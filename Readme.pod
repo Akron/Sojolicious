@@ -1,0 +1,66 @@
+=pod
+
+=head1 Sojolicious
+
+Sojolicious is a toolkit for the federated social web, containing
+plugins for the powerful web framework L<Mojolicious>
+written in Perl.
+
+=head2 Goal
+
+Sojolicious mainly focus on support for the L<http://ostatus.org/|OStatus>
+meta protocol and aims for a straight forward implementation of all
+surrounding specifications.
+
+The design goal is to make all plugins useful on their own,
+as separated building blocks of OStatus, while playing well
+with each other.
+
+All plugins have no requirements other than L<Mojolicious> and Perl 5.8
+(core modules).
+
+Sojolicious is in its early stages and work in progress. There are missing
+parts currently developed and existing parts reworked.
+
+=head2 Synopsis
+
+  use Mojolicious::Lite;
+
+  plugin webfinger => { host => 'sojolicio.us' };
+
+=head2 Plugins
+
+=over 2
+
+=item Mojolicious::Plugin::XRD
+
+L<http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
+
+=item HostMeta
+
+L<http://tools.ietf.org/html/draft-hammer-hostmeta>
+
+=item Webfinger
+
+=item MagicSignatures
+
+=item Salmon
+
+=item ...
+
+As Sojolicious is in its early stages, there is currently work on
+support for L<ActivityStreams>, L<PubsubHubbub> and L<Portable Contacts>.
+
+=back
+
+=head2 Acknowledgement
+
+Mojolicious is written by Sebastian Riedel.
+
+Parts of this work were supported by the BMBF-project L<http://project.linguistic-networks.net/|Linguistic Networks>.
+
+=head2 Where to learn more?
+
+L<http://mojolicio.us>, L<http://ostatus.org/>.
+
+=cut
