@@ -12,7 +12,7 @@ our @EXPORT_OK = qw(b64url_encode
 
 has [qw/n d emLen/] => 0;
 has e => 65537;
-has ns => sub { 'http://salmon-protocol.org/ns/magic-key' };
+# has ns => sub { 'http://salmon-protocol.org/ns/magic-key' };
 
 # Construct a new MagicSignature object
 # Needs a key (private or public)
@@ -81,8 +81,6 @@ sub sign {
 
     my $encoded_message = _sign_emsa_pkcs1_v1_5($self, $message );
 
-    warn('signed: '.$encoded_message);
-
     # From: https://github.com/sivy/Salmon/
     for ($encoded_message) {
 	$_ = $_->as_hex;
@@ -113,7 +111,7 @@ sub verify {
 	$_ = Math::BigInt->from_hex($_); # ->bstr;
     };
 
-    warn('verify: '.$encoded_message);
+#    warn('verify: '.$encoded_message);
 
     return _verify_emsa_pkcs1_v1_5($self,
 				   $message,
@@ -367,3 +365,111 @@ sub b64url_decode {
 
 __END__
 
+=pod
+
+=head1 NAME
+
+Mojolicious::Plugin::MagicKey - MagicKey Plugin for Mojolicious
+
+=head1 SYNOPSIS
+
+  use Mojolicious::Plugin::MagicKey;
+
+  my $mkey = Mojolicious::Plugin::MagicKey->new(<<'MKEY');
+  RSA.
+  mVgY8RN6URBTstndvmUUPb4UZTdwvw
+  mddSKE5z_jvKUEK6yk1u3rrC9yN8k6
+  FilGj9K0eeUPe2hf4Pj-5CmHww==.
+  AQAB.
+  Lgy_yL3hsLBngkFdDw1Jy9TmSRMiH6
+  yihYetQ8jy-jZXdsZXd8V5ub3kuBHH
+  k4M39i3TduIkcrjcsiWQb77D8Q==
+  MKEY
+
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::MagicKey> is a plugin for L<Mojolicious>
+to represent MagicKeys as described in
+L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>
+
+=head1 ATTRIBUTES
+
+=head2 C<n>
+
+The MagicKey RSA modulus.
+
+=head2 C<e>
+
+The MagicKey RSA exponent. By default this value is 65537.
+
+=head2 C<d>
+
+The MagicKey RSA private exponent.
+
+=head2 C<emLen>
+
+The octet-length of C<n>.
+
+=head1 METHODS
+
+=head2 C<new>
+
+The Constructor accepts MagicKeys in compact notation as
+described in [...].
+
+=head2 C<sign>
+
+  my $sig = $mkey->sign('This is a message');
+
+Signs a message (if the key is a private key) and returns
+the signature. The signature algorithm is based on
+L<http://www.ietf.org/rfc/rfc3447.txt|Specification>.
+
+=head2 <verify>
+
+  if ($mkey->verify('This is a message', $sig) {
+    print "The signature is okay.";
+  } else {
+    print "The signature is wrong!";
+  };
+
+=head2 C<to_string>
+
+  print $mkey->to_string;
+
+Returns the string in compact notation as described in [...].
+
+=head1 FUNCTIONS
+
+L<Mojolicious::Plugin::MagicKey> implements the following functions,
+that can be imported.
+
+=head2 C<b64url_encode>
+
+  print b64url_encode('This is a message');
+
+Encodes a string 64-based with URL safe characters.
+
+=head2 C<b64url_encode>
+
+  print b64url_decode('VGhpcyBpcyBhIG1lc3NhZ2U=');
+
+Decodes a 64-based string with URL safe characters.
+
+=head1 DEPENDENCIES
+
+L<Mojolicious>.
+
+=head1 KNOWN BUGS AND LIMITATIONS
+
+The signing and verifification is currently not working
+correctly!
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
+
+=cut

@@ -1,18 +1,7 @@
 package Mojolicious::Plugin::XRD;
 use strict;
 use warnings;
-use Mojo::DOM;
 use Mojo::Base 'Mojolicious::Plugin';
-use Mojo::Util qw/xml_escape quote/;
-
-has 'tree';
-
-our ($indent, $xrd_ns, $xsi_ns);
-BEGIN {
-    our $indent = '  ';
-    our $xrd_ns = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
-    our $xsi_ns = 'http://www.w3.org/2001/XMLSchema-instance';
-};
 
 # Register Plugin
 sub register {
@@ -24,15 +13,34 @@ sub register {
     $mojo->helper(
 	'new_xrd' => sub {
 	    shift; # Either Controller or App
-	    return $plugin->new(@_);
+	    return Mojolicious::Plugin::XRD::Document
+		->new(@_);
 	}
 	);
 
 };
 
+package Mojolicious::Plugin::XRD::Document;
+use strict;
+use warnings;
+use Mojo::Base -base;
+use Mojo::DOM;
+use Mojo::Util qw/xml_escape quote/;
+
+has 'tree';
+has 'url_for' => '';
+
+our ($indent, $xrd_ns, $xsi_ns);
+BEGIN {
+    our $indent = '  ';
+    our $xrd_ns = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
+    our $xsi_ns = 'http://www.w3.org/2001/XMLSchema-instance';
+};
+
 # Constructor
 sub new {
     my $class = ref($_[0]) ? ref(shift(@_)) : shift;
+
     my $document = shift;
 
     my ($xrd, $tree);
@@ -48,7 +56,7 @@ sub new {
 	$xrd  = $dom->at('XRD');
 
 	# The document is no XRD
-	if ($xrd->namespace ne $xrd_ns) {
+	if (!$xrd || $xrd->namespace ne $xrd_ns) {
 	    return undef;
 	};
 
@@ -92,7 +100,7 @@ sub dom {
 
     unless (exists $self->{dom}) {
 	my $dom = Mojo::DOM->new(xml => 1);
-	$dom->{tree} = $self->{tree};
+	$dom->tree($self->{'tree'});
 	$self->{dom} = $dom;
     };
 
@@ -124,6 +132,7 @@ sub add {
 sub get_property {
     my $self = shift;
     my $type = shift;
+
     # Returns the first match
     return $self->dom->at( qq{Property[type="$type"]} );
 };
@@ -132,6 +141,7 @@ sub get_property {
 sub get_link {
     my $self = shift;
     my $rel = shift;
+
     # Returns the first match
     return $self->dom->at( qq{Link[rel="$rel"]} );
 };
@@ -429,7 +439,7 @@ element of the given relation.
 
   print $xrd->dom->at('Link[rel=lrrd]')->text;
 
-C<dom> returns the L<Mojo::DOM> representation of the object,
+Returns the L<Mojo::DOM> representation of the object,
 allowing for fine grained CSS3 selections.
 
 =head2 C<to_xml>

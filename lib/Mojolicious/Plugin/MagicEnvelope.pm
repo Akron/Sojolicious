@@ -357,6 +357,8 @@ __DATA__
 
 __END__
 
+=pod
+
 =head1 NAME
 
 Mojolicious::Plugin::MagicEnvelope - MagicEnvelope Plugin for Mojolicious
@@ -397,7 +399,8 @@ Mojolicious::Plugin::MagicEnvelope - MagicEnvelope Plugin for Mojolicious
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::MagicEnvelope> is a plugin for L<Mojolicious>
-to work with Magic Envelopes as described in [...].
+to work with Magic Envelopes as described in
+L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
 
 =head1 METHODS
 
@@ -407,8 +410,7 @@ The L<Mojolicious::Plugin::MagicEnvelope> constructor accepts
 magicenvelope data in various formats.
 
 It accepts magic envelopes in the XML format or an
-XML document including an magic envelope C<provenance> element
-as described in [...].
+XML document including an magic envelope C<provenance> element.
 
   Mojolicious::Plugin::MagicEnvelope->new(<<'MEXML');
   <?xml version="1.0" encoding="UTF-8"?>
@@ -425,8 +427,7 @@ as described in [...].
   </me:env>
   MEXML
 
-Additionally it accepts magic envelopes in the JSON notation as
-described in [...].
+Additionally it accepts magic envelopes in the JSON notation.
 
   Mojolicious::Plugin::MagicEnvelope->new(<<'MEJSON');
   {
@@ -464,7 +465,7 @@ This is the common way to fold new envelopes.
       });
 
 Finally the constructor accepts magic envelopes in the compact
-notation as described in [...].
+notation.
 
   Mojolicious::Plugin::MagicEnvelope->new(<<'MECOMPACT');
     bXktMDE=.S1VqYVlIWFpuRGVTX3l4S09CcWdjRVFDYVlu
@@ -528,32 +529,7 @@ B<This method is experimental and can change without warning!>
   $me->verified({ key_id => ...,
                   key    => ... });
 
-B<Better: Do not accept no parameters for verification!>
-The discovery should be started in Salmon Client.
-
-
 Verifies the signature of a magic envelope.
-It optionally accepts a hash reference containing a C<key> and/or a
-C<key_id> and/or an C<author>. If the C<key> is given, the signature
-is verified using this key. If the C<key_id> is given, this key is
-discovered and the specific signature is verified. If the C<author>
-is given, this author's public key is discovered. If C<key_id> and
-C<key> is given, the specific signature is verified. If C<author>
-and C<key_id> is given, the specific key is discovered and the specific
-signatures is verified.
-
-Returns ...
-
-  1 if the verification succeeded.
-  0 if the signature failed to be verified.
-    (This can also happen, if a given key_id does not match.)
-  -1 if the envelope is not signed.
-  -2 if a legal author can not be discovered from the data.
-  -3 if the discovery of the author's public key failed.
-
-A verification without any parameters is only possible, if
-the data has valid author information for discovery.
-At the moment only webfinger discovery is supported.
 
 B<This method is experimental and can change without warning!>
 
@@ -561,41 +537,29 @@ B<This method is experimental and can change without warning!>
 
   $me->to_xml;
 
-Returns the magic envelope as a stringified xml representation
-as described in [...].
+Returns the magic envelope as a stringified xml representation.
 
 =head2 C<to_json>
 
   $me->to_json;
 
-Returns the magic envelope as a stringified json representation
-as described in [...].
+Returns the magic envelope as a stringified json representation.
 
 =head2 C<to_compact>
 
   $me->to_compact;
 
-Returns the magic envelope as a compact representation as described
-in [...].
+Returns the magic envelope as a compact representation.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious::Plugin::MagicEnvelope> needs L<Mojolicious>
-(best with SSL support), L<Mojolicious::Plugin::MagicKey>
-and L<Mojolicious::Plugin::Webfinger>
+L<Mojolicious> (best with SSL support),
+L<Mojolicious::Plugin::MagicKey>,
+L<Mojolicious::Plugin::Webfinger>.
 
-=head1 SEE ALSO
-
-L<Mojolicious>,
-L<Mojolicious::Plugin::MagicSignature>,
-L<Mojolicious::Plugin::Webfinger>,
-L<http://mojolicio.us>.
-
-=head2 Known Bugs and Limitations
+=head1 KNOWN BUGS AND LIMITATIONS
 
 The signature is currently not working correctly!
-
-At the moment only webfinger discovery is supported.
 
 =head1 COPYRIGHT AND LICENSE
 

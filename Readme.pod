@@ -14,7 +14,8 @@ surrounding specifications.
 
 The design goal is to make all plugins useful on their own,
 as separated building blocks of OStatus, while playing well
-with each other.
+with each other. All plugins are application and storage agnostic,
+providing event driven hooks for usage.
 
 All plugins have no requirements other than L<Mojolicious> and Perl 5.8
 (core modules).
@@ -24,39 +25,68 @@ parts currently developed and existing parts reworked.
 
 =head2 Synopsis
 
-  use Mojolicious::Lite;
+  package MySocialApp;
+  use Mojolicious;
 
-  plugin webfinger => { host => 'sojolicio.us' };
+  sub startup {
+    my $app = shift;
+
+    # Load Plugins
+    $app->plugin('webfinger' => { host => 'sojolicio.us' });
+    $app->plugin('salmon' => { host => 'sojolicio.us',
+		               secure => 1 });
+
+    my $r = $app->routes;
+
+    # Establish webfinger url
+    $r->route('/webfinger',uri => 'q')->webfinger;
+
+    # Esablish Salmon Endpoints:
+    my $salmon = $r->route('/salmon');
+    $salmon->route('/:user/all-replies')->salmon('all-replies');
+
+    $app->plugins->add_hook(
+      'on_salmon_follow' => sub {
+        ... # You received a follow request
+      };
+    );
+
+  };
+
+  package main;
+  MySocialApp->start;
 
 =head2 Plugins
 
 =over 2
 
-=item Mojolicious::Plugin::XRD
+=item L<http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html|XRD>
 
-L<http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
+=item L<http://tools.ietf.org/html/draft-hammer-hostmeta|HostMeta>
 
-=item HostMeta
+=item L<http://code.google.com/p/webfinger/wiki/WebFingerProtocol|Webfinger>
 
-L<http://tools.ietf.org/html/draft-hammer-hostmeta>
+=item L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|MagicSignatures>
 
-=item Webfinger
-
-=item MagicSignatures
-
-=item Salmon
+=item L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html|Salmon>
 
 =item ...
 
 As Sojolicious is in its early stages, there is currently work on
-support for L<ActivityStreams>, L<PubsubHubbub> and L<Portable Contacts>.
+support for C<ActivityStreams>, C<OAuth>, C<PubsubHubbub> and C<Portable Contacts>.
+There are plans to expand the scope to other social protocols, for example C<OExchange>.
 
 =back
 
 =head2 Acknowledgement
 
-Mojolicious is written by Sebastian Riedel.
-
+L<Mojolicious> is written by Sebastian Riedel.
+C<XRD> was developed by Eran Hammer-Lahav and Will Norris.
+C<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
+C<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
+C<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
+C<Salmon> was developed by John Panzer.
+C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach Copley.
 Parts of this work were supported by the BMBF-project L<http://project.linguistic-networks.net/|Linguistic Networks>.
 
 =head2 Where to learn more?

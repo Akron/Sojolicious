@@ -78,10 +78,10 @@ sub register {
 
 			# Verify MagicSignature
 			# 400 if not correct
-			if ($req->body) {
+  			if ($req->body) {
 			    my $me = $c->magicenvelope($req->body);
 			    unless ($me) {
-				return $c->render(
+  				return $c->render(
 				    status   => 400,
 				    template => 'salmon',
 				    title    => 'Salmon Error',
@@ -92,24 +92,42 @@ sub register {
 				    );
 			    };
 
-			    my $author = $self->discover_author($me);
+			    my $author = $self->_discover_author($me);
+
+			    # my $verb = $c->activity($me)->verb;
+
+			    $c->app->plugins->run_hook( 'before_salmon_reply_verification'
+			                                => $c, $me);
+
+
+			    # verification
+
+			    # Ceck Timestamp
+			    # 400 if not valid
+
+			    # Further Checks. Via hook.
+			    
+			} else {
+			    return $c->render(
+				status   => 400,
+				template => 'salmon',
+				title    => 'Salmon Error',
+				content  => 'The posted magic '.
+				            'envelope seems '.
+				            'to be empty.',
+				template_class => __PACKAGE__
+				);
 			};
-
-#			$plugin->salmon(@_)
-
-# Hook 'after-salmon-reply'
-
-			# Ceck Timestamp
-			# 400 if not valid
-
-			# Further Checks. Via hook.
 			
- 			$c->app->plugins->run_hook('on_salmon_reply' => $c, $me);
+			$c->app->plugins->run_hook( 'on_salmon_reply'
+			                            => $c, $me);
+
 
 			unless ($c->rendered) {
 			    $c->render(
 				status => 200,
-				template => 'salmon-reply'
+				template => 'salmon-reply-ok',
+				template_class => __PACKAGE__
 				);
 			};
 
@@ -123,11 +141,54 @@ sub register {
 		# Handle POST requests
 		$route->post->to(
 		    'cb' => sub {
-# Hook 'before-salmon-mention'
+			my $c = shift;
 
-# Hook 'on-salmon-mention'
+			my $req = $c->req;
 
-			$plugin->salmon(@_)
+ 			if ($req->body) {
+			    my $me = $c->magicenvelope($req->body);
+			    unless ($me) {
+				return $c->render(
+				    status   => 400,
+				    template => 'salmon',
+				    title    => 'Salmon Error',
+				    content  => 'The posted magic '.
+                                                'envelope seems '.
+				                'to be empty.',
+ 				    template_class => __PACKAGE__
+				    );
+			    };
+
+			    $c->app->plugins->run_hook( 'before_salmon_mention_verification'
+			                                => $c, $me);
+
+
+			    my $author = $self->discover_author($me);
+			} else {
+			    return $c->render(
+				status   => 400,
+				template => 'salmon',
+				title    => 'Salmon Error',
+				content  => 'The posted magic '.
+				            'envelope seems '.
+				            'to be empty.',
+				template_class => __PACKAGE__
+				);
+			};
+
+			$c->app->plugins->run_hook( 'on_salmon_mention'
+			                            => $c, $me);
+
+
+			unless ($c->rendered) {
+			    $c->render(
+				status => 200,
+				template => 'salmon-mentioned-ok',
+				template_class => __PACKAGE__
+				);
+			};
+
+
 		    }
 		    );
 		
@@ -137,8 +198,6 @@ sub register {
 	    elsif ($param eq 'signer') {
 
 		# Todo: Fragen: Gibt es schon eine Signer-URI?
-
-# Hook 'before-salmon-sign'
 
 		my $salmon_signer_url = 
 		    $plugin->secure.
@@ -154,11 +213,15 @@ sub register {
 		$link->comment('Salmon Signer');
 		$link->add('Title', 'Salmon Endpoint');
 
-# Hook 'after-salmon-sign'
 
 		$route->post->to(
 		    'cb' => sub {
+# Hook 'before-salmon-sign'
+
 			$plugin->salmon_signer( @_ );
+
+# Hook 'after-salmon-sign'
+
 		    }
 		    );
 	    }
@@ -255,7 +318,7 @@ sub salmon_signer {
     return $plugin->_render_me($c,$me);
 };
 
-sub discover_author {
+sub _discover_author {
     my $plugin = shift;
     my $me = shift;
     
@@ -380,7 +443,148 @@ __DATA__
 
 @@ salmon-reply-ok.html.ep
 % layout 'salmon', title => 'Salmon'
-   <p>Thank you for your reply</p
+   <p>Thank you for your reply.</p
+
+@@ salmon-mentioned-ok.html.ep
+% layout 'salmon', title => 'Salmon'
+   <p>Thank you for your mention.</p
 
 __END__
 
+=pod
+
+=head1 NAME
+
+Mojolicious::Plugin::Salmon - A Salmon Plugin for Mojolicious
+
+=head1 SYNOPSIS
+
+  use Mojolicious::Lite;
+
+  plugin 'salmon', host => 'example.org';
+
+  my $r = app->routes;
+
+  my $salmon = $r->route('/salmon');
+  $salmon->route('/:user/mentioned')->salmon('mentioned');
+  $salmon->route('/:user/all-replies')->salmon('all-replies');
+  $salmon->route('/signer')->salmon('signer');
+
+  app->start;
+
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::Salmon> is a plugin for L<Mojolicious>
+to work with Salmon as described in L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html|Specification>.
+
+=head1 ATTRIBUTES
+
+=head2 C<host>
+
+  $salmon->host('sojolicio.us');
+  my $host = $salmon->host;
+
+The host for the salmon domain.
+
+=head2 C<secure>
+
+  $salmon->secure(1);
+  my $sec = $salmon->secure;
+
+Use C<http> or C<https>.
+
+=head1 SHORTCUTS
+
+L<Mojolicious::Plugin::Salmon> provides a shortcut for the "mentioned",
+the "all-replies" and the "signer" endpoints as described in
+L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html|Specification>.
+
+  app->routes->route('/:user/mentioned')->salmon('mentioned');
+
+Establishes the mentioned endpoint.
+
+  app->routes->route('/:user/all-replies')->salmon('mentioned');
+
+Establishes the endpoint for all replies to a feed.
+
+  app->routes->route('/signer')->salmon('signer');
+
+Establishes the endpoint for folding and signing a magic envelope
+as described in L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
+The Client has to authenticate via OAuth as described in
+L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html|Specification>.
+The Magic Envelope is - based on the accept header of the request -
+in XML format, in JSON format, or Compact notation
+(see L<Mojolicious::MagicEnvelope>).
+
+When set, there are three named routes to access in templates:
+
+   print $c->url_for('salmon-mentioned', user => 'bender');
+   print $c->url_for('salmon-all-replies', user => 'fry');
+   print $c->url_for('salmon-signer');
+
+These can be used for example in HTML C<Link> headers.
+
+=head1 METHODS
+
+=head1 HOOKS
+
+L<Mojolicious::Plugin::Salmon> runs several hooks.
+Some are expansible. B<These hooks will be deleted
+and exchanged to activity streams based hooks.>
+
+=over 2
+
+=item C<before_salmon_reply_verification>
+
+This hook is run before a salmon-reply is verified.
+As verification is computationally expensive, this can
+be used for spam protection by white and black listing.
+The hook returns the current ??? object and the magic envelope.
+
+B<This hook will in future return the ??? object and the activity
+stream entry object.>
+
+=item C<on_salmon_reply>
+
+This hook is run when a verified salmon reply is posted.
+The hook returns the current ??? object and the magic envelope.
+
+B<This hook will in future return the ??? object and the activity
+stream entry object.>
+
+=item C<before_salmon_mention_verification
+
+This hook is run before a salmon-mentioned is verified.
+As verification is computationally expensive, this can
+be used for spam protection by white and black liisting.
+The hook returns the current ??? object and the magic envelope.
+
+B<This hook will in future return the ??? object and the activity
+stream entry object.>
+
+=item C<on_salmon_mention>
+
+This hook is run when a verified salmon mention is posted.
+The hook returns the current ??? object and the magic envelope.
+
+B<This hook will in future return the ??? object and the activity
+stream entry object.>
+
+=back
+
+=head1 DEPENDENCIES
+
+L<Mojolicious> (best with SSL support),
+L<Mojolicious::Plugin::MagicSignatures>,
+L<Mojolicious::Plugin::Webfinger>,
+L<Mojolicious::Plugin::HostMeta>.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
+
+=cut

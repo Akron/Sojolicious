@@ -6,6 +6,11 @@ use Storable 'dclone';
 
 has 'host';
 
+our $WKPATH;
+BEGIN {
+    our $WKPATH = '/.well-known/host-meta';
+};
+
 # Register plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
@@ -32,6 +37,15 @@ sub register {
 	    );
     };
 
+    # use https or http
+    $plugin->secure( $param->{secure} );
+
+    $hostmeta->url_for(
+	$plugin->secure.
+	$plugin->host.
+	$WKPATH
+	);
+
     # Establish 'hostmeta' helper
     $mojo->helper(
 	'hostmeta' => sub {
@@ -46,13 +60,17 @@ sub register {
 		return $plugin->host($_[1]);
 	    }
 
-	    return $plugin->get_hostmeta($c, @_);
+	    return $plugin->_get_hostmeta($c, @_);
 	}
 	);
 
 
     # Establish /.well-known/host-meta route
-    $mojo->routes->route('/.well-known/host-meta')->to(
+    my $r = $mojo->routes->route($WKPATH);
+
+    $r->name('host_meta');
+
+    $r->to(
 	cb => sub {
 	    my $c = shift;
 
@@ -72,24 +90,43 @@ sub register {
 	);
 };
 
-sub get_hostmeta {
+# Use https or http
+sub secure {
+    my $self = shift;
+
+    unless (defined $_[0]) {
+	if (defined $self->{secure}) {
+	    return 'https://';
+	} else {
+	    return 'http://';
+	};
+    } elsif ($_[0]) {
+	$self->{secure} = 1;
+    } else {
+	$self->{secure} = undef;
+    };
+};
+
+# Get HostMeta document
+sub _get_hostmeta {
     my $plugin = shift;
     my $c = shift;
 
-    my $domain = lc(shift(@_));
+    my $host = lc(shift(@_));
 
     # Hook for caching
     my $hostmeta_xrd;
     $c->app->plugins->run_hook(
 	'before_fetching_hostmeta',
 	$c,
-	$domain,
+	$host,
 	\$hostmeta_xrd
 	);
+
     return $hostmeta_xrd if $hostmeta_xrd;
 
     # 1. Check https:, then http:
-    my $domain_hm_path = $domain.'/.well-known/host-meta';
+    my $host_hm_path = $host.$WKPATH;
 
     # Get user agent
     my $ua = $c->ua->max_redirects(3);
@@ -97,17 +134,19 @@ sub get_hostmeta {
 
     # Fetch Host-Meta XRD
     # First try ssl
-    my $domain_hm = $ua->get('https://'.$domain_hm_path);
+    my $secure = 'https://';
+    my $host_hm = $ua->get($secure.$host_hm_path);
 
-    if (!$domain_hm ||
-	!$domain_hm->res->is_status_class(200)
+    if (!$host_hm ||
+	!$host_hm->res->is_status_class(200)
 	) {
 	
 	# Then try insecure
-	$domain_hm = $ua->get('http://'.$domain_hm_path);
+	$secure = 'http://';
+	$host_hm = $ua->get($secure.$host_hm_path);
 
-	if (!$domain_hm ||
-	    !$domain_hm->res->is_status_class(200)
+	if (!$host_hm ||
+	    !$host_hm->res->is_status_class(200)
 	    ) {
 
 	    # Reset max_redirects
@@ -120,29 +159,30 @@ sub get_hostmeta {
 
     # Parse XRD
     $hostmeta_xrd =
-	$c->new_xrd($domain_hm->res->body);
+	$c->new_xrd($host_hm->res->body);
+
+    $hostmeta_xrd->url_for($secure.$WKPATH);
 
     # Validate host
-    if (my $host = $hostmeta_xrd->dom->at('Host')) {
-	if ($host->namespace eq 'http://host-meta.net/xrd/1.0') {
+    if (my $host_e = $hostmeta_xrd->dom->at('Host')) {
+	if ($host_e->namespace eq 'http://host-meta.net/xrd/1.0') {
 
 	    # Is the given domain the expected one?
-	    if (lc($host->text) ne $domain) {
-		$c->app->log->info('The domains "'.$domain.'"'.
-			      ' and "'.$host->text.'" do not match.');
+	    if (lc($host_e->text) ne $host) {
+		$c->app->log->info('The domains "'.$host.'"'.
+			      ' and "'.$host_e->text.'" do not match.');
 		return undef;
 	    };
 	};
     };
 
-
     # Hook for caching
     $c->app->plugins->run_hook(
 	'after_fetching_hostmeta',
 	$c,
-	$domain,
+	$host,
 	\$hostmeta_xrd,
-	$domain_hm->res
+	$host_hm->res
 	);
 
     # Return XRD DOM
@@ -175,15 +215,32 @@ Mojolicious::Plugin::HostMeta
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::HostMeta> is a plugin to support 
-"well-known" HostMeta documents (see L<http://tools.ietf.org/html/draft-hammer-hostmeta|Specification>).
+"well-known" HostMeta documents
+(see L<http://tools.ietf.org/html/draft-hammer-hostmeta|Specification>).
+
+=head1 ATTRIBUTES
+
+=head2 C<host>
+
+  $hm->host('sojolicio.us');
+  my $host = $hm->host;
+
+The host for the hostmeta domain.
+
+=head2 C<secure>
+
+  $hm->secure(1);
+  my $sec = $hm->secure;
+
+Use C<http> or C<https>.
 
 =head1 HELPERS
 
 =head2 C<hostmeta>
 
-    # In Controllers:
-    my $xrd = $self->hostmeta;
-    my $xrd = $self->hostmeta('gmail.com');
+  # In Controllers:
+  my $xrd = $self->hostmeta;
+  my $xrd = $self->hostmeta('gmail.com');
 
 The helper C<hostmeta> returns the own hostmeta document
 as an L<Mojolicious::Plugin::XRD> object, if no hostname
@@ -238,7 +295,8 @@ L<Mojo::Message::Response> object from the request.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>, L<Mojolicious::Plugin::XRD>.
+L<Mojolicious> (best with SSL support),
+L<Mojolicious::Plugin::XRD>.
 
 =head1 COPYRIGHT AND LICENSE
 

@@ -44,7 +44,7 @@ sub register {
 
     $mojo->helper(
 	'webfinger' => sub {
-	    return $plugin->get_webfinger(@_);
+	    return $plugin->_get_webfinger(@_);
 	}
 	);
 
@@ -52,6 +52,7 @@ sub register {
 	'webfinger' => sub {
 	    my $route = shift;
 	    $route->name('webfinger');
+	    my $param = shift;
 
 	    my $wf_template = Mojo::URL->new(
 		$mojo->url_for('webfinger',
@@ -66,7 +67,10 @@ sub register {
 	    my $lrdd = { rel => 'lrdd' };
 	    if ($wf_template =~ s/%7B(.+?)%7D/{$1}/) {
 		$lrdd->{template} = $wf_template; # ->to_string;
-	    } else {
+	    } elsif ($param) {
+		url_escape($param);
+		$lrdd->{template} = $wf_template .= '?'.$param.'={uri}';
+	    } else {		
 		$lrdd->{href} = $wf_template; # ->to_string;
 	    };
 
@@ -77,7 +81,7 @@ sub register {
 		    my $c = shift;
 		    my $uri = $c->stash('uri');
 
-		    my $xrd = $plugin->get_finger($c,$uri);
+		    my $xrd = $plugin->_get_finger($c,$uri);
 
 		    if ($xrd) {
 			$c->render(
@@ -99,6 +103,7 @@ sub register {
 
 };
 
+# Use https or http
 sub secure {
     my $self = shift;
 
@@ -127,7 +132,7 @@ sub _add_to_hostmeta {
 };
 
 
-sub get_webfinger {
+sub _get_webfinger {
     my $plugin = shift;
     my $c = shift;
 
@@ -225,7 +230,7 @@ sub get_webfinger {
 };
 
 # Serve webfinger?
-sub get_finger {
+sub _get_finger {
     my $plugin = shift;
     my $c = shift;
 
@@ -284,6 +289,7 @@ Mojolicious::Plugin::Webfinger - Webfinger Plugin
 
   # Mojolicious
   $app->plugin('webfinger');
+
   my $r = $app->routes;
   $r->route('/webfinger/:uri')->webfinger;
 
@@ -335,18 +341,21 @@ is returned.
   $r->route('/test/:uri')->webfinger;
   # Webfinger at /test/{uri}
 
-  $r->route('/test/', uri => q)->webfinger;
+  $r->route('/test/')->webfinger('q');
   # Webfinger at /test/q={uri}
 
+  $r->route('/test/')->webfinger;
+  # Webfinger at /test/
+
 L<Mojolicious::Plugin::Webfinger> provides a route shortcut
-for serving a I<lrrd> Link relation in C</.well-known/host-meta>
+for serving a C<lrrd> Link relation in C</.well-known/host-meta>
 (see L<Mojolicious::Plugin::HostMeta).
 
 Please set a C<host> as well as the C<secure> parameter when
 loading the plugin, so the path is correct.
 
   $app->plugin('webfinger',
-               'host' => 'www.example.org',
+               'host' => 'example.org',
                'secure' => 1)
 
 =head1 HOOKS

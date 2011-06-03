@@ -6,12 +6,18 @@ use lib '../lib';
 
 use Test::More tests => 8;
 use Test::Mojo;
+use Mojolicious::Lite;
 
-use_ok('Mojolicious::Plugin::XRD');
+my $t = Test::Mojo->new;
 
-my $xrd = Mojolicious::Plugin::XRD->new;
+my $app = $t->app;
 
-ok($xrd, 'XRD established');
+$app->plugin('x_r_d');
+
+# Silence
+$app->log->level('error');
+
+my $xrd = $app->new_xrd;
 
 my $xrd_string = $xrd->to_xml;
 
@@ -33,7 +39,7 @@ my $subnode_2 = $subnode_1->comment("Foobar Link!");
 
 is($subnode_1, $subnode_2, "Comment added");
 
-$xrd = Mojolicious::Plugin::XRD->new(<<'XRD');
+$xrd = $app->new_xrd(<<'XRD');
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"
      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -49,5 +55,12 @@ is($xrd->get_link('foo')->text, 'bar', "DOM access Link");
 $xrd->add('Property', { type => 'bar' }, 'foo');
 
 is($xrd->get_property('bar')->text, 'foo', 'DOM access Property');
+
+is($xrd->url_for, '', 'Correct url');
+
+$xrd->url_for('https://example.org/bob.xrd');
+
+is($xrd->url_for, 'https://example.org/bob.xrd', 'Correct url');
+
 
 __END__
