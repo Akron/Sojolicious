@@ -8,7 +8,7 @@ written in Perl.
 
 =head2 Goal
 
-Sojolicious mainly focus on support for the L<http://ostatus.org/|OStatus>
+Sojolicious mainly focus on support for the L<OStatus|http://ostatus.org/>
 meta protocol and aims for a straight forward implementation of all
 surrounding specifications.
 
@@ -60,15 +60,15 @@ parts currently developed and existing parts reworked.
 
 =over 2
 
-=item L<http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html|XRD>
+=item L<XRD|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
 
-=item L<http://tools.ietf.org/html/draft-hammer-hostmeta|HostMeta>
+=item L<HostMeta|http://tools.ietf.org/html/draft-hammer-hostmeta>
 
-=item L<http://code.google.com/p/webfinger/wiki/WebFingerProtocol|Webfinger>
+=item L<Webfinger|http://code.google.com/p/webfinger/wiki/WebFingerProtocol>
 
-=item L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|MagicSignatures>
+=item L<MagicSignatures|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html>
 
-=item L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html|Salmon>
+=item L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
 
 =item ...
 
@@ -91,7 +91,7 @@ C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach
 
 Thanks to a lot of other implementors for inspiring code (referenced in the sourcecode).
 
-Parts of this work were supported by the BMBF-project L<http://project.linguistic-networks.net/|Linguistic Networks>.
+Parts of this work were supported by the BMBF-project L<Linguistic Networks|http://project.linguistic-networks.net/>.
 
 =head2 Where to learn more?
 
