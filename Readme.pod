@@ -81,12 +81,16 @@ There are plans to expand the scope to other social protocols, for example C<OEx
 =head2 Acknowledgement
 
 L<Mojolicious> is written by Sebastian Riedel.
+
 C<XRD> was developed by Eran Hammer-Lahav and Will Norris.
 C<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
 C<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
 C<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
 C<Salmon> was developed by John Panzer.
 C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach Copley.
+
+Thanks to a lot of other implementors for inspiring code (referenced in the sourcecode).
+
 Parts of this work were supported by the BMBF-project L<http://project.linguistic-networks.net/|Linguistic Networks>.
 
 =head2 Where to learn more?
