@@ -5,7 +5,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::Util qw/url_escape/;
 
 has 'host';
-has secure => 0;
+has 'secure' => 0;
 
 sub register {
     my ($plugin, $mojo, $param) = @_;
@@ -16,32 +16,13 @@ sub register {
 	$mojo->plugin('host_meta', {'host' => $param->{'host'} });
     };
 
-    if (defined $param->{host}) {
-	$plugin->host($param->{host});
+    if (exists $param->{host}) {
+	$plugin->host( $param->{host} );
     } else {
 	$plugin->host( $mojo->hostmeta('host') || 'localhost' );
     };
 
     $plugin->secure( $param->{secure} );
-
-    if (exists $param->{template} ||
-	exists $param->{href}) {
-	my $lrdd = { rel => 'lrdd' };
-
-	if (exists $param->{template}) {
-	    $lrdd->{template} =
-		$plugin->secure.
-		$plugin->host.
-		$param->{template};
-	} else {
-	    $lrdd->{href} =
-		$plugin->secure.
-		$plugin->host.
-		$param->{href};
-	};
-
-	$plugin->add_to_hostmeta($mojo, $lrdd);
-    };
 
     # Add 'webfinger' helper
     $mojo->helper(
@@ -49,18 +30,39 @@ sub register {
 	    return $plugin->_get_webfinger(@_);
 	});
 
+    # Add 'parse_acct' helper
+    $mojo->helper(
+	'parse_acct' => sub {
+	    my ($c, $acct) = @_;
+
+	    # Delete scheme if exists
+	    $acct =~ s/^acct://i;
+
+	    # Split user from domain
+	    my ($user, $domain) = split('@',$acct);
+	    
+	    # Use host domain if no domain is given
+	    $domain ||= $plugin->host;
+
+	    # Create norm writing
+	    my $norm = 'acct:'.$user.'@'.$domain;
+
+	    return ($user, $domain, $norm);
+	});
+
     # Add 'webfinger' shortcut
     $mojo->routes->add_shortcut(
 	'webfinger' => sub {
 	    my $route = shift;
-	    my $param = shift;
+	    my $param_key = shift;
 
-	    my $lrdd = { rel => 'lrdd' };
-	    
-	    if ($param) {
-		$param = { $param => '{uri}' };
-	    };
+	    my $lrdd = { rel  => 'lrdd',
+			 type => 'application/xrd+xml' };
+    
+	    # Make hash from param
+	    my $param = $param_key ? { $param_key => '{uri}' } : undef;
 
+	    # Set endpoint-uri
 	    $mojo->endpoint(
 		'webfinger',
 		$plugin->secure,
@@ -69,29 +71,46 @@ sub register {
 		$param
 		);
 
+	    # Retrieve Endpoint-Uri
 	    my $endpoint = $mojo->endpoint('webfinger',
 					   {'uri' => '{uri}'});
 	    
+	    # If It's a template, point the lrdd to it
 	    if ($endpoint =~ m/\{(?:.+?)\}/) {
 		$lrdd->{template} = $endpoint;
 	    } else {
 		$lrdd->{href} = $endpoint;
 	    };
 
-	    $plugin->_add_to_hostmeta($mojo, $lrdd);
+	    # Add Route to Hostmeta
+	    my $link = $mojo->hostmeta->add('Link', $lrdd);
+	    $link->comment('Webfinger');
+	    $link->add('Title','Resource Descriptor');
 
+	    # Point the route to a callback
 	    $route->to(
 		cb => sub {
 		    my $c = shift;
+
+		    # Get uri from route
 		    my $uri = $c->stash('uri');
+		    $uri = $c->stash($param_key) if $param_key;
+
+		    my $acct;
+		    $mojo->plugins->run_hook(
+			'on_uri_to_acct' => $c, $uri, \$acct
+			);
+
+		    unless ($acct) {
+			return $c->render_not_found;
+		    };
+
+		    $c->stash->{'acct'} = $acct;
 
 		    my $xrd = $plugin->_get_finger($c,$uri);
 
 		    if ($xrd) {
-			$c->render(
-			    'format' => 'xrd',
-			    'inline' => $xrd->to_xml
-			    );
+			return $c->render_xrd($xrd);
 		    }
 		    
 		    # Not found
@@ -107,31 +126,19 @@ sub register {
 
 };
 
-
-sub _add_to_hostmeta {
-    my $plugin = shift;
-    my $mojo = shift;
-    my $lrdd = shift;
-
-    my $link = $mojo->hostmeta->add('Link', $lrdd);
-    $link->comment('Webfinger');
-    $link->add('Title','Resource Descriptor');
-};
-
-
 sub _get_webfinger {
     my $plugin = shift;
     my $c = shift;
 
     # Get user and domain
-    my ($user, $domain) = $plugin->_get_account( shift );
+    my ($user, $domain, $norm) = $c->parse_acct( shift );
 
     # Hook for caching
     my $acct_xrd;
     $c->app->plugins->run_hook(
 	'before_fetching_webfinger',
 	$c,
-	'acct:'.$user.'@'.$domain,
+	$norm,
 	\$acct_xrd
 	);
     return $acct_xrd if $acct_xrd;
@@ -144,19 +151,19 @@ sub _get_webfinger {
     return undef unless $domain_hm;
 	
     # Returns a Mojo::DOM node
-    my $lrdd = $domain_hm->get_link('lrdd')->[0];
+    my $lrdd = $domain_hm->get_link('lrdd');
 	
     my $webfinger_uri;
 	
     # Get webfinger uri by using template
-    if ($webfinger_uri = $lrdd->attrs->{'template'}) {
-	my $acct = 'acct:'.$user.'@'.$domain;
+    if ($webfinger_uri = $lrdd->{'template'}) {
+	my $acct = $norm;
 	url_escape $acct;
 	$webfinger_uri =~ s/\{uri\}/$acct/;
     }
 	
     # Get webfinger uri by using href
-    elsif (not ($webfinger_uri = $lrdd->attrs->{'href'})) {
+    elsif (not ($webfinger_uri = $lrdd->{'href'})) {
 	return undef;
     };
 
@@ -197,7 +204,7 @@ sub _get_webfinger {
 	$c->app->plugins->run_hook(
 	    'after_fetching_webfinger',
 	    $c,
-	    'acct:'.$user.'@'.$domain,
+	    $norm,
 	    \$acct_xrd,
 	    $acct_xrd_doc->res
 	    );
@@ -221,7 +228,7 @@ sub _get_finger {
     my $plugin = shift;
     my $c = shift;
 
-    my ($user, $domain) = $plugin->_get_account( shift );
+    my ($user, $domain, $norm) = $c->parse_acct( shift );
 
     $domain ||= $plugin->host;
 
@@ -230,13 +237,13 @@ sub _get_finger {
 	$domain eq $plugin->host) {
 
 	my $wf_xrd = $c->new_xrd;
-	$wf_xrd->add('Subject','acct:'.$user.'@'.$domain);
+	$wf_xrd->add('Subject', $norm);
 
 	# Run hook
 	$c->app->plugins->run_hook(
 	    'before_serving_webfinger',
 	    $c,
-	    'acct:'.$user.'@'.$domain,
+	    $norm,
 	    $wf_xrd
 	    );
 
@@ -248,22 +255,6 @@ sub _get_finger {
 	return undef;
     };
 }
-
-sub _get_account {
-    my $plugin = shift;
-    my $acct = shift;
-
-    # Delete scheme if exists
-    $acct =~ s/^acct://i;
-
-    # Split user from domain
-    my ($user, $domain) = split('@',$acct);
-
-    $domain ||= $plugin->domain;
-
-    return ($user, $domain);
-};
-
 
 1;
 
@@ -323,6 +314,16 @@ Use C<http> or C<https>.
 Returns the Webfinger L<Mojolicious::Plugin::XRD> document.
 If no account name is given, the user's own webfinger document
 is returned.
+
+=head2 C<parse_acct>
+
+    # In Controllers:
+    my ($user, $domain, $norm) =
+        $self->parse_acct('acct:me@sojolicious');
+
+Returns the the user and the domain part of an acct scheme and
+the normative writing. It accepts short writings like 'acct:me'
+and 'me' as well as full acct writings.
 
 =head1 SHORTCUTS
 

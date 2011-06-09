@@ -10,21 +10,54 @@ sub register {
     # Apply XRD mime-Type
     $mojo->types->type('xrd' => 'application/xrd+xml');
 
+    # Add 'new_xrd' helper
     $mojo->helper(
 	'new_xrd' => sub {
 	    shift; # Either Controller or App
 	    return Mojolicious::Plugin::XRD::Document
 		->new(@_);
-	}
-	);
+	});
 
+    # Add 'render_xrd' helper
+    $mojo->helper(
+	'render_xrd' => sub {
+	    my $c = shift;
+	    my $xrd = shift;
+
+	    my $accept = $c->req->headers->header('Accept');
+
+	    # Render as json
+	    if (( $c->stash('format') &&
+		  $c->stash('format') eq 'json' )
+		||
+		( $c->param('format') &&
+		  $c->param('format') eq 'json' )
+		||
+		( $accept &&
+		  $accept =~ m{application/json} )) {
+
+		return $c->render(
+		    data => $xrd->to_json,
+		    format => 'json');
+	    }
+
+	    # Render as xml
+	    else {
+		return $c->render(
+		    'inline' => $xrd->to_xml,
+		    'format' => 'xrd'
+		    );
+	    };
+	});
 };
 
+# Document class
 package Mojolicious::Plugin::XRD::Document;
 use Mojo::Base 'Mojolicious::Plugin::XML::Simple';
 use strict;
 use warnings;
 
+# Namespace declaration
 our ($xrd_ns, $xsi_ns);
 BEGIN {
     our $xrd_ns = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
@@ -35,8 +68,10 @@ BEGIN {
 sub new {
     my $class = ref($_[0]) ? ref(shift(@_)) : shift;
 
+    # Document.
+    # Either empty, a string or a tree.
     my $document = shift;
-    my $object;
+
     if (!$document) {
 	$document = [
 	    'root',
@@ -53,13 +88,11 @@ sub new {
 	    ];
     };
     
+    # Use constructor from parent class
     return $class->SUPER::new($document);
 };
 
-# Render JRD
-# sub to_json {};
-
-# Get root Property
+# Get Property
 sub get_property {
     my $self = shift;
     my $type = shift;
@@ -75,6 +108,89 @@ sub get_link {
 
     # Returns the first match
     return $self->dom->at( qq{Link[rel="$rel"]} );
+};
+
+# Render JRD
+sub to_json {
+    my $self = shift;
+    my $dom = $self->dom;
+
+    my %object;
+
+    # Serialize Subject and Expires
+    foreach (qw/Subject Expires/) {
+	my $obj = $dom->at($_);
+	$object{lc($_)} = $obj->text if $obj;
+    };
+
+    # Serialize aliases
+    my @aliases;
+    $dom->find('Alias')->each(
+	sub {
+	    push(@aliases, shift->text );
+	});
+    $object{'aliases'} = \@aliases if @aliases;
+
+    # Serialize titles
+    my $titles = _to_json_titles($dom);
+    $object{'titles'} = $titles if keys %$titles;
+
+    # Serialize properties
+    my $properties = _to_json_properties($dom);
+    $object{'properties'} = $properties if keys %$properties;
+
+    # Serialize links
+    my @links;
+    $dom->find('Link')->each(
+	sub {
+	    my $link = shift;
+	    my $link_att = $link->attrs;
+	    my %link_prop;
+	    foreach (qw/rel template href/) {
+		if (exists $link_att->{$_}) {
+		    $link_prop{$_} = $link_att->{$_};
+		};
+	    };
+
+	    # Serialize link titles
+	    my $link_titles = _to_json_titles($link);
+	    $link_prop{'titles'} = $link_titles if keys %$link_titles;
+
+	    # Serialize link properties
+	    my $link_properties = _to_json_properties($link);
+	    $link_prop{'properties'} = $link_properties 
+		if keys %$link_properties;
+	    
+	    push(@links, \%link_prop);
+	});
+    $object{'links'} = \@links if @links;
+    return Mojo::JSON->new->encode(\%object);
+};
+
+# Serialize node titles
+sub _to_json_titles {
+    my $node = shift;
+    my %titles;
+    $node->find('Title')->each(
+	sub {
+	    my $val = $_->text;
+	    my $lang = $_->attrs->{'xml:lang'} || 'default';
+	    $titles{$lang} = $val;
+	});
+    return \%titles;
+};
+
+# Serialize node properties
+sub _to_json_properties {
+    my $node = shift;
+    my %property;
+    $node->find('Property')->each(
+	sub {
+	    my $val = $_->text;
+	    my $type = $_->attrs->{'type'} || 'null';
+	    $property{$type} = $val;
+	});
+    return \%property;
 };
 
 1;
@@ -99,7 +215,7 @@ Mojolicious::Plugin::XRD
 
 L<Mojolicious::Plugin::XRD> is a plugin to support 
 Extensible Resource Descriptor (XRD) documents
-(see L<http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html|Specification>).
+(see L<Specification|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>).
 
 =head1 HELPERS
 
@@ -118,28 +234,19 @@ Extensible Resource Descriptor (XRD) documents
 
 The helper C<new_xrd> returns an XRD object.
 
+=head2 C<render_xrd>
+
+  # In Controllers
+  $self->render_xrd( $xrd );
+
+The helper C<render_xrd> renders an XRD object either
+in C<xml> or in C<json> notation, depending on the request.
+
 =head1 METHODS
 
-=head2 C<add>
-
-  my $xrd_node = $xrd->add('Link', { rel => 'lrdd' });
-
-Appends a new Element to the XRDs root and returns a
-C<Mojolicious::Plugin::XRD::Node> object.
-
-The C<Mojolicious::Plugin::XRD::Node> object has following methods.
-
-=head3 C<add>
-
-  $xrd_node_inner = $xrd_node->add('Title', 'Webfinger');
-
-Appends a new Element to the XRD node.
-
-=head3 C<comments>
-
-  $xrd_node = $xrd_node->comment('Resource Descriptor');
-
-Prepends a comment to the XRD node.
+L<Mojolicious::Plugin::XRD> inherits all methods from
+L<Mojolicious::Plugin::XML::Simple> and implements the
+following new ones.
 
 =head2 C<get_property>
 
@@ -154,21 +261,13 @@ elemet of the given type.
 
 Returns a L<Mojo::DOM> element of the first link
 element of the given relation.
+
+=head2 C<to_json>
+
+  my $jrd = $xrd->to_json;
+
+Returns a JSON string representing a JRD document.
   
-=head2 C<dom>
-
-  print $xrd->dom->at('Link[rel=lrrd]')->text;
-
-Returns the L<Mojo::DOM> representation of the object,
-allowing for fine grained CSS3 selections.
-
-=head2 C<to_xml>
-
-  print $xrd->to_xml;
-
-Returns a stringified XML document. This is not identical
-to L<Mojo::DOM>s C<to_xml> as it applies for pretty printing.
-
 =head1 MIME-TYPES
 
 L<Mojolicious::Plugin::XRD> establishes the following mime-types:
@@ -177,7 +276,8 @@ L<Mojolicious::Plugin::XRD> establishes the following mime-types:
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>.
+L<Mojolicious>,
+L<Mojolicious::Plugin::XML::Simple>.
 
 =head1 COPYRIGHT AND LICENSE
 

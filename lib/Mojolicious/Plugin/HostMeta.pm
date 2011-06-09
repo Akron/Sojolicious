@@ -2,6 +2,7 @@ package Mojolicious::Plugin::HostMeta;
 use strict;
 use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
+use Mojo::JSON;
 use Storable 'dclone';
 
 has 'host';
@@ -31,15 +32,21 @@ sub register {
 	    my $name = shift;
 	    
 	    my $hash_param = {};
-	    if ($c->match) {
-		$hash_param = $c->match->captures
+	    if (ref($c) eq 'Mojolicious::Controller') {
+		%{$hash_param} = %{$c->stash};
 	    };
 
 	    # Get endpoint url
 	    if (!defined $_[1]) {
+		if ($_[0]) {
+		    my $h = shift;
+		    foreach (keys %$h) {
+			$hash_param->{$_} = $h->{$_}
+		    };
+		};
+
 		my $url = $c->url_for( $name,
-				       $hash_param,
-				       %{$_[0]} )->to_abs;
+				       $hash_param )->to_abs;
 
 		if (exists $endpoint{$name}) {
 		    my $new_url = $endpoint{$name}->clone;
@@ -61,10 +68,13 @@ sub register {
 		};
 
 		my $endpoint = Mojo::URL->new;
-		$endpoint->host( $host );
-		$endpoint->scheme( $secure ? 'https' : 'http' );
-		$endpoint->query->param(%$param) if $param;
-		$endpoint{$name} = $endpoint;
+		for ($endpoint) {
+		    $_->host( $host );
+		    $_->scheme( $secure ? 'https' : 'http' );
+		    $_->query->param( %$param ) if $param;
+		    $endpoint{$name} = $_;
+		};
+
 		$route->name($name);
 	    };
 	});
@@ -99,7 +109,7 @@ sub register {
 	    elsif ($_[0] eq 'host') {
 		return $plugin->host if !$_[1];
 		return $plugin->host($_[1]);
-	    }
+	    };
 
 	    return $plugin->_get_hostmeta($c, @_);
 	}
@@ -128,10 +138,7 @@ sub register {
 		$c,
 		$hostmeta_clone);
 
-	    $c->render(
-		'inline' => $hostmeta_clone->to_xml,
-		'format' => 'xrd'
-		)
+	    return $c->render_xrd($hostmeta_clone);
 	}
 	);
 };
@@ -218,7 +225,6 @@ sub _get_hostmeta {
     return $hostmeta_xrd;
 };
 
-
 1;
 
 __END__
@@ -272,10 +278,10 @@ Use C<http> or C<https>.
   my $xrd = $self->hostmeta('gmail.com');
 
 The helper C<hostmeta> returns the own hostmeta document
-as an L<Mojolicious::Plugin::XRD> object, if no hostname
-is given. If a hostname is given, the corresponding
-hostmeta document is retrieved and returned as an XRD
-object.
+as an L<Mojolicious::Plugin::Hostmeta::Document> object,
+if no hostname is given. If a hostname is given, the
+corresponding hostmeta document is retrieved and returned
+as an XRD object.
 
 =head2 C<endpoint>
 

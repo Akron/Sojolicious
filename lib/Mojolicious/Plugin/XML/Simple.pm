@@ -1,26 +1,43 @@
 package Mojolicious::Plugin::XML::Simple;
 use strict;
 use warnings;
+use Mojo::Base -base;
 use Mojo::Util qw/xml_escape quote/;
 use Scalar::Util qw( weaken );
 use Mojo::DOM;
+has 'tree';
 
+# Indentation for pretty printing
 our $indent;
 BEGIN {
     $indent = '  ';
 };
 
-# Todo: Irgendwo speichern, dass es sich schon um ein DOM handelt etc.
-
+# Constructor
 sub new {
     my $class = shift;
     my $doc = shift;
 
-    if (ref($doc)) {
-	weaken($doc);
-	$doc->[2]->[3] = $doc;
+    # No document given
+    if (!$doc) {
+	$doc = [
+	    'root',
+	    [ 'pi', 'xml version="1.0"'.
+	            ' encoding="UTF-8"'.
+	            ' standalone="yes"' ],
+	    [ 'tag',
+	      'xml',
+	      {}
+	    ]];
+    };
 
-    } else {
+    # Document given as tree
+    if ( ref( $doc ) ) {
+	$doc->[2]->[3] = $doc;
+    }
+
+    # Document given as string
+    elsif ($doc) {
 
 	# Parse document
 	my $dom = Mojo::DOM->new(xml => 1);
@@ -29,7 +46,7 @@ sub new {
 	$doc = $dom->tree;
     };
 
-    return bless($doc, $class);
+    return bless( { tree => $doc }, $class);
 };
 
 sub new_node {
@@ -61,23 +78,24 @@ sub new_node {
 
     push(@$self, $tag);
 
-    return bless($self, $class);
+    return bless( { tree => $self }, $class);
 };
 
 # Appends a new node to the XML Node
 sub add {
     my $self = shift;
+    my $tree = $self->tree;
 
-    my $parent = ($self->[0] eq 'root') ? $self->[2] : $self->[0];
+    my $parent = ($tree->[0] eq 'root') ? $tree->[2] : $tree->[0];
 
     weaken($parent);
 
     my $node = $self->new_node($parent, @_);
 
-    if ($self->[$#$self]->[0] eq 'tag') {
-	push(@{$self->[$#$self]}, @{$node});
+    if ($tree->[$#$tree]->[0] eq 'tag') {
+	push( @{ $tree->[ $#{ $tree } ] }, @{ $node->tree });
     } else {
-	push(@{$parent}, @{$node});
+	push( @{ $parent }, @{ $node->tree });
     };
 
     return $node;
@@ -86,29 +104,32 @@ sub add {
 # Prepends a Comment to the XML node
 sub comment {
     my $self = shift;
+    my $tree = $self->tree;
+
     my $comment = shift;
 
-    if ($self->[0] eq 'root') {
+    if ($tree->[0] eq 'root') {
 	return;
     };
 
     my $offset = 4;
-    my $parent = $self->[0]->[3];
+    my $parent = $tree->[0]->[3];
 
-    foreach my $e (@{$parent}[$offset .. $#{$parent}]) {
+    foreach my $e ( @{ $parent }[ $offset .. $#{ $parent } ]) {
+
 	$offset++;
-	if ($e eq $self->[0]) {
+	if ($e eq $tree->[0]) {
 	    last;
 	};
     };
 
-    my $pos_e = $parent->[$offset - 2];
+    my $pos_e = $parent->[ $offset - 2 ];
 
-    xml_escape($comment);
+    xml_escape( $comment );
 
     if ($pos_e->[0] &&
 	$pos_e->[0] eq 'comment') {
-	$pos_e->[1] .= '; '.$comment;
+	$pos_e->[1] .= '; ' . $comment;
     }
 
     else {
@@ -123,7 +144,7 @@ sub comment {
 
 sub to_xml {
     my $self = shift;
-    return _render(0, $self);
+    return _render(0, $self->tree);
 };
 
 # render subtrees with pretty printing
@@ -265,11 +286,100 @@ sub _attr ($$) {
     return '';
 };
 
+# Return Mojo::DOM
 sub dom {
     my $self = shift;
-    my $dom = Mojo::DOM->new(xml => 1);
-    $dom->tree($self);
+
+    if ($self->{dom}) {
+	return $self->{dom};
+    };
+
+    my $dom = Mojo::DOM->new( xml => 1 );
+    $dom->tree( $self->tree );
+    $self->{dom} = $dom;
     return $dom;
+
+};
+
+sub DESTROY {
+    my $t = shift->tree;
+    if ($t->[0] eq 'root') {
+	$t->[2]->[3] = undef;
+    };
 };
 
 1;
+
+__END__
+
+=pod
+
+=head1 NAME
+
+Mojolicious::Plugin::XML::Simple
+
+=head1 SYNOPSIS
+
+  # Mojolicious
+  $self->plugin('x_r_d');
+
+  # Mojolicious::Lite
+  plugin 'x_r_d';
+
+=head1 METHODS
+
+L<Mojolicious::Plugin::XML::Simple> inherits all methods from
+L<Mojo::Base> and implements the following new ones.
+
+=head2 C<new>
+
+  my $xml = Mojolicious::Plugin::XML::Simple->new(<<'EOF');
+
+
+=head2 C<add>
+
+  my $xrd_node = $xrd->add('Link', { rel => 'lrdd' });
+
+Appends a new Element to the XRDs root and returns a
+C<Mojolicious::Plugin::XRD::Node> object.
+
+The C<Mojolicious::Plugin::XRD::Node> object has following methods.
+
+=head3 C<add>
+
+  $xrd_node_inner = $xrd_node->add('Title', 'Webfinger');
+
+Appends a new Element to the XRD node.
+
+=head3 C<comments>
+
+  $xrd_node = $xrd_node->comment('Resource Descriptor');
+
+Prepends a comment to the XRD node.
+
+=head2 C<dom>
+
+  print $xrd->dom->at('Link[rel=lrrd]')->text;
+
+Returns the L<Mojo::DOM> representation of the object,
+allowing for fine grained CSS3 selections.
+
+=head2 C<to_xml>
+
+  print $xrd->to_xml;
+
+Returns a stringified XML document. This is not identical
+to L<Mojo::DOM>s C<to_xml> as it applies for pretty printing.
+
+=head1 DEPENDENCIES
+
+L<Mojolicious>.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
+
+=cut

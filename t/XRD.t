@@ -4,9 +4,10 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 6;
+use Test::More tests => 7;
 use Test::Mojo;
 use Mojolicious::Lite;
+use Mojo::JSON;
 
 my $t = Test::Mojo->new;
 
@@ -55,5 +56,12 @@ is($xrd->get_link('foo')->text, 'bar', "DOM access Link");
 $xrd->add('Property', { type => 'bar' }, 'foo');
 
 is($xrd->get_property('bar')->text, 'foo', 'DOM access Property');
+
+
+is_deeply(
+    Mojo::JSON->new->decode($xrd->to_json),
+    { links => [ { rel => 'foo' }],
+      properties => { bar  => 'foo' } },
+    'Correct JRD');
 
 __END__

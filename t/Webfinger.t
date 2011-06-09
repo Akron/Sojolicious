@@ -17,7 +17,7 @@ $app->plugin('webfinger' =>
 
 $app->routes->route('/webfinger')->webfinger('q');
 
-is($app->hostmeta->get_link('lrdd')->{template},
+is($app->hostmeta->get_link('lrdd')->attrs->{template},
    'https://sojolicio.us/webfinger?q={uri}',
    'Correct uri');
 

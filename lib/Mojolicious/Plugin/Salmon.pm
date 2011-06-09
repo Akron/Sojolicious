@@ -12,6 +12,7 @@ sub register {
 
     my $helpers = $mojo->renderer->helpers;
 
+    # Dependencies
     # Load magic signatures if not loaded
     unless (exists $helpers->{'magicenvelope'}) {
 	$mojo->plugin('magic_signatures', {'host' => $param->{'host'}} );
@@ -27,6 +28,7 @@ sub register {
 	$mojo->plugin('host_meta', {'host' => $param->{'host'}} );
     };
 
+    # Attributes
     # set host
     if (defined $param->{host}) {
 	$plugin->host($param->{host});
@@ -35,13 +37,15 @@ sub register {
     };
 
     # Does it need ssl or not
-    $plugin->secure( $param->{host} );
+    $plugin->secure( $param->{secure} );
 
+    # Shortcuts
+    # Add 'salmon' shortcut
     $mojo->routes->add_shortcut(
 	'salmon' => sub {
-	    my $route = shift;
-	    my $param = shift;
+	    my ($route, $param) = @_;
 
+	    # Todo: Mojo-Debug
 	    warn 'Unknown Salmon parameter' && return
 		if $param !~ /^(mentioned|all-replies|signer)$/;
 
@@ -56,7 +60,7 @@ sub register {
 			);
 		});
 
-
+	    # Set salmon endpoints
 	    $mojo->endpoint(
 		'salmon-'.$param,
 		$plugin->secure,
@@ -66,159 +70,52 @@ sub register {
 
 	    if ($param eq 'all-replies') {
 
+		# Add reply handle to webfinger
 		$mojo->plugins->add_hook(
 		    'before_serving_webfinger' => sub {
-			my ($c, $acct, $xrd) = @_;
+			my ($plugins, $c, $acct, $xrd) = @_;
 			$xrd->add(
 			    'Link',
 			    {'rel' => 'http://salmon-protocol.org/'.
 				 'ns/salmon-replies',
 				 'href' =>
 				 $c->endpoint('salmon-all-replies')
-			    });
+			    })->comment('Salmon Reply Endpoint');
 		    });
 		
-
-
 		# Handle POST requests
 		$route->post->to(
-		    'cb' => sub {
-			my $c = shift;
-
-			my $req = $c->req;
-
-			# Verify OAuth
-			# 401 if not correct
-			# Or 202 for later verification
-
-			# Verify MagicSignature
-			# 400 if not correct
-  			if ($req->body) {
-			    my $me = $c->magicenvelope($req->body);
-			    unless ($me) {
-  				return $c->render(
-				    status   => 400,
-				    template => 'salmon',
-				    title    => 'Salmon Error',
-				    content  => 'The posted magic '.
-                                                'envelope seems '.
-				                'to be empty.',
- 				    template_class => __PACKAGE__
-				    );
-			    };
-
-			    # my $author = $self->_discover_author($me);
-
-			    # my $verb = $c->activity($me)->verb;
-
-			    $c->app->plugins->run_hook( 'before_salmon_reply_verification'
-			                                => $c, $me);
-
-
-			    # verification
-
-			    # Ceck Timestamp
-			    # 400 if not valid
-
-			    # Further Checks. Via hook.
-			    
-
-			$c->app->plugins->run_hook( 'on_salmon_reply'
-			                            => $c, $me);
-
-
-			unless ($c->rendered) {
-			    $c->render(
-				status => 200,
-				template => 'salmon-reply-ok',
-				template_class => __PACKAGE__
-				);
-			};
-
-			return;
-
-
-			} else {
-			    return $c->render(
-				status   => 400,
-				template => 'salmon',
-				title    => 'Salmon Error',
-				content  => 'The posted magic '.
-				            'envelope seems '.
-				            'to be empty.',
-				template_class => __PACKAGE__
-				);
-			};
-			
-		    }
+		    'cb' => sub { $plugin->_all_replies( @_ ) }
 		    );
+
 	    }
 
 	    # Mention route
 	    elsif ($param eq 'mentioned') {
+
+		# Add mention handle to webfinger
+		$mojo->plugins->add_hook(
+		    'before_serving_webfinger' => sub {
+			my ($plugins, $c, $acct, $xrd) = @_;
+			$xrd->add(
+			    'Link',
+			    {'rel' => 'http://salmon-protocol.org/'.
+				 'ns/salmon-mention',
+				 'href' =>
+				 $c->endpoint('salmon-mentioned')
+			    })->comment('Salmon Mentioned Endpoint');
+		    });
+
 		# Handle POST requests
 		$route->post->to(
-		    'cb' => sub {
-			my $c = shift;
-
-			my $req = $c->req;
-
- 			if ($req->body) {
-			    my $me = $c->magicenvelope($req->body);
-			    unless ($me) {
-				return $c->render(
-				    status   => 400,
-				    template => 'salmon',
-				    title    => 'Salmon Error',
-				    content  => 'The posted magic '.
-                                                'envelope seems '.
-				                'to be empty.',
- 				    template_class => __PACKAGE__
-				    );
-			    };
-
-			    $c->app->plugins->run_hook( 'before_salmon_mention_verification'
-			                                => $c, $me);
-
-
-			    # my $author = $self->discover_author($me);
-
-
-			$c->app->plugins->run_hook( 'on_salmon_mention'
-			                            => $c, $me);
-
-
-			unless ($c->rendered) {
-			    $c->render(
-				status => 200,
-				template => 'salmon-mentioned-ok',
-				template_class => __PACKAGE__
-				);
-			};
-
-
-			} else {
-			    return $c->render(
-				status   => 400,
-				template => 'salmon',
-				title    => 'Salmon Error',
-				content  => 'The posted magic '.
-				            'envelope seems '.
-				            'to be empty.',
-				template_class => __PACKAGE__
-				);
-			};
-
-		    }
+		    'cb' => sub { $plugin->_mentioned( @_ ) }
 		    );
-		
 	    }
 
 	    # Signer route
 	    elsif ($param eq 'signer') {
-
+		
 		# Todo: Fragen: Gibt es schon eine Signer-URI?
-
 		my $salmon_signer_url = $mojo->endpoint('salmon-signer');
 
 		# Add signer link to host-meta
@@ -227,27 +124,19 @@ sub register {
 			rel => 'salmon-signer',
 			href => $salmon_signer_url
 		    });
-		$link->comment('Salmon Signer');
+		$link->comment('Salmon Signer Endpoint');
 		$link->add('Title', 'Salmon Endpoint');
 
 
 		$route->post->to(
-		    'cb' => sub {
-# Hook 'before-salmon-sign'
-
-			$plugin->salmon_signer( @_ );
-
-# Hook 'after-salmon-sign'
-
-		    }
+		    'cb' => sub { $plugin->_signer( @_ ); }
 		    );
-	    }
+	    };
 
-	    else {
-		warn 'wrong';
-	    };  
-	}
-	);
+	});
+
+    # Helpers?
+
 };
 
 sub salmon {
@@ -281,7 +170,7 @@ sub salmon {
 };
 
 # to be implemented!
-sub salmon_signer {
+sub _signer {
     my $plugin = shift;
 
     warn 'Salmon signer is not yet implemented.';
@@ -291,6 +180,9 @@ sub salmon_signer {
     # Check OAuth token
     # 401 if not correct
     # ...
+
+# Hook before_salmon_sign
+# Hook after_salmon_sign
 
     my $body = $c->req->body;
     my $data_type = $c->req->headers->header('Content-Type');
@@ -316,6 +208,121 @@ sub salmon_signer {
     $me->sign( { key => $mkey } );
 
     return $plugin->_render_me($c,$me);
+};
+
+sub _all_replies {
+    my $c = shift;
+    
+    my $req = $c->req;
+	    
+    # Verify OAuth
+    # 401 if not correct
+    # Or 202 for later verification
+    
+    # Verify MagicSignature
+    # 400 if not correct
+    if ($req->body) {
+	my $me = $c->magicenvelope($req->body);
+	unless ($me) {
+	    return $c->render(
+		status   => 400,
+		template => 'salmon',
+		title    => 'Salmon Error',
+		content  => 'The posted magic '.
+		'envelope seems '.
+		'to be empty.',
+		template_class => __PACKAGE__
+		);
+	};
+	
+	# my $author = $self->_discover_author($me);
+	
+	# my $verb = $c->activity($me)->verb;
+	
+	$c->app->plugins->run_hook( 'before_salmon_reply_verification'
+				    => $c, $me);
+	
+	# verification
+	
+	# Ceck Timestamp
+	# 400 if not valid
+
+	# Further Checks. Via hook.
+			    
+	$c->app->plugins->run_hook( 'on_salmon_reply'
+				    => $c, $me);
+
+	unless ($c->rendered) {
+	    $c->render(
+		status => 200,
+		template => 'salmon-reply-ok',
+		template_class => __PACKAGE__
+		);
+	};
+	
+	return;
+
+    } else {
+	return $c->render(
+	    status   => 400,
+	    template => 'salmon',
+	    title    => 'Salmon Error',
+	    content  => 'The posted magic '.
+	    'envelope seems '.
+	    'to be empty.',
+	    template_class => __PACKAGE__
+	    );
+    };
+};
+
+
+sub _mentioned {
+    my $c = shift;
+
+    my $req = $c->req;
+
+    if ($req->body) {
+	my $me = $c->magicenvelope($req->body);
+	unless ($me) {
+	    return $c->render(
+		status   => 400,
+		template => 'salmon',
+		title    => 'Salmon Error',
+		content  => 'The posted magic '.
+		'envelope seems '.
+		'to be empty.',
+		template_class => __PACKAGE__
+		);
+	};
+	
+	$c->app->plugins->run_hook( 'before_salmon_mention_verification'
+				    => $c, $me);
+	
+	
+	# my $author = $self->discover_author($me);
+	
+	$c->app->plugins->run_hook( 'on_salmon_mention'
+				    => $c, $me);
+
+	unless ($c->rendered) {
+	    $c->render(
+		status => 200,
+		template => 'salmon-mentioned-ok',
+		template_class => __PACKAGE__
+		);
+	};
+
+    } else {
+	return $c->render(
+	    status   => 400,
+	    template => 'salmon',
+	    title    => 'Salmon Error',
+	    content  => 'The posted magic '.
+	    'envelope seems '.
+	    'to be empty.',
+	    template_class => __PACKAGE__
+	    );
+    };
 };
 
 sub _discover_author {
