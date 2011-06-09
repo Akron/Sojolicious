@@ -1,4 +1,4 @@
-use Test::More tests => 1;
+use Test::More tests => 0;
 use Test::Mojo;
 use strict;
 use warnings;
@@ -23,6 +23,7 @@ $salmon->route('/mentioned')->salmon('mentioned');
 $salmon->route('/all-replies')->salmon('all-replies');
 $salmon->route('/signer')->salmon('signer');
 
+__END__
 my $mkey = <<'RSAKEY';
   RSA.
   mVgY8RN6URBTstndvmUUPb4UZTdwvw

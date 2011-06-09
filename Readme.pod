@@ -1,3 +1,13 @@
+package Sojolicious;
+use strict;
+use warnings;
+
+our $VERSION = '0.02';
+
+1;
+
+__END__
+
 =pod
 
 =head1 Sojolicious

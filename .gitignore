@@ -1,4 +1,7 @@
+blib
 Sandbox
+Makefile
+pm_to_blib
 *~
 .*
 !.gitignore
