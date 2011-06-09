@@ -3,7 +3,8 @@ use strict;
 use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 
-has qw/host/;
+has 'host';
+has secure => 0;
 
 # Register plugin
 sub register {
@@ -55,15 +56,29 @@ sub register {
 			);
 		});
 
-	    # Set the route name
- 	    my $r_name = 'salmon-'.$param;
-	    if ($plugin->app->url_for{$r_name}) {
-		warn qq{Route $r_name already defined.};
-		return;
-	    };
-	    $route->name($r_name);
+
+	    $mojo->endpoint(
+		'salmon-'.$param,
+		$plugin->secure,
+		$plugin->host,
+		$route
+		);
 
 	    if ($param eq 'all-replies') {
+
+		$mojo->plugins->add_hook(
+		    'before_serving_webfinger' => sub {
+			my ($c, $acct, $xrd) = @_;
+			$xrd->add(
+			    'Link',
+			    {'rel' => 'http://salmon-protocol.org/'.
+				 'ns/salmon-replies',
+				 'href' =>
+				 $c->endpoint('salmon-all-replies')
+			    });
+		    });
+		
+
 
 		# Handle POST requests
 		$route->post->to(
@@ -92,7 +107,7 @@ sub register {
 				    );
 			    };
 
-			    my $author = $self->_discover_author($me);
+			    # my $author = $self->_discover_author($me);
 
 			    # my $verb = $c->activity($me)->verb;
 
@@ -107,18 +122,7 @@ sub register {
 
 			    # Further Checks. Via hook.
 			    
-			} else {
-			    return $c->render(
-				status   => 400,
-				template => 'salmon',
-				title    => 'Salmon Error',
-				content  => 'The posted magic '.
-				            'envelope seems '.
-				            'to be empty.',
-				template_class => __PACKAGE__
-				);
-			};
-			
+
 			$c->app->plugins->run_hook( 'on_salmon_reply'
 			                            => $c, $me);
 
@@ -132,6 +136,20 @@ sub register {
 			};
 
 			return;
+
+
+			} else {
+			    return $c->render(
+				status   => 400,
+				template => 'salmon',
+				title    => 'Salmon Error',
+				content  => 'The posted magic '.
+				            'envelope seems '.
+				            'to be empty.',
+				template_class => __PACKAGE__
+				);
+			};
+			
 		    }
 		    );
 	    }
@@ -163,18 +181,8 @@ sub register {
 			                                => $c, $me);
 
 
-			    my $author = $self->discover_author($me);
-			} else {
-			    return $c->render(
-				status   => 400,
-				template => 'salmon',
-				title    => 'Salmon Error',
-				content  => 'The posted magic '.
-				            'envelope seems '.
-				            'to be empty.',
-				template_class => __PACKAGE__
-				);
-			};
+			    # my $author = $self->discover_author($me);
+
 
 			$c->app->plugins->run_hook( 'on_salmon_mention'
 			                            => $c, $me);
@@ -189,6 +197,18 @@ sub register {
 			};
 
 
+			} else {
+			    return $c->render(
+				status   => 400,
+				template => 'salmon',
+				title    => 'Salmon Error',
+				content  => 'The posted magic '.
+				            'envelope seems '.
+				            'to be empty.',
+				template_class => __PACKAGE__
+				);
+			};
+
 		    }
 		    );
 		
@@ -199,10 +219,7 @@ sub register {
 
 		# Todo: Fragen: Gibt es schon eine Signer-URI?
 
-		my $salmon_signer_url = 
-		    $plugin->secure.
-		    $plugin->host.
-		    $mojo->url_for('salmon-signer')->to_abs;
+		my $salmon_signer_url = $mojo->endpoint('salmon-signer');
 
 		# Add signer link to host-meta
 		my $link = $mojo->hostmeta->add(
@@ -232,23 +249,6 @@ sub register {
 	}
 	);
 };
-
-sub secure {
-    my $self = shift;
-
-    unless (defined $_[0]) {
-	if (defined $self->{secure}) {
-	    return 'https://';
-	} else {
-	    return 'http://';
-	};
-    } elsif ($_[0]) {
-	$self->{secure} = 1;
-    } else {
-	$self->{secure} = undef;
-    };
-};
-
 
 sub salmon {
     my $plugin = shift;

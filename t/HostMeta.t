@@ -4,7 +4,7 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 9;
+use Test::More tests => 8;
 use Test::Mojo;
 use Mojolicious::Lite;
 
@@ -21,7 +21,7 @@ $app->log->level('error');
 $app->hook('before_serving_hostmeta' => sub {
     my ($c, $xrd) = @_;
     $xrd->add('Property', { type => 'foo' }, 'bar');
-    is($xrd->url_for, 'https://sojolicio.us/.well-known/host-meta',
+    is($c->endpoint('hostmeta'), 'https://sojolicio.us/.well-known/host-meta',
        'Correct url');
 	   });
 
@@ -38,8 +38,6 @@ $app->hook('before_fetching_hostmeta',
 
 		   my $xrd = $c->new_xrd;
 
-		   $xrd->url_for('http://'.$host.'/.well-known/host-meta');
-
 		   my $sub = $xrd->add('Link', { rel => 'bar' }, 'foo' );
 		   $sub->comment('New Link');
 		   $$xrd_ref = $xrd;
@@ -48,5 +46,4 @@ $app->hook('before_fetching_hostmeta',
 
 my $xrd = $t->app->hostmeta('example.org');
 is($xrd->get_link('bar')->text, 'foo', 'Correct link');
-is($xrd->url_for, 'http://example.org/.well-known/host-meta', 'Correct url');
 

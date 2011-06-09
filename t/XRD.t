@@ -4,7 +4,7 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 8;
+use Test::More tests => 6;
 use Test::Mojo;
 use Mojolicious::Lite;
 
@@ -32,7 +32,7 @@ is ($xrd_string, '<?xmlversion="1.0"encoding="UTF-8"'.
 
 my $subnode_1 = $xrd->add('Link',{ rel => 'foo' }, 'bar');
 
-is(ref($subnode_1), 'Mojolicious::Plugin::XRD::Node',
+is(ref($subnode_1), 'Mojolicious::Plugin::XRD::Document',
    'Subnode added');
 
 my $subnode_2 = $subnode_1->comment("Foobar Link!");
@@ -55,12 +55,5 @@ is($xrd->get_link('foo')->text, 'bar', "DOM access Link");
 $xrd->add('Property', { type => 'bar' }, 'foo');
 
 is($xrd->get_property('bar')->text, 'foo', 'DOM access Property');
-
-is($xrd->url_for, '', 'Correct url');
-
-$xrd->url_for('https://example.org/bob.xrd');
-
-is($xrd->url_for, 'https://example.org/bob.xrd', 'Correct url');
-
 
 __END__

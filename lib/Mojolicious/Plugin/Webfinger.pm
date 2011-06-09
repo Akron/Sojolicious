@@ -4,7 +4,8 @@ use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::Util qw/url_escape/;
 
-has qw/host/;
+has 'host';
+has secure => 0;
 
 sub register {
     my ($plugin, $mojo, $param) = @_;
@@ -42,36 +43,39 @@ sub register {
 	$plugin->add_to_hostmeta($mojo, $lrdd);
     };
 
+    # Add 'webfinger' helper
     $mojo->helper(
 	'webfinger' => sub {
 	    return $plugin->_get_webfinger(@_);
-	}
-	);
+	});
 
+    # Add 'webfinger' shortcut
     $mojo->routes->add_shortcut(
 	'webfinger' => sub {
 	    my $route = shift;
-	    $route->name('webfinger');
 	    my $param = shift;
 
-	    my $wf_template = Mojo::URL->new(
-		$mojo->url_for('webfinger',
-			       'uri' => '{uri}')
-		)->to_string;
-
-	    $wf_template =
-		$plugin->secure.
-		$plugin->host.
-		$wf_template;
-	    
 	    my $lrdd = { rel => 'lrdd' };
-	    if ($wf_template =~ s/%7B(.+?)%7D/{$1}/) {
-		$lrdd->{template} = $wf_template; # ->to_string;
-	    } elsif ($param) {
-		url_escape($param);
-		$lrdd->{template} = $wf_template .= '?'.$param.'={uri}';
-	    } else {		
-		$lrdd->{href} = $wf_template; # ->to_string;
+	    
+	    if ($param) {
+		$param = { $param => '{uri}' };
+	    };
+
+	    $mojo->endpoint(
+		'webfinger',
+		$plugin->secure,
+		$plugin->host,
+		$route,
+		$param
+		);
+
+	    my $endpoint = $mojo->endpoint('webfinger',
+					   {'uri' => '{uri}'});
+	    
+	    if ($endpoint =~ m/\{(?:.+?)\}/) {
+		$lrdd->{template} = $endpoint;
+	    } else {
+		$lrdd->{href} = $endpoint;
 	    };
 
 	    $plugin->_add_to_hostmeta($mojo, $lrdd);
@@ -101,23 +105,6 @@ sub register {
 	}
 	);
 
-};
-
-# Use https or http
-sub secure {
-    my $self = shift;
-
-    unless (defined $_[0]) {
-	if (defined $self->{secure}) {
-	    return 'https://';
-	} else {
-	    return 'http://';
-	};
-    } elsif ($_[0]) {
-	$self->{secure} = 1;
-    } else {
-	$self->{secure} = undef;
-    };
 };
 
 
@@ -248,6 +235,7 @@ sub _get_finger {
 	# Run hook
 	$c->app->plugins->run_hook(
 	    'before_serving_webfinger',
+	    $c,
 	    'acct:'.$user.'@'.$domain,
 	    $wf_xrd
 	    );

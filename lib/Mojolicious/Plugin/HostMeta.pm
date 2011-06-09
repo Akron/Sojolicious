@@ -5,6 +5,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Storable 'dclone';
 
 has 'host';
+has 'secure' => 0;
 
 our $WKPATH;
 BEGIN {
@@ -21,6 +22,52 @@ sub register {
     };
 
     my $hostmeta = $mojo->new_xrd;
+
+    # Establish 'endpoint' helper
+    my %endpoint;
+    $mojo->helper(
+	'endpoint' => sub {
+	    my $c = shift; # c or mojo
+	    my $name = shift;
+	    
+	    my $hash_param = {};
+	    if ($c->match) {
+		$hash_param = $c->match->captures
+	    };
+
+	    # Get endpoint url
+	    if (!defined $_[1]) {
+		my $url = $c->url_for( $name,
+				       $hash_param,
+				       %{$_[0]} )->to_abs;
+
+		if (exists $endpoint{$name}) {
+		    my $new_url = $endpoint{$name}->clone;
+		    $url = $new_url->path($url->path);
+		};
+		my $endpoint = $url->to_string;
+		$endpoint =~ s/%7B(.+?)%7D/{$1}/g;
+		return $endpoint;
+	    }
+	    
+	    # Define endpoint url
+	    else {
+
+		my ($secure, $host, $route, $param) = @_;
+
+		if (exists $endpoint{$name}) {
+		    warn qq{Route $name already defined.};
+		    return;
+		};
+
+		my $endpoint = Mojo::URL->new;
+		$endpoint->host( $host );
+		$endpoint->scheme( $secure ? 'https' : 'http' );
+		$endpoint->query->param(%$param) if $param;
+		$endpoint{$name} = $endpoint;
+		$route->name($name);
+	    };
+	});
 
     # If domain parameter is given
     if ($param->{host}) {
@@ -39,12 +86,6 @@ sub register {
 
     # use https or http
     $plugin->secure( $param->{secure} );
-
-    $hostmeta->url_for(
-	$plugin->secure.
-	$plugin->host.
-	$WKPATH
-	);
 
     # Establish 'hostmeta' helper
     $mojo->helper(
@@ -66,11 +107,16 @@ sub register {
 
 
     # Establish /.well-known/host-meta route
-    my $r = $mojo->routes->route($WKPATH);
+    my $route = $mojo->routes->route($WKPATH);
 
-    $r->name('host_meta');
+    # Define endpoint manually (Really necessary?)
+    $route->name('hostmeta');
+    my $endpoint = Mojo::URL->new;
+    $endpoint->host( $plugin->host );
+    $endpoint->scheme( $plugin->secure ? 'https' : 'http' );
+    $endpoint{hostmeta} = $endpoint;
 
-    $r->to(
+    $route->to(
 	cb => sub {
 	    my $c = shift;
 
@@ -88,23 +134,6 @@ sub register {
 		)
 	}
 	);
-};
-
-# Use https or http
-sub secure {
-    my $self = shift;
-
-    unless (defined $_[0]) {
-	if (defined $self->{secure}) {
-	    return 'https://';
-	} else {
-	    return 'http://';
-	};
-    } elsif ($_[0]) {
-	$self->{secure} = 1;
-    } else {
-	$self->{secure} = undef;
-    };
 };
 
 # Get HostMeta document
@@ -238,7 +267,7 @@ Use C<http> or C<https>.
 
 =head2 C<hostmeta>
 
-  # In Controllers:
+  # In Controller:
   my $xrd = $self->hostmeta;
   my $xrd = $self->hostmeta('gmail.com');
 
@@ -247,6 +276,18 @@ as an L<Mojolicious::Plugin::XRD> object, if no hostname
 is given. If a hostname is given, the corresponding
 hostmeta document is retrieved and returned as an XRD
 object.
+
+=head2 C<endpoint>
+
+  # In Application:
+  my $route = $mojo->routes->route('/:user/webfinger');
+  $mojo->endpoint('webfinger' => 1,             # https
+                                 'sojolicio.us' # host
+                                 $route         # Route
+                                 );
+
+  # In Controller:
+  $self->
 
 =head1 ROUTES
 
