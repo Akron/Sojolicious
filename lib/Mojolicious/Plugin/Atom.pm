@@ -1,4 +1,4 @@
-+package Mojolicious::Plugin::Atom;
+package Mojolicious::Plugin::Atom;
 use Mojo::Base 'Mojolicious::Plugin::XML::Simple';
 use strict;
 use warnings;
