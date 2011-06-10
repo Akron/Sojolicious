@@ -1,5 +1,6 @@
 package Mojolicious::Plugin::Atom;
 use Mojo::Base 'Mojolicious::Plugin::XML::Simple';
+use Mojo::ByteStream 'b';
 use strict;
 use warnings;
 
@@ -38,6 +39,30 @@ sub add_entry {
     $entry->add('id', shift ) if $_[0];
     $entry->comment('Feed-Entry');
     return $entry;
+};
+
+sub add_content {
+    my $self = shift;
+    my $t = $_[1] ? shift || 'text';
+    my $content = shift;
+
+    my $param = { type => $t };
+
+    # xhtml
+    if ($t eq 'xhtml') {
+	return $self->add('content',
+			  $param,
+			  $content);
+    }
+
+    # html or text
+    elsif ($t eq 'html' or $t eq 'text') {
+	return $self->add('content',
+			  $param,
+			  b($content)->html_escape)
+    };
+
+    return;
 };
 
 1;
