@@ -1,5 +1,6 @@
 blib
 Sandbox
+lib/Sojolicious
 Makefile
 pm_to_blib
 *~

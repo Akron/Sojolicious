@@ -1,4 +1,4 @@
-use Test::More tests => 0;
+use Test::More skip_all => "Not fully implemented yet.";
 use Test::Mojo;
 use strict;
 use warnings;

@@ -110,6 +110,23 @@ sub get_link {
     return $self->dom->at( qq{Link[rel="$rel"]} );
 };
 
+# Get expiration date as epoch
+sub get_expiration {
+    my $self = shift;
+    my $exp = $self->dom->at('Expires');
+    return 0 unless $exp;
+
+    if (my ($year, $mon, $mday, $hour, $min, $sec) =
+	( $exp =~ m/^(\d{4})-(\d\d)-(\d\d)T
+                     (\d\d):(\d\d):(\d\d)
+                     Z$/x )) {
+	return timegm($sec, $min, $hour,
+		      $mday, $mon, $year);
+    };
+
+    return 0;
+};
+
 # Render JRD
 sub to_json {
     my $self = shift;
@@ -261,6 +278,13 @@ elemet of the given type.
 
 Returns a L<Mojo::DOM> element of the first link
 element of the given relation.
+
+=head2 C<get_expiration>
+
+  my $epoch = $xrd->get_expiration;
+
+Returns the expiration date of the document in UNIX epoch
+notation. This may differ to the HTTP expiration date.
 
 =head2 C<to_json>
 

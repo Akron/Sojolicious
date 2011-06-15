@@ -61,25 +61,25 @@ sub register {
 		});
 
 	    # Set salmon endpoints
-	    $mojo->endpoint(
+	    $mojo->set_endpoint(
 		'salmon-'.$param,
-		$plugin->secure,
-		$plugin->host,
-		$route
+		{ secure => $plugin->secure,
+		  host => $plugin->host,
+		  route => $route }
 		);
 
 	    if ($param eq 'all-replies') {
 
 		# Add reply handle to webfinger
-		$mojo->plugins->add_hook(
+		$mojo->hook(
 		    'before_serving_webfinger' => sub {
-			my ($plugins, $c, $acct, $xrd) = @_;
+			my ($c, $acct, $xrd) = @_;
 			$xrd->add(
 			    'Link',
 			    {'rel' => 'http://salmon-protocol.org/'.
 				 'ns/salmon-replies',
 				 'href' =>
-				 $c->endpoint('salmon-all-replies')
+				 $c->get_endpoint('salmon-all-replies')
 			    })->comment('Salmon Reply Endpoint');
 		    });
 		
@@ -94,15 +94,15 @@ sub register {
 	    elsif ($param eq 'mentioned') {
 
 		# Add mention handle to webfinger
-		$mojo->plugins->add_hook(
+		$mojo->hook(
 		    'before_serving_webfinger' => sub {
-			my ($plugins, $c, $acct, $xrd) = @_;
+			my ($c, $acct, $xrd) = @_;
 			$xrd->add(
 			    'Link',
 			    {'rel' => 'http://salmon-protocol.org/'.
 				 'ns/salmon-mention',
 				 'href' =>
-				 $c->endpoint('salmon-mentioned')
+				 $c->get_endpoint('salmon-mentioned')
 			    })->comment('Salmon Mentioned Endpoint');
 		    });
 
@@ -116,7 +116,7 @@ sub register {
 	    elsif ($param eq 'signer') {
 		
 		# Todo: Fragen: Gibt es schon eine Signer-URI?
-		my $salmon_signer_url = $mojo->endpoint('salmon-signer');
+		my $salmon_signer_url = $mojo->get_endpoint('salmon-signer');
 
 		# Add signer link to host-meta
 		my $link = $mojo->hostmeta->add(

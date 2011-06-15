@@ -4,6 +4,7 @@ use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::JSON;
 use Storable 'dclone';
+use Mojo::Date;
 
 has 'host';
 has 'secure' => 0;
@@ -24,60 +25,75 @@ sub register {
 
     my $hostmeta = $mojo->new_xrd;
 
-    # Establish 'endpoint' helper
+    # Establish 'set_endpoint' helper
     my %endpoint;
     $mojo->helper(
-	'endpoint' => sub {
+	'set_endpoint' => sub {
 	    my $c = shift; # c or mojo
 	    my $name = shift;
-	    
+	    my $param = shift;
+	
+	    if (exists $endpoint{$name}) {
+		warn qq{Route $name already defined.};
+		return;
+	    };
+
+	    if (exists $param->{route}) {
+		$param->{route}->name($name);
+	    };
+	
+	    for ( Mojo::URL->new ) {
+		$_->host( $param->{host} || $plugin->host );
+		
+		if (exists $param->{secure}) {
+		    $_->scheme( $param->{secure} ? 'https' : 'http' );
+		}
+
+		# Get scheme from plugin
+		else {
+		    $_->scheme( $plugin->secure ? 'https' : 'http' );
+		};
+		
+		if (defined $param->{query}) {
+		    $_->query->param( %{ $param->{query} } );
+		};
+		
+		$endpoint{$name} = $_;
+	    };
+	});
+
+    # Establish 'get_endpoint' helper
+    $mojo->helper(
+	'get_endpoint' => sub {
+	    my $c = shift; # c or mojo
+	    my $name = shift;
 	    my $hash_param = {};
+	    
 	    if (ref($c) eq 'Mojolicious::Controller') {
 		%{$hash_param} = %{$c->stash};
 	    };
-
-	    # Get endpoint url
-	    if (!defined $_[1]) {
-		if ($_[0]) {
-		    my $h = shift;
-		    foreach (keys %$h) {
-			$hash_param->{$_} = $h->{$_}
-		    };
-		};
-
-		my $url = $c->url_for( $name,
-				       $hash_param )->to_abs;
-
-		if (exists $endpoint{$name}) {
-		    my $new_url = $endpoint{$name}->clone;
-		    $url = $new_url->path($url->path);
-		};
-		my $endpoint = $url->to_string;
-		$endpoint =~ s/%7B(.+?)%7D/{$1}/g;
-		return $endpoint;
-	    }
 	    
-	    # Define endpoint url
-	    else {
-
-		my ($secure, $host, $route, $param) = @_;
-
-		if (exists $endpoint{$name}) {
-		    warn qq{Route $name already defined.};
-		    return;
+	    if ($_[0]) {
+		my $h = shift;
+		foreach (keys %$h) {
+		    $hash_param->{$_} = $h->{$_}
 		};
-
-		my $endpoint = Mojo::URL->new;
-		for ($endpoint) {
-		    $_->host( $host );
-		    $_->scheme( $secure ? 'https' : 'http' );
-		    $_->query->param( %$param ) if $param;
-		    $endpoint{$name} = $_;
-		};
-
-		$route->name($name);
 	    };
+	    
+	    my $url = $c->url_for( $name,
+				   $hash_param )->to_abs;
+	    
+	    if (exists $endpoint{$name}) {
+		my $new_url = $endpoint{$name}->clone;
+		$url = $new_url->path($url->path);
+	    };
+	    my $endpoint = $url->to_string;
+	    $endpoint =~ s/%7B(.+?)%7D/{$1}/g;
+	    return $endpoint;
 	});
+    
+    # Discover relations
+    $mojo->helper( 'discover_rel' => \&discover_rel );
 
     # If domain parameter is given
     if ($param->{host}) {
@@ -112,8 +128,7 @@ sub register {
 	    };
 
 	    return $plugin->_get_hostmeta($c, @_);
-	}
-	);
+	});
 
 
     # Establish /.well-known/host-meta route
@@ -121,10 +136,11 @@ sub register {
 
     # Define endpoint manually (Really necessary?)
     $route->name('hostmeta');
-    my $endpoint = Mojo::URL->new;
-    $endpoint->host( $plugin->host );
-    $endpoint->scheme( $plugin->secure ? 'https' : 'http' );
-    $endpoint{hostmeta} = $endpoint;
+    for ( Mojo::URL->new ) {
+	$_->host( $plugin->host );
+	$_->scheme( $plugin->secure ? 'https' : 'http' );
+	$endpoint{hostmeta} = $_;
+    };
 
     $route->to(
 	cb => sub {
@@ -139,8 +155,42 @@ sub register {
 		$hostmeta_clone);
 
 	    return $c->render_xrd($hostmeta_clone);
-	}
-	);
+	});
+};
+
+# discover rel from dom
+sub discover_rel {
+    my $self = shift;
+    my $c = shift;
+    my $dom = shift;
+    my $rel = shift;
+
+    if (ref($dom) ne 'Mojo::DOM') {
+
+	# Get file
+	my $ua = $c->ua;
+	
+	$ua->max_redirects(3);
+	my $res = $ua->get($dom);
+	$ua->max_redirects(0);
+	
+	# is 2xx, incl. 204 aka successful
+	if (!$res->is_status_class(200)) {
+	    return 0;
+	};
+	
+	$dom = $res->dom;
+    };
+    
+    return () unless $dom;
+    
+    my @rels;
+    $dom->find('link,Link[rel="$rel"]')->each(
+	sub {
+	    push(@rels, shift->attrs->{href});
+	});
+    
+    return @rels;
 };
 
 # Get HostMeta document
@@ -196,8 +246,6 @@ sub _get_hostmeta {
     # Parse XRD
     $hostmeta_xrd =
 	$c->new_xrd($host_hm->res->body);
-
-    $hostmeta_xrd->url_for($secure.$WKPATH);
 
     # Validate host
     if (my $host_e = $hostmeta_xrd->dom->at('Host')) {
@@ -283,17 +331,31 @@ if no hostname is given. If a hostname is given, the
 corresponding hostmeta document is retrieved and returned
 as an XRD object.
 
-=head2 C<endpoint>
+=head2 C<set_endpoint>
 
   # In Application:
   my $route = $mojo->routes->route('/:user/webfinger');
-  $mojo->endpoint('webfinger' => 1,             # https
-                                 'sojolicio.us' # host
-                                 $route         # Route
-                                 );
+  $mojo->set_endpoint('webfinger' => {
+                        secure => 1,              # https
+                        host => 'sojolicio.us',   # host
+                        route => $route,          # Route
+                        query => { q => '{uri}' } # query-param
+                      });
+
+Stores an endpoint defined for a service. It accepts optional
+parameters C<secure>, C<host>, a C<route> to the service and 
+query parameters (C<param>).
+
+=head2 C<get_endpoint>
 
   # In Controller:
-  $self->
+  return $self->get_endpoint('webfinger');
+  return $self->get_endpoint('webfinger', { user => 'me' } );
+
+Returns the endpoint defined for a specific service.
+It accepts additional stash values for the route. These
+stash values override existing stash values from the
+controller.
 
 =head1 ROUTES
 
@@ -336,7 +398,7 @@ This hook is run after a foreign hostmeta document is retrieved.
 This can be used for caching.
 The hook returns the current ??? object, the host name, a string
 reference, meant to refer to the XRD object, and the
-L<Mojo::Message::Response> object from the request. 
+L<Mojo::Message::Response> object from the request.
 
 =back
 

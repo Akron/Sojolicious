@@ -6,7 +6,6 @@ WriteMakefile(
     NAME         => "Sojolicious",
     ($] >= 5.005 ?
       (
-       ABSTRACT_FROM  => 'Readme.pod',
        AUTHOR         => 'Nils Diewald') : ()
     ),
     PREREQ_PM => {

@@ -63,17 +63,19 @@ sub register {
 	    my $param = $param_key ? { $param_key => '{uri}' } : undef;
 
 	    # Set endpoint-uri
-	    $mojo->endpoint(
-		'webfinger',
-		$plugin->secure,
-		$plugin->host,
-		$route,
-		$param
-		);
+	    $mojo->set_endpoint(
+		'webfinger' => {
+		    secure => $plugin->secure,
+		    host => $plugin->host,
+		    route => $route,
+		    query => $param
+		});
 
 	    # Retrieve Endpoint-Uri
-	    my $endpoint = $mojo->endpoint('webfinger',
-					   {'uri' => '{uri}'});
+	    my $endpoint = $mojo->get_endpoint(
+		'webfinger' => {
+		    'uri' => '{uri}'
+		});
 	    
 	    # If It's a template, point the lrdd to it
 	    if ($endpoint =~ m/\{(?:.+?)\}/) {
