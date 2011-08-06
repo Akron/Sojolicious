@@ -1,6 +1,4 @@
 package Mojolicious::Plugin::XRD;
-use strict;
-use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 
 # Register Plugin
@@ -44,7 +42,7 @@ sub register {
 	    # Render as xml
 	    else {
 		return $c->render(
-		    'inline' => $xrd->to_xml,
+		    'inline' => $xrd->to_pretty_xml,
 		    'format' => 'xrd'
 		    );
 	    };
@@ -53,7 +51,7 @@ sub register {
 
 # Document class
 package Mojolicious::Plugin::XRD::Document;
-use Mojo::Base 'Mojolicious::Plugin::XML::Simple';
+use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
 use strict;
 use warnings;
 
@@ -68,28 +66,27 @@ BEGIN {
 sub new {
     my $class = ref($_[0]) ? ref(shift(@_)) : shift;
 
-    # Document.
-    # Either empty, a string or a tree.
-    my $document = shift;
-
-    if (!$document) {
-	$document = [
-	    'root',
-	    [ 'pi', 'xml version="1.0"'.
-	            ' encoding="UTF-8"'.
-	            ' standalone="yes"' ],
-	    [ 'tag',
-	      'XRD',
-	      {
-		  'xmlns' => $xrd_ns,
-		  'xmlns:xsi' => $xsi_ns
-	      }
-	    ]
-	    ];
+    # Start XRD from scratch
+    unless ($_[0]) {
+	return $class->SUPER::new(
+	    'XRD', {
+		'xmlns'     => 'http://docs.oasis-open.org/ns/xri/xrd-1.0',
+		'xmlns:xsi' => 'http://www.w3.org/2001/XMLSchema-instance'
+	    });
     };
     
     # Use constructor from parent class
-    return $class->SUPER::new($document);
+    $class->SUPER::new(@_);
+};
+
+# Add Property
+sub add_property {
+    my $self = shift;
+    my %hash = (
+	type => shift,
+	%{ shift(@_) } 
+	);
+    return $self->add('Property', \%hash, @_ );
 };
 
 # Get Property
@@ -98,7 +95,17 @@ sub get_property {
     my $type = shift;
 
     # Returns the first match
-    return $self->dom->at( qq{Property[type="$type"]} );
+    return $self->at( qq{Property[type="$type"]} );
+};
+
+# Add Link
+sub add_link {
+    my $self = shift;
+    my %hash = (
+	rel => shift,
+	%{ shift(@_) } 
+	);
+    return $self->add('Link', \%hash, @_ );
 };
 
 # Get Link
@@ -107,14 +114,15 @@ sub get_link {
     my $rel = shift;
 
     # Returns the first match
-    return $self->dom->at( qq{Link[rel="$rel"]} );
+    return $self->at( qq{Link[rel="$rel"]} );
 };
 
 # Get expiration date as epoch
 sub get_expiration {
     my $self = shift;
-    my $exp = $self->dom->at('Expires');
-    return 0 unless $exp;
+    my $exp = $self->at('Expires');
+ 
+   return 0 unless $exp;
 
     if (my ($year, $mon, $mday, $hour, $min, $sec) =
 	( $exp =~ m/^(\d{4})-(\d\d)-(\d\d)T
@@ -130,7 +138,7 @@ sub get_expiration {
 # Render JRD
 sub to_json {
     my $self = shift;
-    my $dom = $self->dom;
+    my $dom  = $self->root;
 
     my %object;
 
@@ -261,9 +269,16 @@ in C<xml> or in C<json> notation, depending on the request.
 
 =head1 METHODS
 
-L<Mojolicious::Plugin::XRD> inherits all methods from
-L<Mojolicious::Plugin::XML::Simple> and implements the
+L<Mojolicious::Plugin::XRD::Document> inherits all methods
+from L<Mojolicious::Plugin::XML::Serial> and implements the
 following new ones.
+
+=head2 C<add_property>
+
+  my $type = $xrd->add_property('descrybedby' => { href => '/me.foaf' } );
+
+Adds a property to the xrd document.
+Returns a L<Mojolicious::Plugin::XML::Serial> object.
 
 =head2 C<get_property>
 
@@ -271,6 +286,13 @@ following new ones.
 
 Returns a L<Mojo::DOM> element of the first property
 elemet of the given type.
+
+=head2 C<add_link>
+
+  my $type = $xrd->add_link('hcard' => { href => '/me.hcard' } );
+
+Adds a link to the xrd document.
+Returns a L<Mojolicious::Plugin::XML::Serial> object.
 
 =head2 C<get_link>
 
@@ -301,7 +323,7 @@ L<Mojolicious::Plugin::XRD> establishes the following mime-types:
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::XML::Simple>.
+L<Mojolicious::Plugin::XML::Serial>.
 
 =head1 COPYRIGHT AND LICENSE
 

@@ -4,7 +4,7 @@ use warnings;
 use Mojo::Base -base;
 
 use Math::BigInt;
-use Mojo::Util qw/b64_encode b64_decode/;
+use MIME::Base64;
 use Digest::SHA qw(sha256);
 use Exporter 'import';
 our @EXPORT_OK = qw(b64url_encode
@@ -341,7 +341,9 @@ sub _bitsize {
 sub b64url_encode {
     my $v = shift;
     return '' unless $v;
-    b64_encode($v);
+
+    utf8::encode $v if utf8::is_utf8 $v;
+    $v = encode_base64($v, '');
     $v =~ tr{+/}{-_};
 
     $v =~ tr{\t-\x0d }{}d;
@@ -357,8 +359,12 @@ sub b64url_decode {
     my $v = shift;
     return '' unless $v;
     $v =~ tr{-_}{+/};
-    b64_decode($v);
-    return $v;
+
+    if (my $padding = (length($v) % 4)) {
+	$v .= '=' x (4 - $padding);
+    };
+    
+    return decode_base64($v);
 };
 
 1;

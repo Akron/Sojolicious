@@ -19,13 +19,14 @@ $app->plugin('host_meta' =>
 $app->log->level('error');
 
 $app->hook('before_serving_hostmeta' => sub {
+
     my ($c, $xrd) = @_;
+
     $xrd->add('Property', { type => 'foo' }, 'bar');
-    is($c->get_endpoint('hostmeta'), 'https://sojolicio.us/.well-known/host-meta',
+    is($c->get_endpoint('hostmeta'),
+       'https://sojolicio.us/.well-known/host-meta',
        'Correct url');
 	   });
-
-#print $t->ua->get('/.well-known/host-meta')->res->body;
 
 my $xrd_test = $t->get_ok('/.well-known/host-meta')->status_is(200);
 
@@ -48,4 +49,3 @@ $app->hook('before_fetching_hostmeta',
 
 my $xrd = $t->app->hostmeta('example.org');
 is($xrd->get_link('bar')->text, 'foo', 'Correct link');
-

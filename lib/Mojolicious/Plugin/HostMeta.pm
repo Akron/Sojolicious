@@ -377,7 +377,7 @@ the host's own hostmeta document.
 	my $plugins = shift;
         my $c = shift;
 	my $hostmeta = shift;
-	$hostmeta->add('Link', {rel => 'try'} );
+	$hostmeta->add_link('try');
   };
 
 This hook is run before the host's own hostmeta document is

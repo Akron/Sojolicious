@@ -4,7 +4,7 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 7;
+use Test::More tests => 11;
 use Test::Mojo;
 use Mojolicious::Lite;
 use Mojo::JSON;
@@ -20,7 +20,7 @@ $app->log->level('error');
 
 my $xrd = $app->new_xrd;
 
-my $xrd_string = $xrd->to_xml;
+my $xrd_string = $xrd->to_pretty_xml;
 
 $xrd_string =~ s/[\s\r\n]+//g;
 
@@ -35,6 +35,9 @@ my $subnode_1 = $xrd->add('Link',{ rel => 'foo' }, 'bar');
 
 is(ref($subnode_1), 'Mojolicious::Plugin::XRD::Document',
    'Subnode added');
+
+is($xrd->at('Link')->attrs('rel'), 'foo', 'Attribute');
+is($xrd->at('Link[rel="foo"]')->text, 'bar', 'Text');
 
 my $subnode_2 = $subnode_1->comment("Foobar Link!");
 
@@ -51,12 +54,13 @@ XRD
 
 ok($xrd, 'XRD loaded');
 
+is($xrd->at('Link[rel="foo"]')->text, 'bar', "DOM access Link");
 is($xrd->get_link('foo')->text, 'bar', "DOM access Link");
 
 $xrd->add('Property', { type => 'bar' }, 'foo');
 
+is($xrd->at('Property[type="bar"]')->text, 'foo', 'DOM access Property');
 is($xrd->get_property('bar')->text, 'foo', 'DOM access Property');
-
 
 is_deeply(
     Mojo::JSON->new->decode($xrd->to_json),

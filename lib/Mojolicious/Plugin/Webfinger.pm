@@ -2,7 +2,7 @@ package Mojolicious::Plugin::Webfinger;
 use strict;
 use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
-use Mojo::Util qw/url_escape/;
+use Mojo::ByteStream 'b';
 
 has 'host';
 has 'secure' => 0;
@@ -56,8 +56,7 @@ sub register {
 	    my $route = shift;
 	    my $param_key = shift;
 
-	    my $lrdd = { rel  => 'lrdd',
-			 type => 'application/xrd+xml' };
+	    my $lrdd = { type => 'application/xrd+xml' };
     
 	    # Make hash from param
 	    my $param = $param_key ? { $param_key => '{uri}' } : undef;
@@ -85,7 +84,7 @@ sub register {
 	    };
 
 	    # Add Route to Hostmeta
-	    my $link = $mojo->hostmeta->add('Link', $lrdd);
+	    my $link = $mojo->hostmeta->add_link('lrdd' => $lrdd);
 	    $link->comment('Webfinger');
 	    $link->add('Title','Resource Descriptor');
 
@@ -98,16 +97,14 @@ sub register {
 		    my $uri = $c->stash('uri');
 		    $uri = $c->stash($param_key) if $param_key;
 
-		    my $acct;
+		    my $ok = 0;
 		    $mojo->plugins->run_hook(
-			'on_uri_to_acct' => $c, $uri, \$acct
+			'on_prepare_webfinger' => $plugin, $c, $uri, \$ok
 			);
 
-		    unless ($acct) {
+		    unless ($ok) {
 			return $c->render_not_found;
 		    };
-
-		    $c->stash->{'acct'} = $acct;
 
 		    my $xrd = $plugin->_get_finger($c,$uri);
 
@@ -119,13 +116,8 @@ sub register {
 		    else {
 			$c->render_not_found;
 		    };
-		}
-	    );
-
-
-	}
-	);
-
+		});
+	});
 };
 
 sub _get_webfinger {
@@ -134,6 +126,10 @@ sub _get_webfinger {
 
     # Get user and domain
     my ($user, $domain, $norm) = $c->parse_acct( shift );
+
+    if ($domain eq $plugin->host) {
+	return $plugin->_get_finger($c, $norm);
+    };
 
     # Hook for caching
     my $acct_xrd;
@@ -144,7 +140,6 @@ sub _get_webfinger {
 	\$acct_xrd
 	);
     return $acct_xrd if $acct_xrd;
-
 
     # Get host-meta from domain
     my $domain_hm = $c->hostmeta($domain);
@@ -159,8 +154,7 @@ sub _get_webfinger {
 	
     # Get webfinger uri by using template
     if ($webfinger_uri = $lrdd->{'template'}) {
-	my $acct = $norm;
-	url_escape $acct;
+	my $acct = b($norm)->url_escape;
 	$webfinger_uri =~ s/\{uri\}/$acct/;
     }
 	
@@ -218,14 +212,10 @@ sub _get_webfinger {
 	return undef;
     };
 
-
-    # };
-
     $ua->max_redirects(0);
-    
 };
 
-# Serve webfinger?
+# Serve webfinger
 sub _get_finger {
     my $plugin = shift;
     my $c = shift;
@@ -256,7 +246,7 @@ sub _get_finger {
 
 	return undef;
     };
-}
+};
 
 1;
 
@@ -339,7 +329,7 @@ and 'me' as well as full acct writings.
   # Webfinger at /test/
 
 L<Mojolicious::Plugin::Webfinger> provides a route shortcut
-for serving a C<lrrd> Link relation in C</.well-known/host-meta>
+for serving a C<lrdd> Link relation in C</.well-known/host-meta>
 (see L<Mojolicious::Plugin::HostMeta).
 
 Please set a C<host> as well as the C<secure> parameter when
@@ -368,6 +358,12 @@ This can be used for caching.
 The hook returns the current ??? object, the account name,
 a string reference, meant to refer to the XRD object, and the
 L<Mojo::Message::Response> object from the request. 
+
+=item C<before_serving_webfinger>
+
+This hook is run before a webfinger document is served.
+The hook returns the current ??? object, the account name
+and the XRD object. 
 
 =back
 
