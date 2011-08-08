@@ -20,7 +20,7 @@ sub new {
 
     if (ref($class)     ||
 	!$_[0]          ||
-	$_[0] =~ /[<>]/ ||
+	index($_[0],'<') >= 0 ||
 	((@_ % 2) == 0 &&
 	 ref( $_[1] ) ne 'HASH')) {
 	return $class->SUPER::new(@_);
@@ -57,6 +57,9 @@ sub new {
 sub add {
     my $self = shift;
     
+#    use Data::Dumper;
+#    warn('-<= '.Dumper($self->tree));
+
     if (!$self->parent &&
 	$self->tree->[1]->[0] eq 'pi'){
 	$self = $self->at('*');

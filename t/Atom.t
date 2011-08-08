@@ -12,15 +12,15 @@ use Mojolicious::Lite;
 
 use Test::More tests => 95;
 
-my $poco_ns = 'http://www.w3.org/TR/2011/WD-contacts-api-20110616/';
+my $poco_ns  = 'http://www.w3.org/TR/2011/WD-contacts-api-20110616/';
 my $xhtml_ns = 'http://www.w3.org/1999/xhtml';
 
 use_ok('Mojolicious::Plugin::Atom');
 
 # new
-my $atom = Mojolicious::Plugin::Atom::Document->new('feed');
+my $atom = Mojolicious::Plugin::Atom->new('feed');
 is(ref($atom), 'Mojolicious::Plugin::Atom::Document', 'new 1');
-$atom = $atom->new('feed');
+$atom = $atom->new_feed;
 is(ref($atom), 'Mojolicious::Plugin::Atom::Document', 'new 2');
 
 # New Text
@@ -122,10 +122,10 @@ $entry = $atom->at('entry');
 $entry->add_author($person);
 is($atom->at('feed > entry > author > name')->text,
    'Bender',
-    'Add auhor 2');
+    'Add author 2');
 is($atom->at('feed > entry > author > uri')->text,
    'http://sojolicio.us/bender',
-    'Add auhor 3');
+    'Add author 3');
 
 
 # Add category
@@ -342,7 +342,7 @@ is($atom->at('entry updated')->text,
 
 
 # Examples
-$atom = Mojolicious::Plugin::Atom::Document->new;
+$atom = Mojolicious::Plugin::Atom->new('entry');
 $entry = $atom->add_entry(id => '#467r57');
 $entry->add_author(name   => 'Bender');
 $entry->add_content(text  => "I am Bender!");
@@ -358,7 +358,7 @@ is($atom->at('content[type="xhtml"] div')->text,  'I am !', 'Text');
 is($atom->at('content[type="xhtml"] div')->all_text,  'I am Bender!', 'Text');
 is($atom->at('content[type="movie"]')->text, 'SSBhbSBCZW5kZXIh', 'Text');
 
-$atom = Mojolicious::Plugin::Atom::Document->new(<<'ATOM');
+$atom = Mojolicious::Plugin::Atom->new(<<'ATOM');
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry>
@@ -390,8 +390,8 @@ $date = $atom->new_date(1313131313);
 $atom->add_updated($date);
 is($atom->at('updated')->text, '2011-07-12t06:41:53Z', 'Updated');
 
-# Plugin helper
 
+# Plugin helper
 my $t = Test::Mojo->new;
 my $app = $t->app;
 

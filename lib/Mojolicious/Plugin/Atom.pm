@@ -1,6 +1,11 @@
 package Mojolicious::Plugin::Atom;
 use Mojo::Base 'Mojolicious::Plugin';
 
+our $atom_ns;
+BEGIN {
+    our $atom_ns =  'http://www.w3.org/2005/Atom';
+};
+
 # Register Plugin
 sub register {
     my ($plugin, $mojo) = @_;
@@ -12,8 +17,7 @@ sub register {
     $mojo->helper(
 	'new_atom' => sub {
 	    shift; # Either Controller or App
-	    return Mojolicious::Plugin::Atom::Document
-		->new(@_);
+	    return $plugin->new( shift || 'feed' );
 	});
 
     # Add 'render_atom' helper
@@ -26,7 +30,29 @@ sub register {
 		'format' => 'atom'
 		);
 	});
+};
 
+# Constructor
+sub new {
+    my $class = shift;
+
+    # Return for register_plugin
+    if (!defined $_[0]) {
+	return $class if ref($class);
+	return bless( {}, $class );
+    }
+
+    # Start Atom feed or entry
+    elsif (@_ == 1 && index($_[0], '<') == -1) {
+	my $type  = shift;
+	
+	return Mojolicious::Plugin::Atom::Document->new(
+	    $type,
+	    { 'xmlns' => $atom_ns });
+    };
+    
+    # Start document
+    return Mojolicious::Plugin::Atom::Document->new(@_);
 };
 
 # Document class
@@ -35,7 +61,7 @@ use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
 use Mojo::ByteStream 'b';
 use Mojo::Date;
 
-our ($RFC3339_RE, $xhtml_ns, $atom_ns);
+our ($RFC3339_RE, $xhtml_ns);
 BEGIN {
     # rfc3339 timestamp
     our $RFC3339_RE = qr/^(\d{4})-(\d\d)-(\d\d)[Tt]
@@ -44,30 +70,18 @@ BEGIN {
 
     # Namespace declaration
     our $xhtml_ns = 'http://www.w3.org/1999/xhtml';
-    our $atom_ns =  'http://www.w3.org/2005/Atom';
 };
 
 # see http://search.cpan.org/~aristotle/XML-Atom-SimpleFeed-0.86/lib/XML/Atom/SimpleFeed.pm
 
-# Constructor
-sub new {
-    my $class = ref($_[0]) ? ref( shift(@_) ) : shift;
+# New feed
+sub new_feed {
+    return Mojolicious::Plugin::Atom->new('feed');
+};
 
-    # Start from scratch
-    if (!$_[0] ||
-	(index($_[0], '<') == -1 &&
-	 !defined $_[2] )) {
-
-	# Create new Atom document
-	my $type = shift || 'feed';
-
-	return $class->SUPER::new(
-	    $type,
-	    { 'xmlns' => $atom_ns });
-    };
-
-    # Use constructor from parent class
-    $class->SUPER::new(@_);
+# New entry
+sub new_entry {
+    return Mojolicious::Plugin::Atom->new('entry');
 };
 
 # New person construct
@@ -441,7 +455,7 @@ Mojolicious::Plugin::Atom - Atom Syndication Format Plugin
 
 =head1 DESCRIPTION
 
-L<Mojolicious::Pluggin::Atom> provides several functions
+L<Mojolicious::Plugin::Atom> provides several functions
 for the work with the Atom Syndication Format as described in
 L<http://tools.ietf.org/html/rfc4287|RFC4287>.
 
@@ -451,7 +465,7 @@ L<http://tools.ietf.org/html/rfc4287|RFC4287>.
 
   my $atom = $self->new_atom('entry');
 
-  my $atom = $self->new_xrd(<<'ATOM');
+  my $atom = $self->new_atom(<<'ATOM');
   <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <entry xmlns="http://www.w3.org/2005/Atom">
     <author>
@@ -469,20 +483,34 @@ L<http://tools.ietf.org/html/rfc4287|RFC4287>.
   </entry>
   ATOM
 
-The helper C<new_atom> returns an ATOM object.
+The helper C<new_atom> returns an Atom object.
+It accepts the arguments C<feed> or C<entry> or all
+parameters accepted by L<Mojolicious::Plugin::Serial::new>.
 
 =head2 C<render_atom>
 
   # In Controllers
   $self->render_atom( $feed );
 
-The helper C<render_atom> renders an ATOM object in C<xml>.
+The helper C<render_atom> renders an Atom object in C<xml>.
 
 =head1 METHODS
 
 L<Mojolicious::Plugin::Atom::Document> inherits all methods
 from L<Mojolicious::Plugin::XML::Serial> and implements the
 following new ones.
+
+=head2 C<new_feed>
+
+  my $feed = $atom->new_feed;
+
+Returns a new Atom C<feed> object.
+
+=head2 C<new_entry>
+
+  my $entry = $atom->new_entry;
+
+Returns a new Atom C<entry> object.
 
 =head2 C<new_text>
 
@@ -529,7 +557,7 @@ If no parameter is given, the current server time is returned.
 
   my $entry = $atom->add_entry(id => '#Entry1');
 
-Adds an entry to the ATOM object.
+Adds an entry to the Atom object.
 Accepts a hash of simple entry information.
 
 =head2 C<add_content>
@@ -541,7 +569,7 @@ Accepts a hash of simple entry information.
   $atom->add_content($text);
   $atom->add_content('This is a test!');
 
-Adds content information to the ATOM object.
+Adds content information to the Atom object.
 Accepts a text construct (see L<new_text>) or the
 parameters accepted by L<new_text>.
 
@@ -551,7 +579,7 @@ parameters accepted by L<new_text>.
                                   uri  => 'acct:bender@example.org');
   my $author = $atom->add_author($person);
 
-Adds author information to the ATOM object.
+Adds author information to the Atom object.
 Accepts a person construct (see L<new_person>) or the
 parameters accepted by L<new_person>.
 
@@ -559,7 +587,7 @@ parameters accepted by L<new_person>.
 
   $atom->add_category('world');
 
-Adds category information to the ATOM object.
+Adds category information to the Atom object.
 Accepts either a hash for attributes or one string
 representing the categories term.
 
@@ -569,7 +597,7 @@ representing the categories term.
                                   uri  => 'acct:bender@example.org');
   my $contributor = $atom->add_contributor($person);
 
-Adds contributor information to the ATOM object.
+Adds contributor information to the Atom object.
 Accepts a person construct (see L<new_person>) or the
 parameters accepted by L<new_person>.
 
@@ -577,13 +605,13 @@ parameters accepted by L<new_person>.
 
   $atom->add_generator('Sojolicious-Atom-Plugin');
 
-Adds generator information to the ATOM object.
+Adds generator information to the Atom object.
 
 =head2 C<add_icon>
 
   $atom->add_icon('http://sojolicio.us/favicon.ico');
 
-Adds a URI to an icon associated with the ATOM object.
+Adds a URI to an icon associated with the Atom object.
 The image should be suitable for small representation size
 and have an aspect ratio of 1:1. 
 
@@ -591,21 +619,21 @@ and have an aspect ratio of 1:1.
 
   $atom->add_id('http://sojolicio.us/#12345');
 
-Adds a unique identifier to the ATOM object.
+Adds a unique identifier to the Atom object.
 
 =head2 C<add_link>
 
   $atom->add_link(rel => 'self',
                   href => 'http://sojolicio.us/#12345');
 
-Adds link information to the ATOM object. If no relation
+Adds link information to the Atom object. If no relation
 attribute is given, the default relation is 'related'.
 
 =head2 C<add_logo>
 
   $atom->add_logo('http://sojolicio.us/sojolicious.png');
 
-Adds a URI to a logo associated with the ATOM object.
+Adds a URI to a logo associated with the Atom object.
 The image should have an aspect ratio of 2:1. 
 
 =head2 C<add_published>
@@ -613,7 +641,7 @@ The image should have an aspect ratio of 2:1.
   my $date = $atom->new_date(1312311456);
   $atom->add_published($date);
 
-Adds a publishing timestamp to the ATOM object.
+Adds a publishing timestamp to the Atom object.
 Accepts a date construct (see L<new_date>) or the
 parameter accepted by L<new_date>.
 
@@ -621,7 +649,7 @@ parameter accepted by L<new_date>.
 
   $atom->add_rights('Public Domain');
 
-Adds legal information to the ATOM object.
+Adds legal information to the Atom object.
 Accepts a text construct (see L<new_text>) or the
 parameters accepted by L<new_text>.
 
@@ -631,7 +659,7 @@ parameters accepted by L<new_text>.
     'http://source.sojolicio.us/');
   $source->add_author(name => 'Zoidberg');
 
-Adds source information of the ATOM object.
+Adds source information of the Atom object.
 
 =head2 C<add_subtitle>
 
@@ -641,7 +669,7 @@ Adds source information of the ATOM object.
   $atom->add_subtitle($text);
   $atom->add_subtitle('This is a subtitle!');
 
-Adds subtitle information to the ATOM object.
+Adds subtitle information to the Atom object.
 Accepts a text construct (see L<new_text>) or the
 parameters accepted by L<new_text>.
 
@@ -653,7 +681,7 @@ parameters accepted by L<new_text>.
   $atom->add_summary($text);
   $atom->add_summary('Test entry');
 
-Adds a summary of the content to the ATOM object.
+Adds a summary of the content to the Atom object.
 Accepts a text construct (see L<new_text>) or the
 parameters accepted by L<new_text>.
 
@@ -665,7 +693,7 @@ parameters accepted by L<new_text>.
   $atom->add_title($text);
   $atom->add_title('First Test entry');
 
-Adds a title to the ATOM object.
+Adds a title to the Atom object.
 Accepts a text construct (see L<new_text>) or the
 parameters accepted by L<new_text>.
 
@@ -674,7 +702,7 @@ parameters accepted by L<new_text>.
   my $date = $atom->new_date(1312311456);
   $atom->add_updated($date);
 
-Adds a last update timestamp to the ATOM object.
+Adds a last update timestamp to the Atom object.
 Accepts a date construct (see L<new_date>) or the
 parameter accepted by L<new_date>.
 
