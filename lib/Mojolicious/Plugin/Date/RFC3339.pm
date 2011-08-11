@@ -94,6 +94,75 @@ sub to_string {
 __END__
 
 
-The code is heavily based on L<Mojo::Date>.
-# Atom and XRD
-L<RFC3339|http://tools.ietf.org/html/rfc3339>
+
+=pod
+
+=head1 NAME
+
+Mojolicious::Plugin::Date::RFC3339 - Support for RFC3339 dates
+
+=head1 SYNOPSIS
+
+  use Mojolicious::Plugin::Date::RFC3339;
+
+  my $date = Mojolicious::Plugin::Date::RFC3339->new(784111777);
+  my $date_str = $date->to_string;
+  $date->parse('1993-01-01t18:50:00-04:00');
+  my $epoch = $date->epoch;
+
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::Date::RFC3339> implements date and time functions
+according to L<RFC3339|http://tools.ietf.org/html/rfc3339>.
+
+=head1 ATTRIBUTES
+
+L<Mojolicious::Plugin::Date::RFC3339> implements the following attributes.
+
+=head2 C<epoch>
+
+  my $epoch = $date->epoch;
+  $date     = $date->epoch(784111777);
+
+Epoch seconds.
+
+=head1 METHODS
+
+L<Mojolicious::Plugin::Date::RCF3339> inherits all methods from
+L<Mojo::Base> and implements the following new ones.
+
+=head2 C<new>
+
+  my $date = Mojolicious::Plugin::Date::RFC3339->new;
+  my $date = Mojolicious::Plugin::Date::RFC3339->new($string);
+
+Construct a new L<Mojolicious::Plugin::Date::RFC3339> object.
+
+=head2 C<parse>
+
+  $date = $date->parse('1993-01-01t18:50:00-04:00');
+  $date = $date->parse(1312043400);
+
+=head2 C<to_string>
+
+  my $string = $date->to_string;
+
+Render date suitable to RFC3339 without offset information.
+
+=head1 DEPENDENCIES
+
+L<Mojolicious>,
+L<Time::Local>.
+
+=head1 COPYRIGHT AND LICENSE
+
+The code is heavily based on L<Mojo::Date>,
+written by Sebastian Riedel. See L<Mojo::Date>
+for additional copyright and license information.
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
+
+=cut
