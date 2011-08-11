@@ -4,7 +4,6 @@ use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::JSON;
 use Storable 'dclone';
-use Mojo::Date;
 
 has 'host';
 has 'secure' => 0;
@@ -247,18 +246,19 @@ sub _get_hostmeta {
     $hostmeta_xrd =
 	$c->new_xrd($host_hm->res->body);
 
+    # Deprecated host validation
     # Validate host
-    if (my $host_e = $hostmeta_xrd->dom->at('Host')) {
-	if ($host_e->namespace eq 'http://host-meta.net/xrd/1.0') {
-
-	    # Is the given domain the expected one?
-	    if (lc($host_e->text) ne $host) {
-		$c->app->log->info('The domains "'.$host.'"'.
-			      ' and "'.$host_e->text.'" do not match.');
-		return undef;
-	    };
-	};
-    };
+    # if (my $host_e = $hostmeta_xrd->dom->at('Host')) {
+    #   if ($host_e->namespace eq 'http://host-meta.net/xrd/1.0') {
+    #
+    #	    # Is the given domain the expected one?
+    #	    if (lc($host_e->text) ne $host) {
+    #		$c->app->log->info('The domains "'.$host.'"'.
+    #			      ' and "'.$host_e->text.'" do not match.');
+    #		return undef;
+    #	    };
+    #  	};
+    # };
 
     # Hook for caching
     $c->app->plugins->run_hook(

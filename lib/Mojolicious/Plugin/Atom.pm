@@ -156,7 +156,7 @@ sub _add_date {
 
     my $date_string = sprintf(
 	"%04d-%02d-%02dt%02d:%02d:%02dZ",
-	$year + 1900, $month, $mday,
+	($year + 1900), ($month + 1), $mday,
 	$hour, $min, $sec);
 
     return $self->add($type, $date_string);

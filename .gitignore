@@ -1,10 +1,13 @@
 blib
 Sandbox
 lib/Sojolicious
+lib/Sojolicious.pm
+lib/sojolicious.sqlite
 lib/Mojolicious/Plugin/PortableContacts.pm
 lib/Mojolicious/Plugin/OAuth.pm
 lib/Mojolicious/Plugin/XRDS.pm
 lib/Mojolicious/Plugin/INames.pm
+lib/Mojolicious/Plugin/DateRFC3339.pm
 t/Atom-Pub.pm
 t/ActivityStreams.t
 MYMETA*

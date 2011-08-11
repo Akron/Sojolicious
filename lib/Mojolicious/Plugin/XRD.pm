@@ -22,38 +22,23 @@ sub register {
 	    my $c = shift;
 	    my $xrd = shift;
 
-	    my $accept = $c->req->headers->header('Accept');
-
-	    # Render as json
-	    if (( $c->stash('format') &&
-		  $c->stash('format') eq 'json' )
-		||
-		( $c->param('format') &&
-		  $c->param('format') eq 'json' )
-		||
-		( $accept &&
-		  $accept =~ m{application/json} )) {
-
-		return $c->render(
-		    data => $xrd->to_json,
-		    format => 'json');
-	    }
-
-	    # Render as xml
-	    else {
-		return $c->render(
-		    'inline' => $xrd->to_pretty_xml,
-		    'format' => 'xrd'
-		    );
-	    };
+	    # content negotiation
+	    $c->respond_to(
+		json => sub { $c->render(
+				  data   => $xrd->to_json,
+				  format => 'json'
+                                )},
+		any  => sub { $c->render(
+				  data   => $xrd->to_pretty_xml,
+				  format => 'xrd'
+				)}
+		);
 	});
 };
 
 # Document class
 package Mojolicious::Plugin::XRD::Document;
 use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
-use strict;
-use warnings;
 
 # Namespace declaration
 our ($xrd_ns, $xsi_ns);
