@@ -39,6 +39,7 @@ sub register {
 # Document class
 package Mojolicious::Plugin::XRD::Document;
 use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+use Mojolicious::Plugin::Date::RFC3339;
 
 # Namespace declaration
 our ($xrd_ns, $xsi_ns);
@@ -107,15 +108,9 @@ sub get_expiration {
     my $self = shift;
     my $exp = $self->at('Expires');
  
-   return 0 unless $exp;
+    return 0 unless $exp;
 
-    if (my ($year, $mon, $mday, $hour, $min, $sec) =
-	( $exp =~ m/^(\d{4})-(\d\d)-(\d\d)T
-                     (\d\d):(\d\d):(\d\d)
-                     Z$/x )) {
-	return timegm($sec, $min, $hour,
-		      $mday, $mon, $year);
-    };
+    return Mojolicious::Plugin::Date::RFC3339->new($exp)->epoch;
 
     return 0;
 };
@@ -290,8 +285,9 @@ element of the given relation.
 
   my $epoch = $xrd->get_expiration;
 
-Returns the expiration date of the document in UNIX epoch
-notation. This may differ to the HTTP expiration date.
+Returns the expiration date of the document as 
+a UNIX epoch value.
+This may differ to the HTTP expiration date.
 
 =head2 C<to_json>
 

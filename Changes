@@ -1,5 +1,6 @@
 0.04 2011-08-10
         - Added ActivityStreams support.
+        - Added Mojolicious::Plugin::Date::RFC3339.
 
 0.03 2011-08-06
         - Added Atom support.

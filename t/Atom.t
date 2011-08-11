@@ -67,11 +67,11 @@ is($person->at('uri')->text, 'http://sojolicio.us/bender', 'Person2');
 
 # New Date
 my $date = $atom->new_date('2011-07-30T16:30:00Z');
-is($date, 'Tue, 30 Aug 2011 16:30:00 GMT', 'Date1');
-is($date->epoch, 1314721800, 'Date2');
-$date = $atom->new_date(1314721800);
-is($date, 'Tue, 30 Aug 2011 16:30:00 GMT', 'Date3');
-is($date->epoch, 1314721800, 'Date4');
+is($date, '2011-07-30T16:30:00Z', 'Date1');
+is($date->epoch, 1312043400, 'Date2');
+$date = $atom->new_date(1312043400);
+is($date, '2011-07-30T16:30:00Z', 'Date3');
+is($date->epoch, 1312043400, 'Date4');
 
 
 # Add entry
@@ -195,11 +195,11 @@ is($atom->at('logo')->text, 'http://sojolicio.us/logo.png',
 # Add published
 $entry->add_published($date);
 is($entry->at('published')->text,
-   '2011-07-30t16:30:00Z',
+   '2011-07-30T16:30:00Z',
    'Add published 1');
 $atom->at('entry')->add_published(1314721000);
 is($atom->at('entry published')->text,
-   '2011-07-30t16:16:40Z',
+   '2011-08-30T16:16:40Z',
    'Add published 2');
 
 
@@ -332,11 +332,11 @@ ok($atom->add_title($source), 'Add title 7');
 $entry = $atom->find('entry')->[1];
 $entry->add_updated($date);
 is($entry->at('updated')->text,
-   '2011-07-30t16:30:00Z',
+   '2011-07-30T16:30:00Z',
    'Add updated 1');
 $atom->at('entry')->add_updated(1314721000);
 is($atom->at('entry updated')->text,
-   '2011-07-30t16:16:40Z',
+   '2011-08-30T16:16:40Z',
    'Add updated 2');
 
 
@@ -388,7 +388,7 @@ is($person->at('person birthday')->namespace, $poco_ns, 'Person-Poco-NS');
 # Date consructs
 $date = $atom->new_date(1313131313);
 $atom->add_updated($date);
-is($atom->at('updated')->text, '2011-07-12t06:41:53Z', 'Updated');
+is($atom->at('updated')->text, '2011-08-12T06:41:53Z', 'Updated');
 
 
 # Plugin helper

@@ -155,6 +155,20 @@ sub register {
 
 	    return $c->render_xrd($hostmeta_clone);
 	});
+
+
+    $routes->route('/')->bridge(
+	sub {
+	    my $c = shift;
+	    my $format = shift( @{ $mojo->types->detect(
+				       $c->req->headers->accept
+				       )});
+	    if ($format eq $mojo->types('xrd')) {
+		return 1;
+	    };
+	    return 0;
+	} )->redirect_to(...)
+
 };
 
 # discover rel from dom

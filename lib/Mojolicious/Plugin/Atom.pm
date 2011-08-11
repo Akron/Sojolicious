@@ -59,15 +59,10 @@ sub new {
 package Mojolicious::Plugin::Atom::Document;
 use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
 use Mojo::ByteStream 'b';
-use Mojo::Date;
+use Mojolicious::Plugin::Date::RFC3339;
 
-our ($RFC3339_RE, $xhtml_ns);
+our $xhtml_ns;
 BEGIN {
-    # rfc3339 timestamp
-    our $RFC3339_RE = qr/^(\d{4})-(\d\d)-(\d\d)[Tt]
-                          (\d\d):(\d\d):(\d\d)(\.\d+)?
-                          ([zZ]|[\+\-]\d\d:\d\d)$/x;
-
     # Namespace declaration
     our $xhtml_ns = 'http://www.w3.org/1999/xhtml';
 };
@@ -121,45 +116,23 @@ sub _add_person {
 
 # New date construct
 sub new_date {
-    my ($self, $time) = @_;
+    my $self = shift;
 
     # now
-    if (!$time) {
-	$time = time;
-    }
+    my $time = shift || time;
 
-    # is rfc3339 compatible
-    elsif (
-	my ($year, $month, $mday,
-	    $hour, $min, $sec, $sec_frac,
-	    $offset) = ($time =~ $RFC3339_RE)) {
-	eval {
-	    $time = Time::Local::timegm($sec, $min, $hour,
-					$mday, $month, $year);
-	};
-	return if $@ || $time < 0;
-    };
-
-    return Mojo::Date->new($time);
+    return Mojolicious::Plugin::Date::RFC3339->new($time);
 };
 
 # Add date construct
 sub _add_date {
     my ($self, $type, $date) = @_;
     
-    if (ref($date) ne 'Mojo::Date') {
-	$date = Mojo::Date->new($date || time);
+    unless (ref($date)) {
+	$date = $self->new_date($date);
     };
 
-    my ($sec, $min, $hour,
-	$mday, $month, $year) = gmtime($date->epoch);
-
-    my $date_string = sprintf(
-	"%04d-%02d-%02dt%02d:%02d:%02dZ",
-	($year + 1900), ($month + 1), $mday,
-	$hour, $min, $sec);
-
-    return $self->add($type, $date_string);
+    return $self->add($type, $date->to_string);
 };
 
 # New text construct
@@ -546,11 +519,10 @@ Returns a new person construction.
 =head2 C<new_date>
 
   my $date = $atom->new_date(1312311456);
+  my $date = $atom->new_date('1996-12-19T16:39:57-08:00');
 
-Returns a L<Mojo::Date> object. It accepts all parameters
-of L<Mojo::Date> and additionally is able to parse
-L<RFC3339|http://tools.ietf.org/html/rfc3339>
-datetime constructs (e.g. "2003-12-13T18:30:02.25Z").
+Returns a L<Mojolicious::Plugin::Date::RFC3339> object.
+It accepts all parameters of L<Mojolicious::Plugin::Date::RFC3339::parse>.
 If no parameter is given, the current server time is returned.
 
 =head2 C<add_entry>
@@ -716,7 +688,8 @@ L<Mojolicious::Plugin::Atom> establishes the following mime-types:
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::XML::Serial>.
+L<Mojolicious::Plugin::XML::Serial>,
+L<Mojolicious::Plugin::Date::RFC3339>.
 
 =head1 COPYRIGHT AND LICENSE
 
