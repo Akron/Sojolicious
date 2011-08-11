@@ -157,17 +157,17 @@ sub register {
 	});
 
 
-    $routes->route('/')->bridge(
-	sub {
-	    my $c = shift;
-	    my $format = shift( @{ $mojo->types->detect(
-				       $c->req->headers->accept
-				       )});
-	    if ($format eq $mojo->types('xrd')) {
-		return 1;
-	    };
-	    return 0;
-	} )->redirect_to(...)
+#    $mojo->routes->route('/')->bridge(
+#	sub {
+#	    my $c = shift;
+#	    my $format = shift( @{ $mojo->types->detect(
+#				       $c->req->headers->accept
+#				       )});
+#	    if ($format eq $mojo->types('xrd')) {
+#		return 1;
+#	    };
+#	    return 0;
+#	} )->redirect_to(...)
 
 };
 
