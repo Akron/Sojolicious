@@ -1,8 +1,5 @@
-package Mojolicious::Plugin::MagicKey;
-use strict;
-use warnings;
+package Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Base -base;
-
 use Math::BigInt;
 use MIME::Base64;
 use Digest::SHA qw(sha256);
@@ -21,13 +18,19 @@ sub new {
     my $self;
 
     # Is a magic-key:
-    if (length($_[0]) > 1) {
+    if (ref $_[0] && ref $_[0] eq __PACKAGE__) {
+	return $_[0];
+    }
+
+    # Is a Magic Key in string notation
+    elsif (@_ == 1) {
 	my $string = shift;
 
 	$self = $class->SUPER::new;
 
+	$string =~ s/\s+//mg;
 	my ( $type, $mod, $exp, $private_exp )
-	    = split('\.', $string);
+	    = split(/\./, $string);
 	
 	# The key is incorrect
 	if ($type ne 'RSA') {
@@ -111,8 +114,6 @@ sub verify {
 	$_ = Math::BigInt->from_hex($_); # ->bstr;
     };
 
-#    warn('verify: '.$encoded_message);
-
     return _verify_emsa_pkcs1_v1_5($self,
 				   $message,
 				   $encoded_message);
@@ -121,10 +122,23 @@ sub verify {
 # Return MagicKey-String
 sub to_string {
     my $self = shift;
+
+    my $n = $self->n;
+    my $e = $self->e;
+
+  # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
+  #   MagicSignatures/SignatureAlgRsaSha256.pm
+    foreach ($n, $e) {
+	my $hex = $_->as_hex;
+	$hex =~ s/^0x//;
+	$hex = ( ( length $hex ) % 2 > 0 ) ? "0$hex" : $hex;
+	$_ = pack "H*", $hex;
+    };
+
     my $mkey = join('.',
 		    'RSA',
-		    b64url_encode( $self->n ),
-		    b64url_encode( $self->e ) );
+		    b64url_encode( $n ),
+		    b64url_encode( $e ) );
     $mkey =~ s/=+//g;
     return $mkey;
 };
@@ -174,7 +188,7 @@ sub _verify_emsa_pkcs1_v1_5 {
 
     my $k = $K->emLen;
 
-    if (length($S) != $k) {
+    if (length($S) != $K) {
 	warn "invalid signature";
 	warn(length($S).':'.$k);
 	return 0;
@@ -375,13 +389,13 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::MagicKey - MagicKey Plugin for Mojolicious
+Mojolicious::Plugin::MagicSignatures::Key - MagicKey Plugin for Mojolicious
 
 =head1 SYNOPSIS
 
-  use Mojolicious::Plugin::MagicKey;
+  use Mojolicious::Plugin::MagicSignatures::Key;
 
-  my $mkey = Mojolicious::Plugin::MagicKey->new(<<'MKEY');
+  my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(<<'MKEY');
   RSA.
   mVgY8RN6URBTstndvmUUPb4UZTdwvw
   mddSKE5z_jvKUEK6yk1u3rrC9yN8k6
@@ -394,8 +408,8 @@ Mojolicious::Plugin::MagicKey - MagicKey Plugin for Mojolicious
 
 =head1 DESCRIPTION
 
-L<Mojolicious::Plugin::MagicKey> is a plugin for L<Mojolicious>
-to represent MagicKeys as described in
+L<Mojolicious::Plugin::MagicSignatures::Key> is a plugin for
+L<Mojolicious> to represent MagicKeys as described in
 L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>
 
 =head1 ATTRIBUTES

@@ -250,10 +250,14 @@ sub _element ($$) {
 		    
 		    $content .= "\n";
 # temp
-		    my @lines = grep($_, split(/(.{64})/, $b64_string));
-		    foreach (@lines) {
-			$content .= ($indent x ($i + 1)).$_."\n"
-		    };
+#		    my @lines = grep($_, split(/(.{64})/, $b64_string));
+#		    foreach (@lines) {
+#			$content .= ($indent x ($i + 1)).$_."\n"
+#		    };
+
+		    $content .= $indent x ($i + 1);
+		    $content .= join( ( $indent x ($i + 1) ),
+				      ( unpack '(A60)*', $b64_string ) );
 		    $content .= ($indent x $i);
 		}
 

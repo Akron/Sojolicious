@@ -191,8 +191,10 @@ sub new_text {
 	$c_node = $class->SUPER::new('text',
 				     { type => $type,
 				       -type => 'escape',
+				       'xml:space' => 'preserve',
 				       %hash },
-				     b($content)->xml_escape );
+				     b($content)->xml_escape
+	    );
 	
     }
     

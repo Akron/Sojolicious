@@ -1,12 +1,17 @@
-package Mojolicious::Plugin::MagicEnvelope;
-use strict;
-use warnings;
-use Mojolicious::Plugin::MagicKey qw(b64url_encode
-                                     b64url_decode);
+package Mojolicious::Plugin::MagicSignatures::Envelope;
+
+use Mojo::Base '-base';
+use Mojolicious::Plugin::MagicSignatures::Key qw(b64url_encode b64url_decode);
 use Mojo::Command;
 use Mojo::DOM;
 use Mojo::Template;
 use Mojo::JSON;
+
+has 'data';
+has alg       => 'RSA-SHA256';
+has encoding  => 'base64url';
+has data_type => 'text/plain';
+
 
 our ($me_ns, @val_array);
 BEGIN {
@@ -18,14 +23,8 @@ BEGIN {
 sub new {
     my $class = shift;
 
-    my $self = {
-	alg       => 'RSA-SHA256',
-	encoding  => 'base64url',
-	data_type => 'text/plain',
-	sigs      => [],
-	signed    => 0,
-	verified  => 0
-    };
+    my $self = $class->SUPER::new;
+    $self->{sigs} = [];
 
     # Message is me-xml:
     if ($_[0] =~ /^[\s\n]*\</) {
@@ -40,8 +39,8 @@ sub new {
 
 	# Retrieve and edit data
 	my $data = $env->at('data');
-	$self->{data_type} = $data->attrs->{type};
-	$self->{data} = b64url_decode ( $data->text );
+	$self->data_type( $data->attrs->{type} );
+	$self->data( b64url_decode ( $data->text ) );
 	
 	# Check algorithm
 	return if ($env->at('alg') &&
@@ -55,23 +54,24 @@ sub new {
 	$env->find('sig')->each(
 	    sub {
 		my %sig = ( value => b64url_decode( $_->text ) );
-
+		
 		$sig{key_id} = $_->attrs->{key_id}
 		  if exists $_->attrs->{key_id};
 
 		push( @{ $self->{sigs} }, \%sig );
+
 		$self->{signed} = 1;
-	    }
-	    );
+	    });
     }
 
     # Message is me-json as a datastructure
-    elsif (ref($_[0]) && (ref($_[0]) eq 'HASH')) {
+    elsif (ref $_[0] && (ref $_[0] eq 'HASH')) {
 	my $env = shift;
 
 	foreach my $v (@val_array) {
 	    $self->{$v} = delete $env->{$v} if exists $env->{$v};
 	};
+
 	if ($self->{sigs}->[0]) {
 	    $self->{signed} = 1;
 	};
@@ -94,47 +94,44 @@ sub new {
 	    $self->{signed} = 1;
 	};
 
-	warn 'Unknown parameters: '.join(',', %$env)
+	warn 'Unknown parameters: ' . join(',', %$env)
 	    if keys %$env;
     }
 
     # Message is me as a compact string
     elsif ($_[0] =~ /\.YmFzZTY0dXJs\./) {
-	my ($key_id, $sig,
-	    $data, $data_type, $encoding, $alg) =
-	    split(/\./, shift );
 
-	for ($key_id, $sig,
-	     $data, $data_type, $encoding, $alg) {
+	my @val;
+	foreach (@val = split(/\./, shift ) ) {
 	    $_ = b64url_decode( $_ ) if $_;
 	};
 
-	$self->{data}      = $data;
-	$self->{data_type} = $data_type;
-	$self->{encoding}  = $encoding if $encoding;
-	$self->{alg}       = $alg      if $alg;
-
 	for ($self->{sigs}->[0]) {
-	    $_->{value}     = $sig;
-	    $_->{key_id}    = $key_id if $key_id;
+	    $_->{key_id}    = $val[0] if defined $val[0];
+	    $_->{value}     = $val[1];
 	    $self->{signed} = 1;
 	};
+
+	$self->data($val[2])      if $val[2];
+	$self->data_type($val[3]) if $val[3];
+	$self->encoding($val[4])  if $val[4];
+	$self->alg($val[5])       if $val[5];
     }
 
     # The format is not supported
     else {
-	warn('Everything unknown');
 	return;
     };
 
     # bless me instance
-    return bless $self, $class;
+    return $self;
 };
 
 # sign magic envelope instance
 sub sign {
-    my $self = shift;
-    my %param = %{ shift(@_) };
+    my $self   = shift;
+    my $key_id = shift;
+    my $val    = shift;
 
     # Regarding key id:
     # "If the signer does not maintain individual key_ids,
@@ -142,44 +139,83 @@ sub sign {
     #  of the SHA-256 hash of public key's application/magic-key
     #  representation."
 
-    return $self unless $param{key};
+    # A valid key is given
+    if ($val) {
 
-    my $magic_sig = Mojolicious::Plugin::MagicKey->new($param{key});
+	# Set key based on parameters
+	my @param = (
+	    ref $val ?
+	    ( ref $val eq 'HASH' ? %{ $val } : $val )
+	    : $val);
+	
+	my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new( @param );
 
-    unless ($magic_sig && $magic_sig->d) {
-	warn 'Private key is not valid';
+	return undef unless ($mkey && $mkey->d);
+
+	# Get signature base string
+	$self->{sig_base} = _sig_base( $self->{data},
+				       $self->{data_type} );
+	
+	# Compute signature for base string
+	my $msig = $mkey->sign( $self->{sig_base} );
+	
+	return undef unless $msig;
+	
+	# Sign envelope
+	my %msig = ( value => $msig );
+	
+	$msig{key_id} = $key_id if defined $key_id;
+	
+	# Push signature
+	push(@{$self->{sigs}}, \%msig );
+	
+	# Declare envelope as signed
+	$self->{signed} = 1;
+	
+	# Return envelope
 	return $self;
     };
-    
-    # Get signature base string
-    $self->{sig_base} = _sig_base( $self->{data},
-				   $self->{data_type} );
 
-    # Compute signature for base string
-    my $sig = $magic_sig->sign( $self->{sig_base} );
 
-    unless ($sig) {
-	warn 'Unable to sign message';
-	return $self;
+    # Get signature:
+    my @sigs = @{ $self->{sigs} };
+
+    # No key_id given
+    if (!$key_id) {
+
+	foreach (@sigs) {
+	    if (!exists $_->{key_id}) {
+		return $_->{value};
+	    };
+	};
+
+	return $sigs[0]->{value};
+    }
+
+    # Key is given
+    else {
+	my $default;
+	foreach (@sigs) {
+	    if (defined $_->{key_id}) {
+		if ($_->{key_id} eq $key_id) {
+		    return $_->{value};
+		};
+	    } else {
+		$default = $_->{value};
+	    };
+	};
+	return $default;
     };
 
-    # Sign envelope
-    my %sig = ( value => $sig );
-    $sig{key_id} = $param{key_id} if exists $param{key_id};
-    push(@{$self->{sigs}}, \%sig );
-
-    # Declare envelope as signed
-    $self->{signed} = 1;
-
-    # Return envelope
-    return $self;
+    return undef;
 };
+
 
 # Is the me signed?
 sub signed {
 
     # There is no specific key_id requested
-    return $_[0]->{signed} unless $_[1];
+    return $_[0]->{signed} unless defined $_[1];
 
     # Check for specific key_id
     foreach my $sig (@{ $_[0]->{sigs} }) {
@@ -188,11 +224,6 @@ sub signed {
 
     # Envelope is not signed
     return 0;
-};
-
-# return the data string
-sub data {
-    return $_[0]->{data};
 };
 
 # return the data as a MojoDOM if it is xml
@@ -219,23 +250,11 @@ sub to_xml {
     # The me has to be signed
     return unless $self->{signed};
 
-    my $me_templ ='magicenvelope.xml.ep';
-
-    my $cmd = Mojo::Command->new;
-
-#    warn('CMD: '.$cmd);
-#    my $test = $cmd->get_data(
-#	$me_templ,
-#	__PACKAGE__);
-#    use Data::Dumper;
-#    my $value = Data::Dumper::Dumper($test).'!!!';
-#    die '*'.$value.'*';
+#    my $cmd = Mojo::Command->new;
 
     my $template = Mojo::Command->new->get_data(
-	$me_templ,
+	'magicenvelope.xml.ep',
 	__PACKAGE__);
-
-#    die "Error" unless $template;
 
 # Todo:
 #    $self->log->error(qq{Template not found: $me_templ!})
@@ -249,7 +268,7 @@ sub to_compact {
     my $self = shift;
 
     # The me has to be signed
-    return unless $self->{signed};
+    return unless $self->signed;
 
     # Use last signature for serialization
     my $sig = $self->{sigs}->[ $#{ $self->{sigs} } ];
@@ -269,36 +288,36 @@ sub to_compact {
 sub to_json {
     my $self = shift;
 
+    return '{}' unless defined $self->data;
+
     # Create new datastructure
     my %new_em = (
-	alg       => $self->{alg},
-	encoding  => $self->{encoding},
-	data_type => $self->{data_type},
-	data      => b64url_encode( $self->{data} ),
+	alg       => $self->alg,
+	encoding  => $self->encoding,
+	data_type => $self->data_type,
+	data      => b64url_encode( $self->data ),
 	sigs      => []
 	);
 
     # loop through signatures
     foreach my $sig ( @{ $self->{sigs} } ) {
-	my %sig = ( value => b64url_encode( $sig->{value} ) );
-	$sig{key_id} = $sig->{key_id};
-	push( @{ $new_em{sigs} }, \%sig );
+	my %msig = ( value => b64url_encode( $sig->{value} ) );
+	$msig{key_id} = $sig->{key_id} if defined $sig->{key_id};
+	push( @{ $new_em{sigs} }, \%msig );
     };
 
     # Return json-string
-    return Mojo::JSON->new->encode(\%new_em);
+    return Mojo::JSON->new->encode( \%new_em );
 };
 
 # encode urlsafe
 sub _b64_enc {
-    shift; #me
-    return b64url_encode( $_[0] );
+    return b64url_encode( $_[1] );
 };
 
-# encode urlsafe and indent
+# encode urlsafe and indented
 sub _b64_enc_ind {
-    shift; # me
-    my $val =  b64url_encode( $_[0] );
+    my $val =  b64url_encode( $_[1] );
     return '    ' . join( "\n    ", ( unpack '(A60)*', $val ) );
 };
 
@@ -315,9 +334,14 @@ sub _sig_base {
     # alg       - default "RSA-SHA256"
     my $alg       = $_[0] ? b64url_encode( shift ) : 'UlNBLVNIQTI1Ng';
 
-    my $sig_base = join('.', $data, $data_type, $encoding, $alg);
+    my $sig_base = join('.',
+			$data,
+			$data_type,
+			$encoding,
+			$alg);
 
-    # delete all equal signs.
+    # delete all equal signs
+    # maybe that's wrong and it should say s/=+$//sg; ?
     $sig_base =~ s/=//sg;
 
     return $sig_base;
@@ -361,20 +385,20 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::MagicEnvelope - MagicEnvelope Plugin for Mojolicious
+Mojolicious::Plugin::MagicSignatures::Envelope - MagicEnvelope Plugin for Mojolicious
 
 =head1 SYNOPSIS
 
-  use Mojolicious::Plugin::MagicEnvelope;
+  use Mojolicious::Plugin::MagicSignatures::Envelope;
 
-  my $me = Mojolicious::Plugin::MagicEnvelope->new(
+  my $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(
              {
                data => 'Some arbitrary string.',
-               data_ype => 'text/plain'
+               data_type => 'text/plain'
              }
            );
 
-  $me = Mojolicious::Plugin::MagicEnvelope->new(<<'MEXML');
+  $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'MEXML');
   <?xml version="1.0" encoding="UTF-8"?>
   <me:env xmlns:me="http://salmon-protocol.org/ns/magic-env">
     <me:data type="text/plain">
@@ -391,28 +415,69 @@ Mojolicious::Plugin::MagicEnvelope - MagicEnvelope Plugin for Mojolicious
 
   $me->sign('key' => 'RSA.vsd...');
 
-  if ($me->verified > 0) {
-    print $me->data, " is verified!\n";
-  };
-
-
 =head1 DESCRIPTION
 
-L<Mojolicious::Plugin::MagicEnvelope> is a plugin for L<Mojolicious>
-to work with Magic Envelopes as described in
+L<Mojolicious::Plugin::MagicSignatures::Envelope> is a plugin for
+L<Mojolicious> to work with MagicEnvelopes as described in
 L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
+
+=head1 ATTRIBUTES
+
+=head2 C<alg>
+
+  $me->alg;
+
+The algorithm used for the folding of the MagicEnvelope.
+Defaults to 'RSA-SHA256'.
+
+=head2 C<data>
+
+  $me->data;
+
+The decoded data folded in the MagicEnvelope.
+
+=head2 C<data_type>
+
+  $me->data_type;
+
+The mime type of the data folded in the MagicEnvelope.
+
+=head2 C<dom>
+
+  my $dom = $me->dom;
+
+The L<Mojo::DOM> object of the decoded data,
+if the magic envelope contains XML.
+
+=head2 C<encoding>
+
+  $me->encoding;
+
+The encoding of the MagicEnvelope. Defaults to 'base64url'.
+
+=head2 C<signed>
+
+  if ($me->signed) {
+    print "Magic Envelope is signed.\n";
+  }
+
+Returns C<true> when the MagicEnvelope is signed at least once.
+Accepts optionally a C<key_id> and returns true, if the
+MagicEnvelope was signed with this key.
+
+B<This attribute is experimental and can change without warning!>
 
 =head1 METHODS
 
 =head2 C<new>
 
-The L<Mojolicious::Plugin::MagicEnvelope> constructor accepts
+The L<Mojolicious::Plugin::MagicSignatures::Envelope> constructor accepts
 magicenvelope data in various formats.
 
 It accepts magic envelopes in the XML format or an
 XML document including an magic envelope C<provenance> element.
 
-  Mojolicious::Plugin::MagicEnvelope->new(<<'MEXML');
+  Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'MEXML');
   <?xml version="1.0" encoding="UTF-8"?>
   <me:env xmlns:me="http://salmon-protocol.org/ns/magic-env">
     <me:data type="text/plain">
@@ -449,7 +514,7 @@ The constructor also accepts magic envelopes as a datastructure
 with the same parameters as described in the JSON notation.
 This is the common way to fold new envelopes.
 
-  Mojolicious::Plugin::MagicEnvelope->new({
+  Mojolicious::Plugin::MagicSignatures::Envelope->new({
         data      => 'Some arbitrary string.',
         data_type => 'plain_text',
 	alg       => 'RSA-SHA256',
@@ -467,7 +532,7 @@ This is the common way to fold new envelopes.
 Finally the constructor accepts magic envelopes in the compact
 notation.
 
-  Mojolicious::Plugin::MagicEnvelope->new(<<'MECOMPACT');
+  Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'MECOMPACT');
     bXktMDE=.S1VqYVlIWFpuRGVTX3l4S09CcWdjRVFDYVlu
     ZkI5Ulh4dmRFSnFhQW5XUmpBUEJqZUM0b0lReER4d0IwW
     GVQZDhzWHAxN3oybWhpTk1vNHViNGNVOVE9PQ==.U29tZ
@@ -475,61 +540,37 @@ notation.
     ZTY0dXJs.UlNBLVNIQTI1Ng
   MECOMPACT
 
-
-=head1 ATTRIBUTES
-
-=head2 C<data>
-
-  $me->data;
-
-The decoded data folded in the magic envelope.
-
-=head2 C<dom>
-
-  $me->dom;
-
-The L<Mojo::DOM> object of the decoded data,
-if the magic envelope contains XML.
-
-=head1 METHODS
-
 =head2 C<sign>
 
-  $me->sign( { key_id => ..., key => ...} )
-     ->sign( 'RSA.hgfrhvb...' )
-     ->sign( Mojolicious::Plugin::MagicKey->new( ... ) );
+  $me->sign( 'my-01' => 'RSA.hgfrhvb ...' )
+     ->sign( undef   => 'RSA.hgfrhvb ...' );
 
-The sign method adds a signature to the magic envelope.
-The private key for signing can be a hash reference containing a
-C<key> and optionally a C<key_id>, a L<Mojolicious::Plugin::MagicKey>
-object or a magic key string as described in [...].
+  my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new( 'RSA.hgfrhvb ...' )
+  $me->sign( undef => $mkey );
 
-The method returns the magic envelope. A magic
-envelope can be signed multiple times.
+  my $sig = $me->sign('my-01');
+  my $sig = $me->sign;
 
-B<This method is experimental and can change without warning!>
+The sign method gets or adds a signature to the MagicEnvelope.
 
-=head2 C<signed>
+For adding a signature, two parameters are necessary: the key id
+and the private key for signing.
+The private key for signing can be
+a L<Mojolicious::Plugin::MagicSignatures::Key>
+object, a MagicKey string as described in [...] or a hashref
+containing the parameters accepted by 
+L<Mojolicious::Plugin::MagicSignatures::Key> C<new>.
+To sign with a default key, use an undefined key id.
 
-  if ($me->signed) {
-    print "Magic Envelope is signed.\n";
-  }
+On success, the method returns the MagicEnvelope, otherwise it
+returns undef.
+A MagicEnvelope can be signed multiple times.
 
-Returns C<true> when the magic envelope is signed.
-Accepts optionally a C<key_id> and returns true, if the
-magic envelope was signed with this key.
-
-B<This method is experimental and can change without warning!>
-
-=head2 C<verified>
-
-  if ($me->verified > 0) {
-    print "Signature is verified.\n";
-  }
-  $me->verified({ key_id => ...,
-                  key    => ... });
-
-Verifies the signature of a magic envelope.
+For retrieving a specific signature, pass the key id.
+If a signature with the given key id is found, the signature
+value is returned. If it is not found, the default signature
+is returned. If no key id is given, the default signature value
+is returned. If no matching signature can be found, undef is returned.
 
 B<This method is experimental and can change without warning!>
 
@@ -554,8 +595,7 @@ Returns the magic envelope as a compact representation.
 =head1 DEPENDENCIES
 
 L<Mojolicious> (best with SSL support),
-L<Mojolicious::Plugin::MagicKey>,
-L<Mojolicious::Plugin::Webfinger>.
+L<Mojolicious::Plugin::MagicSignatures::Key>.
 
 =head1 KNOWN BUGS AND LIMITATIONS
 

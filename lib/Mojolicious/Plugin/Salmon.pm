@@ -6,6 +6,15 @@ use Mojo::Base 'Mojolicious::Plugin';
 has 'host';
 has secure => 0;
 
+our ($salmon_ns_replies,
+     $salmon_ns_mentioned,
+     $me_mime);
+BEGIN {
+    $salmon_ns_replies   = 'http://salmon-protocol.org/ns/salmon-replies';
+    $salmon_ns_mentioned = 'http://salmon-protocol.org/ns/salmon-mention';
+    $me_mime             = 'application/magic-envelope';
+}
+
 # Register plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
@@ -44,12 +53,12 @@ sub register {
     $mojo->routes->add_shortcut(
 	'salmon' => sub {
 	    my ($route, $param) = @_;
-
+	    
 	    # Todo: Mojo-Debug
 	    warn 'Unknown Salmon parameter' && return
-		if $param !~ /^(mentioned|all-replies|signer)$/;
-
-
+		unless $param =~ /^(?:mentioned|all-replies|signer)$/;
+	    
+	    
 	    # Handle GET requests
 	    $route->get->to(
 		'cb' => sub {
@@ -64,23 +73,22 @@ sub register {
 	    $mojo->set_endpoint(
 		'salmon-'.$param,
 		{ secure => $plugin->secure,
-		  host => $plugin->host,
-		  route => $route }
+		  host   => $plugin->host,
+		  route  => $route }
 		);
-
+	    
 	    if ($param eq 'all-replies') {
-
+		
 		# Add reply handle to webfinger
 		$mojo->hook(
 		    'before_serving_webfinger' => sub {
 			my ($c, $acct, $xrd) = @_;
-			$xrd->add(
-			    'Link',
-			    {'rel' => 'http://salmon-protocol.org/'.
-				 'ns/salmon-replies',
-				 'href' =>
-				 $c->get_endpoint('salmon-all-replies')
-			    })->comment('Salmon Reply Endpoint');
+			
+			$xrd->add_link(
+			    $salmon_ns_replies,
+			    { 'href' => $c->get_endpoint('salmon-all-replies') }
+			    )->comment('Salmon Reply Endpoint');
+		    
 		    });
 		
 		# Handle POST requests
@@ -97,13 +105,12 @@ sub register {
 		$mojo->hook(
 		    'before_serving_webfinger' => sub {
 			my ($c, $acct, $xrd) = @_;
-			$xrd->add(
-			    'Link',
-			    {'rel' => 'http://salmon-protocol.org/'.
-				 'ns/salmon-mention',
-				 'href' =>
-				 $c->get_endpoint('salmon-mentioned')
-			    })->comment('Salmon Mentioned Endpoint');
+
+			$xrd->add_link(
+			    $salmon_ns_mentioned,
+			    { 'href' => $c->get_endpoint('salmon-mentioned') }
+			    )->comment('Salmon Mentioned Endpoint');
+
 		    });
 
 		# Handle POST requests
@@ -111,19 +118,18 @@ sub register {
 		    'cb' => sub { $plugin->_mentioned( @_ ) }
 		    );
 	    }
-
+	    
 	    # Signer route
 	    elsif ($param eq 'signer') {
 		
 		# Todo: Fragen: Gibt es schon eine Signer-URI?
 		my $salmon_signer_url = $mojo->get_endpoint('salmon-signer');
-
+		
 		# Add signer link to host-meta
-		my $link = $mojo->hostmeta->add(
-		    'Link', {
-			rel => 'salmon-signer',
-			href => $salmon_signer_url
-		    });
+		my $link = $mojo->hostmeta->add_link(
+		    'salmon-signer',
+		    { href => $salmon_signer_url }
+		    );
 		$link->comment('Salmon Signer Endpoint');
 		$link->add('Title', 'Salmon Endpoint');
 
@@ -132,11 +138,8 @@ sub register {
 		    'cb' => sub { $plugin->_signer( @_ ); }
 		    );
 	    };
-
 	});
-
     # Helpers?
-
 };
 
 sub salmon {
@@ -145,28 +148,44 @@ sub salmon {
 
     my $content_type = $c->req->headers->content_type;
 
-    my $me_app = 'application/magic-envelope';
-
-    if ($content_type eq $me_app.'+xml') {
-
-	my ($unwrapped_content_type,
+    if (($content_type, $me_mime) == 0) {
+        my ($unwrapped_content_type,
 	    $unwrapped_body) =
-	    $c->me_unwrap($c->req->body);
+		$c->magicenvelope($c->req->body)->data;
 
-	$c->render_text(
-	    $unwrapped_content_type."\n\n".
-	    $unwrapped_body
+
+
+
+	# Use Atom information
+	# elsif ($me->data_type eq 'application/atom+xml') {
+	#  my $entry = $me->data->dom->at('entry');
+	#	return unless $entry;
+	#	
+	#	my $author = $entry->at('author uri');
+	#	return unless $author;
+	#	
+	#	$acct = $author->text || undef;
+	# };
+
+
+	$self->respond_to(
+	    'me+xml'  => { text =>
+			       'XML: '.
+			       $unwrapped_content_type.
+			       "\n\n".
+			       $unwrapped_body },
+	    'me+json' => { text =>
+			       'JSON: '.
+			       $unwrapped_content_type.
+			       "\n\n".
+			       $unwrapped_body}
 	    );
-
     }
 
-    elsif ($content_type eq $me_app.'+json') {
-
-    }
-
+    # No magic envelope
     else {
 	$c->render_text('Booh! No me!');
-    };    
+    };
 };
 
 # to be implemented!
@@ -560,7 +579,7 @@ The hook returns the current ??? object and the magic envelope.
 B<This hook will in future return the ??? object and the activity
 stream entry object.>
 
-=item C<before_salmon_mention_verification
+=item C<before_salmon_mention_verification>
 
 This hook is run before a salmon-mentioned is verified.
 As verification is computationally expensive, this can

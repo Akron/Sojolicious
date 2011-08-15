@@ -1,10 +1,14 @@
-use Test::More tests => 8;
+use Test::More tests => 1; # temp
 use Test::Mojo;
 use strict;
 use warnings;
 $|++;
 
 use lib '../lib';
+
+use_ok('Mojolicious::Plugin::MagicSignatures');
+
+__END__
 
 use Mojolicious::Lite;
 use Mojo::ByteStream 'b';
