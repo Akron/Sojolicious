@@ -10,6 +10,7 @@ lib/Mojolicious/Plugin/INames.pm
 lib/Mojolicious/Plugin/DateRFC3339.pm
 t/Atom-Pub.pm
 t/ActivityStreams.t
+script*
 MYMETA*
 Makefile
 pm_to_blib

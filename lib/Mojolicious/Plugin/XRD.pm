@@ -68,6 +68,7 @@ sub new {
 # Add Property
 sub add_property {
     my $self = shift;
+
     my %hash = (
 	type => shift,
 	%{ shift(@_) } 
@@ -78,6 +79,9 @@ sub add_property {
 # Get Property
 sub get_property {
     my $self = shift;
+
+    return unless $_[0];
+
     my $type = shift;
 
     # Returns the first match
@@ -97,6 +101,9 @@ sub add_link {
 # Get Link
 sub get_link {
     my $self = shift;
+
+    return unless $_[0];
+
     my $rel = shift;
 
     # Returns the first match

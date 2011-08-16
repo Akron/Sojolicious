@@ -6,11 +6,7 @@ $|++;
 
 use lib '../lib';
 
-use Mojo::ByteStream 'b';
-use Test::Mojo;
-use Mojolicious::Lite;
-
-use Test::More tests => 17;
+use Test::More tests => 16;
 
 use_ok('Mojolicious::Plugin::ActivityStreams');
 
@@ -69,25 +65,5 @@ is($as->at('target')->namespace,
    'http://activitystrea.ms/schema/1.0/', 'Add target 3');
 is($as->at('target > object-type')->namespace,
    'http://activitystrea.ms/schema/1.0/', 'Add target 4');
-
-
-# Plugin helper
-my $t = Test::Mojo->new;
-my $app = $t->app;
-
-$app->plugin('activity_streams');
-$as = $app->new_activity;
-
-
-my $as_string = $as->to_pretty_xml;
-$as_string =~ s/[\s\r\n]+//g;
-
-is ($as_string, '<?xmlversion="1.0"encoding="UTF-8'.
-                '"standalone="yes"?><feedxmlns="ht'.
-                'tp://www.w3.org/2005/Atom"xmlns:a'.
-                'ctivity="http://activitystrea.ms/'.
-                'schema/1.0/"/>',
-                'Initial ActivityStream');
-
 
 __END__

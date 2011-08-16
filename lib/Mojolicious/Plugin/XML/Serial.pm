@@ -10,7 +10,7 @@ BEGIN {
     $indent = '  ';
 
     # Namespace
-    $serial_ns = 'http://sojolicio.us/serial';
+    $serial_ns = 'http://sojolicio.us/ns/xml-serial';
 
     $pi = q(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>);
 };

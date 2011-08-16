@@ -92,7 +92,7 @@ sub register {
 	});
     
     # Discover relations
-    $mojo->helper( 'discover_rel' => \&discover_rel );
+    # $mojo->helper( 'discover_rel' => \&discover_rel );
 
     # If domain parameter is given
     if ($param->{host}) {
@@ -173,6 +173,8 @@ sub register {
 
 # discover rel from dom
 sub discover_rel {
+    die 'This is deprecated!';
+
     my $self = shift;
     my $c = shift;
     my $dom = shift;
