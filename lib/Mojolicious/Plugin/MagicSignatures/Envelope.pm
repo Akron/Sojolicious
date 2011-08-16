@@ -342,7 +342,7 @@ sub _sig_base {
 
     # delete all equal signs
     # maybe that's wrong and it should say s/=+$//sg; ?
-    $sig_base =~ s/=//sg;
+    $sig_base =~ s/=+$//sg;
 
     return $sig_base;
 };

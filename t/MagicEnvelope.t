@@ -1,4 +1,4 @@
-use Test::More tests => 1;
+use Test::More tests => 2;
 use Test::Mojo;
 use strict;
 use warnings;
@@ -7,6 +7,20 @@ $|++;
 use lib '../lib';
 
 use_ok('Mojolicious::Plugin::MagicSignatures::Envelope');
+
+my $test_msg = 'Not really Atom'; # Tm90IHJlYWxseSBBdG9t
+my $test_data_type = 'application/atom+xml';
+
+my $sig_base = Mojolicious::Plugin::MagicSignatures::Envelope::_sig_base(
+    $test_msg,
+    $test_data_type);
+
+is($sig_base,
+   'Tm90IHJlYWxseSBBdG9t.YXBwbGljYXRpb24vYXRvbSt4bWw=.'.
+   'YmFzZTY0dXJs.UlNBLVNIQTI1Ng',
+   'Correct signature base string');
+
+__END__
 
 my $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(
     {	

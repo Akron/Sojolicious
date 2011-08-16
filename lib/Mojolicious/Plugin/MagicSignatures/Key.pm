@@ -1,6 +1,8 @@
 package Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Base -base;
-use Math::BigInt;
+
+# Implement alternative with PARI if existent
+use Math::BigInt try => 'GMP,Pari';
 use MIME::Base64;
 use Digest::SHA qw(sha256);
 use Exporter 'import';
@@ -9,6 +11,7 @@ our @EXPORT_OK = qw(b64url_encode
 
 has [qw/n d emLen/] => 0;
 has e => 65537;
+
 # has ns => sub { 'http://salmon-protocol.org/ns/magic-key' };
 
 # Construct a new MagicSignature object
@@ -44,8 +47,8 @@ sub new {
 	    for ($mod, $exp, $private_exp) {
 		next unless $_;
 		$_ = b64url_decode($_);
-		$_ = "0x".unpack "H*", $_;
-		$_ = Math::BigInt->from_hex($_);
+		$_ = "0x" . unpack "H*", $_;
+		$_ = Math::BigInt->from_hex($_)->bstr;
 	    };
 	    
 	    $self->n( $mod );
@@ -82,7 +85,7 @@ sub sign {
     warn 'You can only sign with a private key'
 	and return unless $self->d;
 
-    my $encoded_message = _sign_emsa_pkcs1_v1_5($self, $message );
+    my $encoded_message = _sign_emsa_pkcs1_v1_5($self, $message);
 
     # From: https://github.com/sivy/Salmon/
     for ($encoded_message) {
@@ -94,9 +97,9 @@ sub sign {
     };
 
     # Append padding - although that's not defined
-    while ((length($encoded_message) % 4) != 0) {
-        $encoded_message .= '=';
-    };
+#    while ((length($encoded_message) % 4) != 0) {
+#        $encoded_message .= '=';
+#    };
 
     return $encoded_message;
 };
@@ -104,15 +107,15 @@ sub sign {
 # Verify a signature for a message
 sub verify {
     my $self = shift;
-    my $message = shift;
+    my $message = shift; # basestring!
     my $encoded_message =  shift;
 
     # From: https://github.com/sivy/Salmon/
-    for ($encoded_message) {
-	$_ = b64url_decode($_);
-	$_ = "0x".unpack( "H*", $_ );
-	$_ = Math::BigInt->from_hex($_); # ->bstr;
-    };
+#    for ($encoded_message) {
+#	$_ = b64url_decode($_);
+#	$_ = "0x".unpack( "H*", $_ );
+#	$_ = Math::BigInt->from_hex($_); # ->bstr;
+#    };
 
     return _verify_emsa_pkcs1_v1_5($self,
 				   $message,
@@ -129,9 +132,9 @@ sub to_string {
   # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
   #   MagicSignatures/SignatureAlgRsaSha256.pm
     foreach ($n, $e) {
-	my $hex = $_->as_hex;
+	my $hex = Math::BigInt->new($_)->as_hex;
 	$hex =~ s/^0x//;
-	$hex = ( ( length $hex ) % 2 > 0 ) ? "0$hex" : $hex;
+	$hex = ( ( length( $hex ) % 2 ) > 0 ) ? "0$hex" : $hex;
 	$_ = pack "H*", $hex;
     };
 
@@ -139,7 +142,7 @@ sub to_string {
 		    'RSA',
 		    b64url_encode( $n ),
 		    b64url_encode( $e ) );
-    $mkey =~ s/=+//g;
+#    $mkey =~ s/=+//g;
     return $mkey;
 };
 
@@ -161,12 +164,14 @@ sub _der_sha256 { "\x30\x31\x30\x0d\x06\x09\x60\x86\x48".
 
 # http://www.ietf.org/rfc/rfc3447.txt
 # Ch. 8.1.1
-sub _sign_emsa_pkcs1_v1_5 {
+sub _sign_emsa_pkcs1_v1_5 ($$) {
     my ($K, $M) = @_;
 
     my $k = $K->emLen;
 
     my $EM = _emsa_encode($M, $k, 'sha-256');
+
+    return 0 unless $EM;
 
 #      If the encoding operation outputs "message too long," output
 #      "message too long" and stop.  If the encoding operation outputs
@@ -184,11 +189,11 @@ sub _sign_emsa_pkcs1_v1_5 {
 # http://www.ietf.org/rfc/rfc3447.txt
 # Ch. 8.2.2
 sub _verify_emsa_pkcs1_v1_5 {
-    my ($K, $M, $S) = @_;
+    my ($K, $M, $S) = @_; # k => key, M -> message, s -> signature
 
     my $k = $K->emLen;
 
-    if (length($S) != $K) {
+    if (length($S) != $k) {
 	warn "invalid signature";
 	warn(length($S).':'.$k);
 	return 0;
@@ -234,10 +239,9 @@ sub _rsasp1 {
 	return;
     };
 
-    my $s;
     if ($K->n) {
-	$s = Math::BigInt->new($m)->bmodpow($K->d, $K->n)
-    }
+	return Math::BigInt->new($m)->bmodpow($K->d, $K->n);
+    };
 
     # Not implemented yet
     # Eventually not needed
@@ -245,7 +249,7 @@ sub _rsasp1 {
 #	return;
 #    };
     
-    return $s;
+    return 0;
 };
 
 # http://www.ietf.org/rfc/rfc3447.txt
@@ -272,8 +276,10 @@ sub _emsa_encode {
 #    warn('M: --->',$M,"<---\n\n");
 
     my ($H, $T, $tLen);
+
     if ($hash_digest eq 'sha-256') {
 	$H = sha256($M);  # hex?
+#	$H = Digest::SHA->new('sha-256')->add($M)->digest;  # hex?
 	$T = _der_sha256 . $H;
 	$tLen = length( $T );
     }
@@ -291,12 +297,22 @@ sub _emsa_encode {
     #                too short.", \$M )
     #    if $emlen < length($T) + 10;
 
+
+# pad_string = chr(0xFF) * (msg_size_bits - len(encoded) - 3)
+# instead of
+# pad_string = chr(0xFF) * (msg_size_bits / 8 - len(encoded) - 3) 
+
+#    my $PS = "\xFF" x ($emLen - $tLen - 3); # -3 
+
+    # temp!
+#    $emLen = ($emLen + 8 - ($emLen % 8) / 8);
+
     my $PS = "\xFF" x ($emLen - $tLen - 3); # -3 
 
 #    warn('PS: '.b64url_encode($PS)."<---\n\n");
 
     # \x00
-    my $EM = "\x01".$PS."\x00".$T;
+    my $EM = "\x00\x01".$PS."\x00".$T;
 
 #    warn('EMSA: '.b64url_encode($EM)."<---\n\n");
 
@@ -305,8 +321,9 @@ sub _emsa_encode {
 };
 
 # http://cpansearch.perl.org/src/GBARR/Convert-ASN1-0.22/lib/Convert/ASN1.pm
+# http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
 # Convert from an octet string to a bigint
-sub _os2ip {
+sub _os2ip ($) {
     my $os = shift;
     my $result = Math::BigInt->new(0);
 
@@ -316,12 +333,13 @@ sub _os2ip {
     for (unpack("C*",$os)) {
       $result = ($result * 256) + $_;
     }
+
     return $neg ? ($result + 1) * -1 : $result;
 }
 
 # http://cpansearch.perl.org/src/GBARR/Convert-ASN1-0.22/lib/Convert/ASN1.pm
 # Convert from a bigint to an octet string
-sub _i2osp {
+sub xxx_i2osp {
     my $num = Math::BigInt->new( shift );
     my $neg = $num < 0 and $num = abs($num+1);
 
@@ -338,15 +356,50 @@ sub _i2osp {
     return scalar reverse $result;
 };
 
+# Convert from a bigint to an octet string
+# http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
+sub _i2osp {
+    my $num = Math::BigInt->new( shift ); 
+    my $l = shift || 0;
+
+    my $result = '';
+
+    return if ($l && $num > ( 256 ** $l ));
+
+    do { 
+        my $r = $num % 256;
+        $num = ($num - $r) / 256;
+        $result = chr($r) . $result;
+    } until ($num < 256);
+
+    $result = chr($num) . $result if $num != 0;
+
+    if (length($result) < $l) { 
+        $result = chr(0) x ($l - length($result)) . $result;
+    };
+
+    return $result;
+};
+
+
 # Returns the octet length of a given integer
 sub _octet_len {
+
+    # https://github.com/mozilla/django-salmon/
+    #  blob/master/django_salmon/magicsigs.py
+    # Round up to next byte
+    # modulus_size = keypair.size()
+    # msg_size_bits = modulus_size + 8 - (modulus_size % 8)
+    # pad_string = chr(0xFF) * (msg_size_bits / 8 - len(encoded) - 3)
+    # return chr(0) + chr(1) + pad_string + chr(0) + encoded
+
     my $bs = Math::BigInt->new( _bitsize( shift ) );
-    my $val = ($bs + 7) / 8;
+    my $val = $bs->badd(7)->bdiv(8);
     return $val->bfloor;
 };
 
 # Returns the bitlength of the integer
-sub _bitsize {
+sub _bitsize ($) {
     my $x = Math::BigInt->new( shift );
     return ( length( $x->as_bin ) - 2 );
 };
