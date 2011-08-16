@@ -22,7 +22,7 @@ sub register {
     if (exists $param->{host}) {
 	$plugin->host( $param->{host} );
     } else {
-	if (exists $mojo->renderer->helpers->{hostmeta}) {
+	if ($mojo->can('hostmeta')) {
 	    $plugin->host( $mojo->hostmeta('host') || 'localhost' );
 	} else {
 	    $plugin->host( 'localhost' );
@@ -41,7 +41,7 @@ sub register {
 	    # Internal hub is currently not supported
 	    
 	    # Set endpoint if enabled
-	    if ( exists $mojo->renderer->helpers->{set_endpoint} ) {
+	    if ( $mojo->can('set_endpoint') ) {
 		$mojo->set_endpoint(
 		    'pubsub-'.$param => {
 			secure => $plugin->secure,
@@ -228,6 +228,7 @@ sub change_subscription {
     };
 
     # Get callback endpoint
+    # Works only if endpoints provided
     $param{'callback'} = $c->get_endpoint('pubsub-cb');
 
 

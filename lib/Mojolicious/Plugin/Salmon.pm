@@ -19,22 +19,12 @@ BEGIN {
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
-    my $helpers = $mojo->renderer->helpers;
 
     # Dependencies
     # Load magic signatures if not loaded
-    unless (exists $helpers->{'magicenvelope'}) {
+    # Automatically loads webfinger and hostmeta.
+    unless ($mojo->can('magicenvelope')) {
 	$mojo->plugin('magic_signatures', {'host' => $param->{'host'}} );
-    };
-
-    # Load webfinger if not loaded
-    unless (exists $helpers->{'webfinger'}) {
-	$mojo->plugin('webfinger', {'host' => $param->{'host'}} );
-    };
-
-    # Load host meta if not loaded
-    unless (exists $helpers->{'hostmeta'}) {
-	$mojo->plugin('host_meta', {'host' => $param->{'host'}} );
     };
 
     # Attributes
@@ -148,13 +138,10 @@ sub salmon {
 
     my $content_type = $c->req->headers->content_type;
 
-    if (($content_type, $me_mime) == 0) {
+    if (index($content_type, $me_mime) == 0) {
         my ($unwrapped_content_type,
 	    $unwrapped_body) =
 		$c->magicenvelope($c->req->body)->data;
-
-
-
 
 	# Use Atom information
 	# elsif ($me->data_type eq 'application/atom+xml') {
@@ -168,7 +155,7 @@ sub salmon {
 	# };
 
 
-	$self->respond_to(
+	$c->respond_to(
 	    'me+xml'  => { text =>
 			       'XML: '.
 			       $unwrapped_content_type.

@@ -122,22 +122,22 @@ sub verify {
 				   $encoded_message);
 };
 
-# Return MagicKey-String
+# Return MagicKey-String (public only)
 sub to_string {
     my $self = shift;
 
     my $n = $self->n;
     my $e = $self->e;
 
-  # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
-  #   MagicSignatures/SignatureAlgRsaSha256.pm
+    # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
+    #         MagicSignatures/SignatureAlgRsaSha256.pm
     foreach ($n, $e) {
 	my $hex = Math::BigInt->new($_)->as_hex;
 	$hex =~ s/^0x//;
 	$hex = ( ( length( $hex ) % 2 ) > 0 ) ? "0$hex" : $hex;
 	$_ = pack "H*", $hex;
     };
-
+    
     my $mkey = join('.',
 		    'RSA',
 		    b64url_encode( $n ),
@@ -532,6 +532,8 @@ Decodes a 64-based string with URL safe characters.
 =head1 DEPENDENCIES
 
 L<Mojolicious>.
+Either L<Math::BigInt::GMP> or L<Math::BigInt::Pari> are recommended.
+
 
 =head1 KNOWN BUGS AND LIMITATIONS
 

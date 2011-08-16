@@ -256,9 +256,9 @@ sub _element ($$) {
 #		    };
 
 		    $content .= $indent x ($i + 1);
-		    $content .= join( ( $indent x ($i + 1) ),
+		    $content .= join( "\n" . ( $indent x ($i + 1) ),
 				      ( unpack '(A60)*', $b64_string ) );
-		    $content .= ($indent x $i);
+		    $content .= "\n" . ($indent x $i);
 		}
 
 		elsif ($attr->{'serial:type'} eq 'escape') {
@@ -354,10 +354,10 @@ Mojolicious::Plugin::XML::Serial
   my $dom = Mojolicious::Plugin::XML::Serial->new();
 
   # Mojolicious
-  $self->plugin('x_m_l_serial');
+  $self->plugin('x_m_l-serial');
 
   # Mojolicious::Lite
-  plugin 'x_r_d';
+  plugin 'x_m_l-serial';
 
 =head1 METHODS
 

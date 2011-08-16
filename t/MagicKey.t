@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 use Test::More tests => 26;
-use Math::BigInt;
+use Math::BigInt try => 'GMP,Pari';
 use strict;
 use warnings;
 no strict 'refs';

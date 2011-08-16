@@ -12,7 +12,7 @@ sub register {
 
     # Load Host-Meta if not already loaded.
     # This automatically loads the 'XRD' plugin.
-    unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
+    unless ($mojo->can('hostmeta')) {
 	$mojo->plugin('host_meta', {'host' => $param->{'host'} });
     };
 
@@ -346,7 +346,7 @@ loading the plugin, so the path is correct.
 =item C<before_fetching_webfinger>
 
 This hook is run before a webfinger account is fetched.
-This is useful for chaching. The hook returns the current
+This is useful for chaching. The hook passes the current
 ??? object, the account name and an empty string reference,
 meant to refer to the xrd_object.
 If the XRD reference is filled, the fetching will not proceed. 
@@ -355,14 +355,14 @@ If the XRD reference is filled, the fetching will not proceed.
 
 This hook is run after a webfinger document is retrieved.
 This can be used for caching.
-The hook returns the current ??? object, the account name,
+The hook passes the current ??? object, the account name,
 a string reference, meant to refer to the XRD object, and the
 L<Mojo::Message::Response> object from the request. 
 
 =item C<before_serving_webfinger>
 
 This hook is run before a webfinger document is served.
-The hook returns the current ??? object, the account name
+The hook passes the current ??? object, the account name
 and the XRD object. 
 
 =back
