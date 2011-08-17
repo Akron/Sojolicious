@@ -12,7 +12,7 @@ sub register {
     my ($plugin, $mojo, $param) = @_;
 
     # Load Atom if not already loaded
-    unless ($mojo->can('new_atom')) {
+    unless (exists $mojo->renderer->helpers->{'new_atom'}) {
 	$mojo->plugin('atom');
     };
 

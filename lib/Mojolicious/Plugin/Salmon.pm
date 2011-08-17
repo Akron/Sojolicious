@@ -23,7 +23,7 @@ sub register {
     # Dependencies
     # Load magic signatures if not loaded
     # Automatically loads webfinger and hostmeta.
-    unless ($mojo->can('magicenvelope')) {
+    unless (exists $mojo->renderer->helpers->{'magicenvelope'}) {
 	$mojo->plugin('magic_signatures', {'host' => $param->{'host'}} );
     };
 

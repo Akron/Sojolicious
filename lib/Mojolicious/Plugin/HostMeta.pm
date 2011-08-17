@@ -18,7 +18,7 @@ sub register {
     my ($plugin, $mojo, $param) = @_;
 
     # Load XRD if not already loaded
-    unless ($mojo->can('new_xrd')) {
+    unless (exists $mojo->renderer->helpers->{'new_xrd'}) {
 	$mojo->plugin('x_r_d');
     };
 

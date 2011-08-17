@@ -22,7 +22,7 @@ sub register {
     if (exists $param->{host}) {
 	$plugin->host( $param->{host} );
     } else {
-	if ($mojo->can('hostmeta')) {
+	unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
 	    $plugin->host( $mojo->hostmeta('host') || 'localhost' );
 	} else {
 	    $plugin->host( 'localhost' );

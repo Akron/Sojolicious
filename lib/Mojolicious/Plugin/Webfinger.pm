@@ -12,7 +12,7 @@ sub register {
 
     # Load Host-Meta if not already loaded.
     # This automatically loads the 'XRD' plugin.
-    unless ($mojo->can('hostmeta')) {
+    unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
 	$mojo->plugin('host_meta', {'host' => $param->{'host'} });
     };
 

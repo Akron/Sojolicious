@@ -20,7 +20,7 @@ sub register {
     };
 
     # Load Webfinger if not already loaded.
-    unless ($mojo->can('webfinger')) {
+    unless (exists $mojo->renderer->helpers->{'webfinger'}) {
 	$mojo->plugin('webfinger',
 		      {
 			  host   => $param->{'host'},
