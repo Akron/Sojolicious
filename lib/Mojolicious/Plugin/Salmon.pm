@@ -24,7 +24,7 @@ sub register {
     # Load magic signatures if not loaded
     # Automatically loads webfinger and hostmeta.
     unless (exists $mojo->renderer->helpers->{'magicenvelope'}) {
-	$mojo->plugin('magic_signatures', {'host' => $param->{'host'}} );
+	$mojo->plugin('MagicSignatures', {'host' => $param->{'host'}} );
     };
 
     # Attributes
@@ -474,7 +474,7 @@ Mojolicious::Plugin::Salmon - A Salmon Plugin for Mojolicious
 
   use Mojolicious::Lite;
 
-  plugin 'salmon', host => 'example.org';
+  plugin 'Salmon', host => 'example.org';
 
   my $r = app->routes;
 

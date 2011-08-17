@@ -13,7 +13,7 @@ sub register {
 
     # Load Atom if not already loaded
     unless (exists $mojo->renderer->helpers->{'new_atom'}) {
-	$mojo->plugin('atom');
+	$mojo->plugin('Atom');
     };
 
     # Add 'new_activity' helper
@@ -153,10 +153,10 @@ Mojolicious::Plugin::ActivityStreams - ActivityStreams (Atom) Plugin
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('activity_streams');
+  $app->plugin('ActivityStreams');
 
   # Mojolicious::Lite
-  plugin 'activity_streams';
+  plugin 'ActivityStreams';
 
   # In Controllers
   my $activity = $self->new_activity('entry');

@@ -308,7 +308,7 @@ Mojolicious::Plugin::PubSubHubbub
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('pub_sub_hubbub',
+  $app->plugin('PubSubHubbub',
               { hub => 'https://hub.example.org/' }
               );
 
@@ -326,7 +326,7 @@ Mojolicious::Plugin::PubSubHubbub
   $c->unsubscribe( topic => 'https://sojolicio.us/feed.atom');
 
   # Mojolicious::Lite
-  plugin 'pub_sub_hubbub' => { hub => 'https://hub.example.org' };
+  plugin 'PubSubHubbub' => { hub => 'https://hub.example.org' };
 
   my $ps = any '/:user/callback_url';
   $ps->pubsub('cb);

@@ -13,7 +13,7 @@ sub register {
     # Load Host-Meta if not already loaded.
     # This automatically loads the 'XRD' plugin.
     unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
-	$mojo->plugin('host_meta', {'host' => $param->{'host'} });
+	$mojo->plugin('HostMeta', {'host' => $param->{'host'} });
     };
 
     if (exists $param->{host}) {
@@ -259,7 +259,7 @@ Mojolicious::Plugin::Webfinger - Webfinger Plugin
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('webfinger');
+  $app->plugin('Webfinger');
 
   my $r = $app->routes;
   $r->route('/webfinger/:uri')->webfinger;
@@ -270,7 +270,7 @@ Mojolicious::Plugin::Webfinger - Webfinger Plugin
         ->attrs->{'href'};
 
   # Mojolicious::Lite
-  plugin 'webfinger';
+  plugin 'Webfinger';
   my $wf = any '/webfinger';
   $wf->webfinger;
 

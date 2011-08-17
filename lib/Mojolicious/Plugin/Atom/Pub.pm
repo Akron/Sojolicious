@@ -6,7 +6,7 @@ sub register {
     my ($plugin, $mojo) = @_;
 
     unless (exists $mojo->renderer->helpers->{'atom'}) {
-	$mojo->plugin('atom');
+	$mojo->plugin('Atom');
     };
 
     my $routes = $mojo->routes;

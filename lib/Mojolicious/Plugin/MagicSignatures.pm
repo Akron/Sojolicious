@@ -21,7 +21,7 @@ sub register {
 
     # Load Webfinger if not already loaded.
     unless (exists $mojo->renderer->helpers->{'webfinger'}) {
-	$mojo->plugin('webfinger',
+	$mojo->plugin('Webfinger',
 		      {
 			  host   => $param->{'host'},
 			  secure => $param->{'secure'}
@@ -290,8 +290,11 @@ Mojolicious::Plugin::MagicSignatures - MagicSignatures Plugin for Mojolicious
 
 =head1 SYNOPSIS
 
-  # In Mojolicious startup
-  $app->plugin('magic_signatures');
+  # Mojolicious
+  $app->plugin('MagicSignatures');
+
+  # Mojolicious::Lite
+  plugin 'MagicSignatures';
 
   # In Controller:
   # Fold data in MagicEnvelope

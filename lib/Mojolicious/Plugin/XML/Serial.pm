@@ -354,10 +354,10 @@ Mojolicious::Plugin::XML::Serial
   my $dom = Mojolicious::Plugin::XML::Serial->new();
 
   # Mojolicious
-  $self->plugin('x_m_l-serial');
+  $self->plugin('XML-Serial');
 
   # Mojolicious::Lite
-  plugin 'x_m_l-serial';
+  plugin 'XML-Serial';
 
 =head1 METHODS
 

@@ -1,7 +1,6 @@
 blib
 Sandbox
 lib/Sojolicious
-lib/Mojolicious/Plugin/PortableContacts.pm
 lib/Mojolicious/Plugin/OAuth.pm
 lib/Mojolicious/Plugin/XRDS.pm
 lib/Mojolicious/Plugin/INames.pm

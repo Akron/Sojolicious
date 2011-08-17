@@ -19,7 +19,7 @@ sub register {
 
     # Load XRD if not already loaded
     unless (exists $mojo->renderer->helpers->{'new_xrd'}) {
-	$mojo->plugin('x_r_d');
+	$mojo->plugin('XRD');
     };
 
     my $hostmeta = $mojo->new_xrd;
@@ -302,11 +302,11 @@ Mojolicious::Plugin::HostMeta
 =head1 SYNOPSIS
 
   # Mojolicious
-  $self->plugin('host_meta', { 'host' => 'sojolicio.us' } );
+  $self->plugin('HostMeta', { 'host' => 'sojolicio.us' } );
 
   # Mojolicious::Lite
-  plugin 'host_meta';
-  plugin host_meta => { host => 'sojolicio.us' };
+  plugin 'HostMeta';
+  plugin HostMeta => { host => 'sojolicio.us' };
 
   # In Controllers
   print $self->hostmeta('gmail.com')->get_link('lrrd');

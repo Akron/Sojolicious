@@ -400,10 +400,10 @@ Mojolicious::Plugin::Atom - Atom Syndication Format Plugin
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('atom');
+  $app->plugin('Atom');
 
   # Mojolicious::Lite
-  plugin 'atom';
+  plugin 'Atom';
 
   # In Controllers
   my $feed = $self->new_atom('feed');

@@ -218,10 +218,10 @@ Mojolicious::Plugin::XRD
 =head1 SYNOPSIS
 
   # Mojolicious
-  $self->plugin('x_r_d');
+  $self->plugin('XRD');
 
   # Mojolicious::Lite
-  plugin 'x_r_d';
+  plugin 'XRD';
 
 =head1 DESCRIPTION
 

@@ -17,13 +17,13 @@ sub register {
 
     my $helpers = $mojo->renderer->helpers;
 
-    foreach (qw/host_meta
-                webfinger
-                magic_signatures
-                salmon
-                pub_sub_hubbub
-                portable_contacts
-                activity_streams/) {
+    foreach (qw/HostMeta
+                Webfinger
+                MagicSignatures
+                Salmon
+                PubSubHubbub
+                PortableContacts
+                ActivityStreams/) {
 
 	$param->{$_} = {} unless exists $param->{$_};
 	$mojo->plugin($_, { %default, %{ $param->{$_} } } );
