@@ -11,8 +11,8 @@ sub register {
     my ($plugin, $mojo, $param) = @_;
     
     my %default = (
-	'host' => $param{'host'}     || 'localhost:3000',
-	'secure' => $param{'secure'} || 0
+	'host' => $param->{'host'}     || 'localhost:3000',
+	'secure' => $param->{'secure'} || 0
 	);
 
     my $helpers = $mojo->renderer->helpers;
@@ -25,8 +25,8 @@ sub register {
                 portable_contacts
                 activity_streams/) {
 
-	$param{$_} = {} unless exists $param{$_};
-	$mojo->plugin($_, { %default, %{ $param{$_} } } );
+	$param->{$_} = {} unless exists $param->{$_};
+	$mojo->plugin($_, { %default, %{ $param->{$_} } } );
 
     };
 };
