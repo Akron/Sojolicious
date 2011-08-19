@@ -22,19 +22,56 @@ sub register {
                 MagicSignatures
                 Salmon
                 PubSubHubbub
-                PortableContacts
-                ActivityStreams/) {
+                PortableContacts/) {
 
-	$param->{$_} = {} unless exists $param->{$_};
-	$mojo->plugin($_, { %default, %{ $param->{$_} } } );
-
+	$param->{ $_ } = +{} unless exists $param->{ $_ };
+	$mojo->plugin($_ => { %default, %{ $param->{ $_ } } } );
     };
+
+    $mojo->plugin(
+	'ActivityStreams' => {
+	    %default,
+	    extensions => ['Atom-Threading', 'OStatus'],
+	    helper     => 'new_ostatus_as'
+	});
 };
 
 1;
 
 __END__
 
+sub follow {
+    my $self = shift;
+    my $user = $self->stash('poco_user');
+
+    my $acct = shift;
+
+    my $webfinger_xrd = $self->webfinger($acct);
+
+    if ($webfinger_xrd) {
+	my $doc = $self->new_ostatus_as;
+	$doc->add_actor();
+    };
+
+    # 'after_ostatus_follow' hook (Für evtl. pubsub_publish
+};
+
+sub unfollow {
+    my $self = shift;
+    my ($acct, $id);
+
+    if ($_[0] =~ /^\d+$/) {
+	$id = shift;
+    } else {
+	$acct = shift;
+    };
+};
+
+package Mojolicious::Plugin::OStatus::Document;
+
+sub register_as_extension {
+    return qw/add_attention add_conversation/;
+};
 sub add_attention {
     my $self = shift;
     my $entry = shift;

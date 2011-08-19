@@ -24,7 +24,6 @@ sub new {
 	((@_ % 2) == 0 &&
 	 ref( $_[1] ) ne 'HASH')) {
 	return $class->SUPER::new(@_);
-	
     }
 
     # SELF->new

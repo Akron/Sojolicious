@@ -49,8 +49,14 @@ sub new {
 	return Mojolicious::Plugin::Atom::Document->new(
 	    $type,
 	    { 'xmlns' => $atom_ns });
+    } elsif (@_ == 3 && $_[1] eq 'extension') {
+	return Mojolicious::Plugin::Atom::Document->new(
+	    $_[0],
+	    { 'xmlns'      => $atom_ns,
+	      'serial:ext' => join(';', @{ $_[2] })
+	    })
     };
-    
+  
     # Start document
     return Mojolicious::Plugin::Atom::Document->new(@_);
 };

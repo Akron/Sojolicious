@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.02';
+our $VERSION = '0.06';
 
 1;
 
@@ -24,7 +24,8 @@ surrounding specifications.
 
 The design goal is to make all plugins useful on their own,
 as separated building blocks of OStatus, while playing well
-with each other. All plugins are application and storage agnostic,
+with each other. All plugins are application (despite the fact
+that they are Mojolicious-Plugins) and storage agnostic,
 providing event driven hooks for usage.
 
 All plugins have no requirements other than L<Mojolicious> and Perl 5.8
@@ -32,6 +33,7 @@ All plugins have no requirements other than L<Mojolicious> and Perl 5.8
 
 Sojolicious is in its early stages and work in progress. There are missing
 parts currently developed and existing parts reworked.
+Don't use it in current status!
 
 =head2 Synopsis
 
@@ -42,8 +44,8 @@ parts currently developed and existing parts reworked.
     my $app = shift;
 
     # Load Plugins
-    $app->plugin('webfinger' => { host => 'sojolicio.us' });
-    $app->plugin('salmon' => { host => 'sojolicio.us',
+    $app->plugin('Webfinger' => { host => 'sojolicio.us' });
+    $app->plugin('Salmon' => { host => 'sojolicio.us',
 		               secure => 1 });
 
     my $r = $app->routes;
@@ -53,7 +55,14 @@ parts currently developed and existing parts reworked.
 
     # Esablish Salmon Endpoints:
     my $salmon = $r->route('/salmon');
-    $salmon->route('/:user/all-replies')->salmon('all-replies');
+    for ($salmon) {
+	$_->route('/:acct/mentioned')->salmon('mentioned');
+	$_->route('/:acct/all-replies')->salmon('all-replies');
+	$_->route('/signer')->salmon('signer');
+    };
+
+    # Add pubsubhubbub callback url
+    $r->route('/pubsub')->pubsub('cb');
 
     $app->plugins->add_hook(
       'on_salmon_follow' => sub {
@@ -80,31 +89,55 @@ parts currently developed and existing parts reworked.
 
 =item L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
 
-=item ...
+=item L<PortableContacts|http://portablecontacts.net/draft-spec.html>
+
+=item L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html>
+
+=item L<Atom|https://www.ietf.org/rfc/rfc4287.txt>
+
+=item L<Atom-Threading-Extension|https://www.ietf.org/rfc/rfc4685.txt>
+
+=item L<ActivityStreams|http://activitystrea.ms/specs/atom/1.0/>
+
+=item L<OStatus|http://ostatus.org/sites/default/files/ostatus-1.0-draft-2-specification.html>
 
 As Sojolicious is in its early stages, there is currently work on
-support for C<ActivityStreams>, C<OAuth>, C<PubsubHubbub> and C<Portable Contacts>.
-There are plans to expand the scope to other social protocols, for example C<OExchange>.
+most of these protocols. There is currently no stable release here or on CPAN.
+
+There are plans to expand the scope to other social protocols, for example L<OExchange|http://www.oexchange.org/spec/>.
 
 =back
 
 =head2 Acknowledgement
 
 L<Mojolicious> is written by Sebastian Riedel.
-
 C<XRD> was developed by Eran Hammer-Lahav and Will Norris.
 C<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
 C<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
 C<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
 C<Salmon> was developed by John Panzer.
+C<PortableContacts> was developed by Joseph Smarr.
+C<Atom> was developed by Mark Nottingham and Robert Sayre.
+C<Atom Threading Extensions> was developed by James M. Snell.
+C<ActivityStreams> was developed by Martin Atkins, Will Norris, Chris Messina, Monica Wilkinson, and Rob Dolin.
 C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach Copley.
 
-Thanks to a lot of other implementors for inspiring code (referenced in the sourcecode).
+... just to name the persons officially responsible for maintaining the code and the specifications. Thanks to all contributors of all these projects!
+
+And thanks to a lot of other implementors for inspiring code (which is normally referenced in the sourcecode).
 
 Parts of this work were supported by the BMBF-project L<Linguistic Networks|http://project.linguistic-networks.net/>.
 
 =head2 Where to learn more?
 
-L<http://mojolicio.us>, L<http://ostatus.org/>.
+L<http://mojolicio.us>,
+L<http://ostatus.org/>.
+
+=head1 ... and?
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
 
 =cut
