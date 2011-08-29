@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 1;
 
@@ -126,7 +126,7 @@ C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach
 
 And thanks to a lot of other implementors for inspiring code (which is normally referenced in the sourcecode).
 
-Parts of this work were supported by the BMBF-project L<Linguistic Networks|http://project.linguistic-networks.net/>.
+Parts of my work are supported by the BMBF-project L<Linguistic Networks|http://project.linguistic-networks.net/>.
 
 =head2 Where to learn more?
 

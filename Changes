@@ -1,3 +1,6 @@
+0.07 2011-08-29
+        - Added separate Util::Endpoint plugin.
+
 0.06 2011-08-18
         - Added preliminary PortableContacts support.
 
@@ -6,7 +9,7 @@
 
 0.04 2011-08-10
         - Added ActivityStreams support.
-        - Added Mojolicious::Plugin::Date::RFC3339.
+        - Added Date::RFC3339.
 
 0.03 2011-08-06
         - Added Atom support.
