@@ -47,6 +47,7 @@ sub register {
 		}		
 
 		# Secure flag
+		# This is DEPRECATED!
 		elsif (exists $param->{secure}) {
 		    $mojo->log->warn('secure is deprecated!');
 		    $_->scheme( $param->{secure} ? 'https' : 'http' );
@@ -78,6 +79,7 @@ sub register {
 	'endpoint' => sub {
 	    my $c = shift; # c or mojo
 	    my $name = shift;
+	    my $given_param = shift || {};
 	    
 	    # Endpoint undefined
 	    unless (defined $mojo->defaults('endpoint.'.$name)) {
@@ -88,27 +90,28 @@ sub register {
 	    # get url for route
 	    my $endpoint = $mojo->defaults('endpoint.' . $name);;
 
-	    # Get parameter from stash
-	    my %query_param;
-	    if (ref($c) eq 'Mojolicious::Controller') {
-		%query_param = %{ $c->stash };
-	    };
-	    
-	    # Get parameter from given data
-	    if (my $given_param = shift) {
-		while (my ($key, $value) = each %$given_param) {
-		    $query_param{$key} = $value;
-		};
-	    };
+	    # Get stash or defaults hash
+	    my $stash_param = ref($c) eq 'Mojolicious::Controller' ? $c->stash : 
+		ref($c) eq 'Mojolicious' ? $c->defaults : {};
 	    	       
 	    # Interpolate template
 	    pos($endpoint) = 0;
 	    while ($endpoint =~ /{([^}]+)}/g) {
-		my $p = pos($endpoint) - length($1) + 1;
+		# save search position
+		my $p = pos($endpoint) - length($1) + 2;
 		my $val = $1;
-		if (exists $query_param{$val}) {
-		    $endpoint =~ s/\{$val\}/$query_param{$val}/;
+
+		# Look in given param
+		if (exists $given_param->{$val}) {
+		    $endpoint =~ s/\{$val\}/$given_param->{$val}/;
+		}
+
+		# Look in stash
+		elsif (exists $stash_param->{$val}) {
+		    $endpoint =~ s/\{$val\}/$stash_param->{$val}/;
 		};
+
+		# Reset search position
 		pos($endpoint) = $p;
 	    };
 	    

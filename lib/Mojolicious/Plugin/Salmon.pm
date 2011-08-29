@@ -112,7 +112,7 @@ sub register {
 	    elsif ($param eq 'signer') {
 		
 		# Todo: Fragen: Gibt es schon eine Signer-URI?
-		my $salmon_signer_url = $mojo->get_endpoint('salmon-signer');
+		my $salmon_signer_url = $mojo->endpoint('salmon-signer');
 		
 		# Add signer link to host-meta
 		my $link = $mojo->hostmeta->add_link(

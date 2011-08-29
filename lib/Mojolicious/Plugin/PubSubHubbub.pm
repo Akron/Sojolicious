@@ -101,7 +101,7 @@ sub register {
     
     # Add 'publish' helper
     # $c->pubsub_publish('feed1', 'feed2', ...);
-    $mojo->helper( 'pubsub_publish' => \&publish($plugin, @_) );
+    $mojo->helper( 'pubsub_publish' => \&publish ); # ($plugin, @_) );
     
     # Add 'subscribe' helper
     $mojo->helper(
