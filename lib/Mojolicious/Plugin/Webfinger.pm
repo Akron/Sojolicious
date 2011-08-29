@@ -59,19 +59,18 @@ sub register {
 	    my $lrdd = { type => 'application/xrd+xml' };
     
 	    # Make hash from param
-	    my $param = $param_key ? { $param_key => '{uri}' } : undef;
+	    my $param = $param_key ? [ $param_key => '{uri}' ] : undef;
 
 	    # Set endpoint-uri
-	    $mojo->set_endpoint(
+	    $route->endpoint(
 		'webfinger' => {
-		    secure => $plugin->secure,
-		    host => $plugin->host,
-		    route => $route,
-		    query => $param
+		    scheme => $plugin->secure ? 'https' : 'http',
+		    host   => $plugin->host,
+		    query  => $param
 		});
 
 	    # Retrieve Endpoint-Uri
-	    my $endpoint = $mojo->get_endpoint(
+	    my $endpoint = $mojo->endpoint(
 		'webfinger' => {
 		    'uri' => '{uri}'
 		});
@@ -95,11 +94,17 @@ sub register {
 
 		    # Get uri from route
 		    my $uri = $c->stash('uri');
-		    $uri = $c->stash($param_key) if $param_key;
+  
+		    $uri = $c->param($param_key) if ($param_key && !$uri);
+
+		    $uri = $c->parse_acct($uri);
 
 		    my $ok = 0;
 		    $mojo->plugins->run_hook(
-			'on_prepare_webfinger' => $plugin, $c, $uri, \$ok
+			'on_prepare_webfinger' => $plugin,
+			$c,
+			$uri,
+			\$ok
 			);
 
 		    unless ($ok) {

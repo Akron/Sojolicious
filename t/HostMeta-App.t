@@ -6,10 +6,10 @@ $|++;
 
 use lib '../lib';
 
+use Test::More tests => 33;
 use Test::Mojo;
 use Mojolicious::Lite;
 
-use Test::More tests => 34;
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
@@ -23,10 +23,11 @@ my $h = $app->renderer->helpers;
 ok($h->{new_xrd}, 'render_xrd fine.');
 ok($h->{render_xrd}, 'render_xrd fine.');
 
+# Util::Endpoint
+ok($h->{endpoint}, 'endpoint fine.');
+
 # Hostmeta
 ok($h->{hostmeta}, 'hostmeta fine.');
-ok($h->{set_endpoint}, 'set_endpoint fine.');
-ok($h->{get_endpoint}, 'get_endpoint fine.');
 
 # Reverse check
 ok(!exists $h->{foobar}, 'foobar not fine.');
@@ -44,7 +45,7 @@ $t->get_ok('/.well-known/host-meta')
 $app->hook('before_serving_hostmeta' => sub {
     my ($c, $xrd) = @_;
     $xrd->add('Property', { type => 'foo' }, 'bar');
-    is($c->get_endpoint('hostmeta'),
+    is($c->endpoint('hostmeta'),
        'https://sojolicio.us/.well-known/host-meta',
        'Correct url');
 	   });

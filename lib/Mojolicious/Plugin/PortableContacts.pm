@@ -10,6 +10,10 @@ has 'secure' => 0;
 # print $user->get('emails')->where(type => 'private');
 # http://www.w3.org/TR/2011/WD-contacts-api-20110616/
 
+#my $user = $c->poco('/@me/@all', {filterBy    => '-webfinger',
+#				  filterOp    => 'equals',
+#				  filterValue => 'acct:akron@sojolicio.us'});
+
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
@@ -30,52 +34,92 @@ sub register {
     $mojo->routes->add_shortcut(
 	'poco' => sub {
 	    my $route = shift;
-	    
+	    my $param = shift;
+
+
 	    my $poco = { rel  => 'http://portablecontacts.net/spec/1.0',
-			 href => 'hmmm' };
+			 href => 'XXXX' };
     
 	    # Add Route to Hostmeta
 	    my $link = $mojo->hostmeta->add('Link', $poco);
 	    $link->comment('Portable Contacts');
 	    $link->add('Title','Portable Contacts Endpoint');
 	    
-
 	    # Todo: Check OAuth2 and fill $c->stash->{'poco_user'}
 
+	    # $route->set_endpoint('');
+
 	    # Point the route to poco
-	    $route->to(	cb => sub {} );
 
-	    my $me = $route->route('/@me');
+	    # /@me/@all/
+	    $route->name('poco/@me/@all-1')
+		->to(
+		cb => \&me_all
+		);
 
-	    # /@me/@all == /
-	    my $all = $me->waypoint('/@all')->to(
-		cb => sub {
-		    my $c = shift;
-		    my $poco_user = $c->stash->{poco_user};
-		    my $contacts = $poco_user->contacts( %{ $c->param } );
-		    if ($c->param('format') eq 'json') {
-			$contacts->to_json;
-		    } else {
-			$contacts->to_pretty_xml;
-		    };
-		});
+	    my $me = $route->route('/@me')->name('poco/@me');
+	    
+	    my $all = $me->waypoint('/@all')->name('poco/@me/@all-2')
+		->to(
+		cb => \&me_all
+		);
 
 	    # /@me/@all/{id}
-	    $all->route('/:id')->to(cb => sub {});
+	    $all->route('/:id')->name('poco/@me/@all/{id}')
+		->to(
+		cb => \&me_self_id
+		);
 
 	    # /@me/@self
-	    $me->route('/@self')->to(
-		cb => sub {
-		    my $c = shift;
-		    if (!$c->stash('poco_user')) {
-			$c->stash->{'poco_user'} = $c->poco($c->stash->{user});
-		    };
-		});
+	    $me->route('/@self')->name('poco/@me/@self')
+		->to(
+		cb => \&me_self 
+		);
 
-	}
-
-	);
+	    return;
+	});
 	# 'formats' => 'm/^(?:xml|json)$/';
+
+    $mojo->helper(
+	'poco2' => sub {
+	    my $c = shift;
+	    my $path = '/@me/@all';
+	    if (!$_[0] || ref($_[0])) {
+		$path = shift;
+	    };
+
+	    my $param = ref($_[0]) ? shift : {};
+
+	    my $response = {};
+	    $mojo->plugins->run_hook('get_poco2',
+					 $plugin,
+					 $c,
+					 $path,
+					 $param,
+					 $response);
+
+
+	    return $response;
+
+	    # Todo: return as hash of many users. Always.
+# Structure:
+#{
+#  "startIndex": 10,
+#  "itemsPerPage": 10,
+#  "totalResults": 12,
+#  "entry": [
+#    {
+#      "id": "123",
+#      "displayName": "Minimal Contact"
+#    },
+
+# startIndex ... in DB!
+#	    my $response = {
+#		totalResults => @$user_array || '0'
+#	    };
+
+	    # Add entries
+	});
 
 
     $mojo->helper(
@@ -100,6 +144,63 @@ sub register {
 	    return $user;
 	});
 };
+
+sub me_self {
+    my $c = shift;
+
+    my $poco = $c->stash('poco_user');
+
+    unless ($poco) {
+	my $acct = $c->parse_acct($c->stash('user'));
+	$poco =
+	    $c->stash->{'poco_user'} =
+	    $c->poco('-webfinger' => $acct);
+    };
+    
+    return $c->render_not_found unless $poco;
+    
+    my $success = $c->respond_to(
+	json => { data => $poco->to_json},
+	any  => { format => 'xml',
+		  data => $poco->to_xml }
+	);
+    
+    return $c->render_not_found unless $success;
+    
+    $c->rendered;
+    return;
+};
+
+sub me_self_id {
+    return;
+};
+
+sub me_all {
+    my $c = shift;
+
+
+    my $poco_user = $c->stash->{poco_user};
+# Temp:
+#    my $poco_user = $c->poco_load($c->stash('user'));
+#    hook!
+#    unless ($poco_user) {
+#
+#    };
+
+    my $contacts = $poco_user->contacts( %{ $c->param } );
+
+    my $success = $c->respond_to(
+	json => { data => $contacts->to_json },
+	any  => { format => 'xml',
+		  data => $contacts->to_pretty_xml }
+	);
+
+    return $c->render_not_found unless $success;
+
+    $c->rendered;
+    return;
+};
+
 
 package Mojolicious::Plugin::PortableContacts::User;
 use strict;

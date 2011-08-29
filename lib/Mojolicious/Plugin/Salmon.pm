@@ -22,7 +22,7 @@ sub register {
 
     # Dependencies
     # Load magic signatures if not loaded
-    # Automatically loads webfinger and hostmeta.
+    # Automatically loads webfinger and hostmeta and endpoint and xrd.
     unless (exists $mojo->renderer->helpers->{'magicenvelope'}) {
 	$mojo->plugin('MagicSignatures', {'host' => $param->{'host'}} );
     };
@@ -60,11 +60,10 @@ sub register {
 		});
 
 	    # Set salmon endpoints
-	    $mojo->set_endpoint(
+	    $route->endpoint(
 		'salmon-'.$param,
-		{ secure => $plugin->secure,
-		  host   => $plugin->host,
-		  route  => $route }
+		{ scheme => $plugin->secure ? 'https' : 'http',
+		  host   => $plugin->host }
 		);
 	    
 	    if ($param eq 'all-replies') {

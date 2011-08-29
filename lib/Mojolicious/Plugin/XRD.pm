@@ -22,6 +22,8 @@ sub register {
 	    my $c = shift;
 	    my $xrd = shift;
 
+	    $c->stash('format' => $c->param('format')) unless $c->stash('format');
+
 	    # content negotiation
 	    $c->respond_to(
 		json => sub { $c->render(

@@ -111,7 +111,7 @@ sub _add_object_construct {
 
 	# Add ns prefix if not given
 	if (index($type, '/') == -1) {
-	    $type = $as_ns.$type;
+	    $type = $as_ns.lc($type);
 	};
 
 	$obj->add('activity:object-type', $type);

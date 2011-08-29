@@ -1,24 +1,31 @@
 package Mojolicious::Plugin::PubSubHubbub;
 use Mojo::Base 'Mojolicious::Plugin';
-use strict;
-use warnings;
 use Mojo::ByteStream ('b');
+use Mojo::Util qw/trim/;
 
 has [qw/hub host/];
 has 'secure' => 0;
 
-our $global_param;
+# Default lease seconds before automatic subscription refreshing
+has lease_seconds => (30 * 24 * 60 * 60);
+
+
+our ($global_param,
+     @challenge_chars);
+
 BEGIN {
     $global_param = {
 	'Content-Type' =>
 	    'application/x-www-form-urlencoded'
     };
+    @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9);
 };
 
 # Register plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
+    # Get host parameter
     if (exists $param->{host}) {
 	$plugin->host( $param->{host} );
     } else {
@@ -29,6 +36,7 @@ sub register {
 	};
     };
 
+    # Set secure
     $plugin->secure( $param->{secure} );
 
     # Add 'pubsub' shortcut
@@ -36,17 +44,16 @@ sub register {
 	'pubsub' => sub {
 	    my ($route, $param) = @_;
 
-	    return unless $param eq 'cb';
+	    return unless $param eq 'cb' or $param eq 'hub';
 	    # or $param eq 'hub'
 	    # Internal hub is currently not supported
 	    
 	    # Set endpoint if enabled
-	    if ( $mojo->can('set_endpoint') ) {
-		$mojo->set_endpoint(
+	    if (exists $mojo->renderer->helpers->{'endpoint'}) {
+		$route->endpoint(
 		    'pubsub-'.$param => {
-			secure => $plugin->secure,
-			host   => $plugin->host,
-			route  => $route });
+			scheme => $plugin->secure ? 'https' : 'http',
+			host   => $plugin->host });
 	    };
 
 	    # Add 'callback' route
@@ -86,22 +93,19 @@ sub register {
 	    # Add 'hub' route
 	    # Not implemented yet
 	    else {
-		# $route->to(
-		#    cb => sub {	$plugin->hub( @_ ) }
-		#    );
+		$route->via('post')
+		    ->to( cb => \&hub($plugin, @_) );
 	    };
 
 	});
     
     # Add 'publish' helper
-    $mojo->helper(
-	'publish' => sub {
-	    return $plugin->publish( @_ );
-	});
+    # $c->pubsub_publish('feed1', 'feed2', ...);
+    $mojo->helper( 'pubsub_publish' => \&publish($plugin, @_) );
     
     # Add 'subscribe' helper
     $mojo->helper(
-	'subscribe' => sub {
+	'pubsub_subscribe' => sub {
 	    return $plugin->change_subscription( shift,
 						 mode => 'subscribe',
 						 topic => shift,
@@ -110,7 +114,7 @@ sub register {
     
     # Add 'unsubscribe' helper
     $mojo->helper(
-	'unsubscribe' => sub {
+	'pubsub_unsubscribe' => sub {
 	    return $plugin->change_subscription( shift,
 						 mode => 'unsubscribe',
 						 topic => shift,
@@ -271,6 +275,7 @@ sub change_subscription {
     return 0;
 };
 
+
 1;
 
 __DATA__
@@ -338,6 +343,16 @@ L<Mojolicious::Plugin::PubSubHubbub> is a plugin to support
 PubSubHubbub Webhooks
 (see L<Specification|http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html>).
 
+The plugin supports all three parties: publisher, subscriber, and hub.
+However, be aware that the hub is implemented rather naive and does not scale well.
+Please consider using a foreign hub or use a separated implementation for
+the task by applying the L<on_hub_publish> hook.
+The hub is not meant to be used as a generic hub - it should only serve local payloads
+and allow for subscription and unsupscription to local feeds.
+Additionally, the hub does no polling.
+
+The plugin is data store agnostic. Please use this plugin by applying hooks.
+
 =head1 ATTRIBUTES
 
 =head2 C<host>
@@ -360,6 +375,14 @@ Use C<http> or C<https>.
   my $hub = $ps->hub;
 
 The preferred hub. Currently local hubs are not implemented.
+
+=head2 C<lease_seconds>
+
+  my $seconds = $ps->lease_seconds;
+  $ps->lease_seconds(100 * 24 * 60 * 60);
+
+Seconds a subscription is valid by default before auto refresh
+is enabled.
 
 =head1 HELPERS
 

@@ -78,6 +78,15 @@ sub add {
 	    $self->add_ns($_ => delete $root_attr->{'xmlns:'.$_} );
 	};
 
+	# Push extensions to new root
+	my $root = $self->at(':root');
+	if (exists $root_attr->{'serial:ext'}) {
+	    my $ext = $root->attrs('serial:ext') || ();
+	    $root->attrs('serial:ext' =>
+		join(';', $ext, split(';', $root_attr->{'serial:ext'}))
+		);
+	};
+
 	# Delete pi from node
 	if (ref($node->tree->[1]) eq 'ARRAY' &&
 	    $node->tree->[1]->[0] eq 'pi') {
@@ -334,6 +343,31 @@ sub _attr ($$) {
 
     # return nothing
     return '';
+};
+
+sub AUTOLOAD {
+    my $self = shift;
+    my @param = @_;
+
+    my ($package, $method) = our $AUTOLOAD =~ /^([\w\:]+)\:\:(\w+)$/;
+
+    {
+	no strict 'refs';
+
+	my $root = $self->at(':root');
+
+	if (my $ext_string = $root->attrs('serial:ext')) {
+	    foreach my $ext ( split(';', $ext_string ) ) {
+		if (defined *{ $ext.'::'.$method }) {
+		    return *{ $ext.'::'.$method }->($self, @param);
+		};
+	    };
+	};
+    };
+
+    Carp::croak(qq/Can't locate object method "$method" via package "$package"/);
+    return;
+
 };
 
 1;

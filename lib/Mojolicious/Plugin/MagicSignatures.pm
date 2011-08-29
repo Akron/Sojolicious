@@ -67,11 +67,11 @@ sub register {
 	    unless (defined $mkeys->[1]) {
 		my $mkey = $mkeys->[0]->[0];
 		$xrd->add_link('magic-public-key',
-			       {href =>
-				    'data:' .
-				    'application/magic-public-key,' .
-				    $mkey->to_string
-			       })->comment('MagicKey based on MagicSigantures-00');
+			       { href =>
+				     'data:' .
+				     'application/magic-public-key,' .
+				     $mkey->to_string
+			       })->comment('MagicKey based on MagicSignatures-00');
 	    };
 
 	    # Based on spec-01

@@ -40,23 +40,47 @@ sub register {
 
 __END__
 
-sub follow {
+sub subscribe {
     my $self = shift;
     my $user = $self->stash('poco_user');
 
-    my $acct = shift;
+    # No actor given! err_str()?
+    return unless $user;
 
-    my $webfinger_xrd = $self->webfinger($acct);
+    # User, Group, or Feed
+    my $uri = shift;
 
-    if ($webfinger_xrd) {
-	my $doc = $self->new_ostatus_as;
-	$doc->add_actor();
-    };
+    my $object;
+    # direct feed
+    if (index($uri, 'http') == 0) {
+	# atom / xrd
+	# html
+	# $self->pubsub_subscribe();
+    }
+
+    # Webfinger
+    elsif (index($uri,'@') >= 0) {
+	my $wf_xrd = $self->webfinger( $uri );
+    my $hub = $wf_xrd->get_link('hub');
+    
+    return unless $hub;
+
+    $wf_xrd->get_link('http://schemas.google.com/g/2010#updates-from');
+
+#    };
+
+    return unless $object;
+
+    my $doc = $self->new_ostatus_as;
+
+    $doc->add_actor('...');
+    $doc->add_verb('subscribe');
+    $doc->add_object(type => 'person');
 
     # 'after_ostatus_follow' hook (Für evtl. pubsub_publish
 };
 
-sub unfollow {
+sub unsubscribe {
     my $self = shift;
     my ($acct, $id);
 

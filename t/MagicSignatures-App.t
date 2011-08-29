@@ -9,7 +9,7 @@ use lib '../lib';
 use Test::Mojo;
 use Mojolicious::Lite;
 
-use Test::More tests => 20;
+use Test::More tests => 19;
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
@@ -26,8 +26,7 @@ ok($h->{render_xrd}, 'render_xrd fine.');
 
 # Hostmeta
 ok($h->{hostmeta}, 'hostmeta fine.');
-ok($h->{set_endpoint}, 'set_endpoint fine.');
-ok($h->{get_endpoint}, 'get_endpoint fine.');
+ok($h->{endpoint}, 'endpoint fine.');
 
 # Webfinger
 ok($h->{webfinger}, 'webfinger fine.');

@@ -2,16 +2,16 @@
 use strict;
 use warnings;
 
+$|++;
 use lib '../lib';
 
-use Test::More tests => 7;
+use Test::More tests => 8;
 use Test::Mojo;
 use Mojolicious::Lite;
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
 my $acct = 'acct:akron@sojolicio.us';
-
 $app->plugin('webfinger' =>
 	     { host => 'sojolicio.us', secure => 1 });
 
@@ -20,6 +20,10 @@ $app->routes->route('/webfinger')->webfinger('q');
 is($app->hostmeta->get_link('lrdd')->attrs->{template},
    'https://sojolicio.us/webfinger?q={uri}',
    'Correct uri');
+
+is ($app->endpoint('webfinger' => {uri => $acct}),
+    'https://sojolicio.us/webfinger?q='.$acct,
+    'Webfinger endpoint');
 
 $app->hook('before_serving_webfinger' => sub {
     my ($c, $norm, $xrd) = @_;

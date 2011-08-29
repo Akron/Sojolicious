@@ -1,6 +1,4 @@
 package Mojolicious::Plugin::HostMeta;
-use strict;
-use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::JSON;
 use Storable 'dclone';
@@ -17,79 +15,17 @@ BEGIN {
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
+    # Load Util-Endpoint if not already loaded
+    unless (exists $mojo->renderer->helpers->{'endpoint'}) {
+	$mojo->plugin('Util::Endpoint');
+    };
+
     # Load XRD if not already loaded
     unless (exists $mojo->renderer->helpers->{'new_xrd'}) {
 	$mojo->plugin('XRD');
     };
 
     my $hostmeta = $mojo->new_xrd;
-
-    # Establish 'set_endpoint' helper
-    my %endpoint;
-    $mojo->helper(
-	'set_endpoint' => sub {
-	    my $c = shift; # c or mojo
-	    my $name = shift;
-	    my $param = shift;
-	
-	    if (exists $endpoint{$name}) {
-		warn qq{Route $name already defined.};
-		return;
-	    };
-
-	    if (exists $param->{route}) {
-		$param->{route}->name($name);
-	    };
-	
-	    for ( Mojo::URL->new ) {
-		$_->host( $param->{host} || $plugin->host );
-		
-		if (exists $param->{secure}) {
-		    $_->scheme( $param->{secure} ? 'https' : 'http' );
-		}
-
-		# Get scheme from plugin
-		else {
-		    $_->scheme( $plugin->secure ? 'https' : 'http' );
-		};
-		
-		if (defined $param->{query}) {
-		    $_->query->param( %{ $param->{query} } );
-		};
-		
-		$endpoint{$name} = $_;
-	    };
-	});
-
-    # Establish 'get_endpoint' helper
-    $mojo->helper(
-	'get_endpoint' => sub {
-	    my $c = shift; # c or mojo
-	    my $name = shift;
-	    my $hash_param = {};
-	    
-	    if (ref($c) eq 'Mojolicious::Controller') {
-		%{$hash_param} = %{$c->stash};
-	    };
-	    
-	    if ($_[0]) {
-		my $h = shift;
-		foreach (keys %$h) {
-		    $hash_param->{$_} = $h->{$_}
-		};
-	    };
-	    
-	    my $url = $c->url_for( $name,
-				   $hash_param )->to_abs;
-	    
-	    if (exists $endpoint{$name}) {
-		my $new_url = $endpoint{$name}->clone;
-		$url = $new_url->path($url->path);
-	    };
-	    my $endpoint = $url->to_string;
-	    $endpoint =~ s/%7B(.+?)%7D/{$1}/g;
-	    return $endpoint;
-	});
     
     # Discover relations
     # $mojo->helper( 'discover_rel' => \&discover_rel );
@@ -116,31 +52,38 @@ sub register {
     $mojo->helper(
 	'hostmeta' => sub {
 	    my $c = shift;
-
+	    
 	    if (!$_[0]) {
 		return $hostmeta;
 	    } 
-
+	    
 	    elsif ($_[0] eq 'host') {
-		return $plugin->host if !$_[1];
+		return $plugin->host unless $_[1];
 		return $plugin->host($_[1]);
 	    };
-
+	    
 	    return $plugin->_get_hostmeta($c, @_);
 	});
-
-
+    
+    
     # Establish /.well-known/host-meta route
     my $route = $mojo->routes->route($WKPATH);
 
-    # Define endpoint manually (Really necessary?)
-    $route->name('hostmeta');
-    for ( Mojo::URL->new ) {
-	$_->host( $plugin->host );
-	$_->scheme( $plugin->secure ? 'https' : 'http' );
-	$endpoint{hostmeta} = $_;
-    };
+    # Define endpoint
+    $route->endpoint(
+	'hostmeta' => {
+	    scheme => $plugin->secure ? 'https' : 'http',
+	    host   => $plugin->host,
+	});
 
+#    $c->set_endpoint(
+#	'hostmeta' => {
+#	    scheme => $plugin->secure ? 'https' : 'http',
+#	    host   => $plugin->host,
+#	    route  => $route
+#	});
+
+    # Set route callback
     $route->to(
 	cb => sub {
 	    my $c = shift;
@@ -311,6 +254,8 @@ Mojolicious::Plugin::HostMeta
   # In Controllers
   print $self->hostmeta('gmail.com')->get_link('lrrd');
 
+  print $self->endpoint('host_meta');
+
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::HostMeta> is a plugin to support 
@@ -347,35 +292,9 @@ if no hostname is given. If a hostname is given, the
 corresponding hostmeta document is retrieved and returned
 as an XRD object.
 
-=head2 C<set_endpoint>
-
-  # In Application:
-  my $route = $mojo->routes->route('/:user/webfinger');
-  $mojo->set_endpoint('webfinger' => {
-                        secure => 1,              # https
-                        host => 'sojolicio.us',   # host
-                        route => $route,          # Route
-                        query => { q => '{uri}' } # query-param
-                      });
-
-Stores an endpoint defined for a service. It accepts optional
-parameters C<secure>, C<host>, a C<route> to the service and 
-query parameters (C<param>).
-
-=head2 C<get_endpoint>
-
-  # In Controller:
-  return $self->get_endpoint('webfinger');
-  return $self->get_endpoint('webfinger', { user => 'me' } );
-
-Returns the endpoint defined for a specific service.
-It accepts additional stash values for the route. These
-stash values override existing stash values from the
-controller.
-
 =head1 ROUTES
 
-The route C</.well-known/host-meta> is established an serves
+The route C</.well-known/host-meta> is established and serves
 the host's own hostmeta document.
 
 =head1 HOOKS
