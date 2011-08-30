@@ -1,4 +1,5 @@
 package Mojolicious::Plugin::PortableContacts;
+use Mojolicious::Plugin::PortableContacts::Response;
 use Mojo::Base 'Mojolicious::Plugin';
 use strict;
 use warnings;
@@ -36,14 +37,19 @@ sub register {
 	    my $route = shift;
 	    my $param = shift;
 
+	    $route->endpoint('poco' => {
+		host => $plugin->host,
+		scheme => $plugin->secure ? 'https' : 'http'
+			     });
+
 
 	    my $poco = { rel  => 'http://portablecontacts.net/spec/1.0',
-			 href => 'XXXX' };
+			 href => $mojo->endpoint('poco') };
     
 	    # Add Route to Hostmeta
 	    my $link = $mojo->hostmeta->add('Link', $poco);
 	    $link->comment('Portable Contacts');
-	    $link->add('Title','Portable Contacts Endpoint');
+	    $link->add('Title','Portable Contacts API Endpoint');
 	    
 	    # Todo: Check OAuth2 and fill $c->stash->{'poco_user'}
 
@@ -56,22 +62,23 @@ sub register {
 		->to(
 		cb => \&me_all
 		);
-
-	    my $me = $route->route('/@me')->name('poco/@me');
-	    
-	    my $all = $me->waypoint('/@all')->name('poco/@me/@all-2')
+	    $route->route('/@me/@all')->name('poco/@me/@all-2')
 		->to(
 		cb => \&me_all
 		);
 
 	    # /@me/@all/{id}
-	    $all->route('/:id')->name('poco/@me/@all/{id}')
+	    $route->route('/@me/@all/:id')->name('poco/@me/@all/{id}')
 		->to(
-		cb => \&me_self_id
-		);
+		cb => sub {
+		    my $c = shift;
+		    return $plugin->me_self_id($c,
+					       $c->stash('id'),
+					       $c->param);
+		});
 
 	    # /@me/@self
-	    $me->route('/@self')->name('poco/@me/@self')
+	    $route->route('/@me/@self')->name('poco/@me/@self')
 		->to(
 		cb => \&me_self 
 		);
@@ -84,7 +91,7 @@ sub register {
 	'poco2' => sub {
 	    my $c = shift;
 	    my $path = '/@me/@all';
-	    if (!$_[0] || ref($_[0])) {
+	    if ($_[0] && !ref($_[0])) {
 		$path = shift;
 	    };
 
@@ -98,7 +105,14 @@ sub register {
 					 $param,
 					 $response);
 
-
+#	    my @entry;
+#	    foreach my $entry (@{$response->{entry}}) {
+#		push(@entry,
+#		     Mojolicious::Plugin::PortableContacts::User
+#		     ->new($entry) );
+#	    };
+#	    $response->{entry} = \@entry;
+		
 	    return $response;
 
 	    # Todo: return as hash of many users. Always.
@@ -172,7 +186,38 @@ sub me_self {
 };
 
 sub me_self_id {
-    return;
+    my $plugin = shift;
+    my $c = shift;
+    my $id = shift;
+    my $param = shift;
+
+    my $response = {};
+
+    $c->app->plugins->run_hook('get_poco2',
+			       $plugin,
+			       $c,
+			       '/@me/@all/'.$id,
+			       $param,
+			       $response);
+
+    my $status = 200;
+    if ($response->{totalResults} == 0) {
+	# ID does not exist
+	$status = 404;
+    };
+
+    $response =
+	Mojolicious::Plugin::PortableContacts::Response->new($response);
+
+    return $c->respond_to(
+	xml => sub { shift->render(status => $status,
+				   'format' => 'xml',
+				   data => $response->to_xml)},
+	any => sub { shift->render(status => $status,
+				   'format' => 'json',
+				   data => $response->to_json) }
+	);
+
 };
 
 sub me_all {
@@ -201,165 +246,6 @@ sub me_all {
     return;
 };
 
-
-package Mojolicious::Plugin::PortableContacts::User;
-use strict;
-use warnings;
-use Mojo::JSON;
-use Mojolicious::Plugin::XML::Serial;
-
-our ($SINGULAR_RE, $PLURAL_RE, $VALID_RE);
-BEGIN {
-    our $SINGULAR_RE = qr/(?:id|
-                             (?:preferred_user|nick|display_)?name|
-                             published|
-                             updated|
-                             birthday|
-                             anniversary|
-                             gender|
-                             note|
-                             utc_offset|
-                             connected)$/x;
-    our $PLURAL_RE = qr/^(?:email|
-                            url|
-                            phone_number|
-                            im|
-                            photo|
-                            tag|
-                            relationship|
-                            organization|
-                            addresse|
-                            account)s$/x;
-    our $VALID_RE = qr(^$SINGULAR_RE|$PLURAL_RE$);
-};
-
-sub new {
-    my $class = shift;
-    my $self = shift;
-    bless $self, $class;
-};
-
-sub get {
-    my $self = shift;
-    my $key = shift;
-
-    # singular attribute
-    if ($key =~ $SINGULAR_RE) {
-	return $self->{$key};
-    }
-
-    # plural attribute
-    elsif ($key =~ $PLURAL_RE) {
-	my $plural = defined $self->{$key} ? $self->{$key} : [];
-	return Mojolicious::Plugin::PortableContacts::User::Plural->new($plural);
-    };
-
-    warn('Unknown attribute');
-    return;
-};
-
-sub connections {
-    my $self = shift;
-    my %conditions = @_;
-    my %cond = (
-	'filterBy' => '',
-	'filterOp' => 'm/^(?:equals|contains|startswith|present)$/',
-	'filterValue' => '',
-	'updatedSince' => '',
-	'sortBy' => '',
-	'sortOrder' => 'm/^(?:a|de)scending$/',
-	'startIndex' => 'm/^\d+$/',
-	'count' => 'm/^\d+$/',
-	'fields' => 'm/^(?:[a-zA-Z,\s]+|\@all)$/',
-	);
-};
-
-sub _node {
-    my $self = shift;
-
-    my $entry = Mojolicious::Plugin::XML::Serial->new('entry');
-
-    foreach my $key (keys %$self) {
-
-	# Normal value
-	if (!ref $self->{$key} && $key =~ $SINGULAR_RE) {
-	    $entry->add($key, $self->{$key});
-	}
-
-	else {
-	    if (ref($self->{$key}) eq 'HASH'  && $key =~ $SINGULAR_RE) {
-		my $node = $entry->add($key);
-		while (my ($sub_key, $sub_value) = each (%{$self->{$key}})) {
-		    $node->add($sub_key, $sub_value);
-		};
-	    }
-	    elsif ($key =~ $PLURAL_RE) {
-		foreach my $sub_node (@{$self->{$key}}) {
-		    if ((ref $sub_node) eq 'HASH') {
-			my $node = $entry->add($key);
-			while (my ($sub_key, $sub_value) = each (%{$sub_node})) {
-			    $node->add($sub_key, $sub_value);
-			};
-		    }
-		    else {
-			my $node = $entry->add($key, $sub_node);
-		    };
-		};
-	    };
-	};
-    };
-
-    return $entry;
-};
-
-sub to_xml {
-    my $self = shift;
-    return $self->_node->to_pretty_xml;
-};
-
-# Return as JSON string
-sub to_json {
-    # Only allow fine first values
-    my %hash;
-    foreach my $key (keys %{ $_[0] }) {
-	if ($key =~ $VALID_RE) {
-	    $hash{$key} = $_[0]->{$key};
-	};
-    };
-
-    return Mojo::JSON->new->encode( \%hash );
-};
-
-sub parse {
-    my $self = shift;
-    # json or xml or hash_refxs
-    my $object = shift;
-
-    return $self = bless $object, ref($self);
-};
-
-
-package Mojolicious::Plugin::PortableContacts::User::Plural;
-use strict;
-use warnings;
-
-sub new {
-    my $class = ref($_[0]) ? ref(shift(@_)) : shift;
-    my $self = shift || [];
-    bless $self, $class;
-};
-
-sub where {
-    my $self = shift;
-    my %conditions = @_;
-    my @array = @$self;
-
-    while (my ($key, $value) = each %conditions) {
-	@array = grep ($_->{$key} eq $value, @array);
-    };
-
-    return $self->new(\@array);
-};
-
+1;
 
 __END__

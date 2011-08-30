@@ -106,7 +106,7 @@ sub add {
 	$comment = shift;
 
 	my $string = "<$name />";
-	$string = "<$name>$text</$name>" if $text;
+	$string = "<$name>$text</$name>" if defined $text;
 
 	# Append new node
 	$self->append_content($string);
