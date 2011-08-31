@@ -112,7 +112,7 @@ sub register {
 		    };
 
 		    my $xrd = $plugin->_get_finger($c,$uri);
-
+		    
 		    if ($xrd) {
 			return $c->render_xrd($xrd);
 		    }

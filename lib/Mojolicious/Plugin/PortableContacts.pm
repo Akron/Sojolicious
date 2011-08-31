@@ -4,6 +4,7 @@ use Mojolicious::Plugin::PortableContacts::Response;
 
 has 'host';
 has 'secure' => 0;
+has 'count'  => 0;
 
 # http://www.w3.org/TR/2011/WD-contacts-api-20110616/
 # -> $c->poco_find(['emails','accounts'] => { filterBy => ...});
@@ -78,16 +79,28 @@ sub register {
 	    # Todo: Check OAuth2 and fill $c->stash->{'poco_user'}
 
 	    # /@me/@all/
-	    $route->route('/')->name('poco/@me/@all-1')->to( cb => \&me_all );
+	    $route->route('/')->name('poco/@me/@all-1')->to(
+		cb => sub {
+		    my $c = shift;
+		    my %param;
+		    foreach ($c->param) {
+			$param{$_} = $c->param($_) if $c->param($_);
+		    };
+		    $plugin->me_all($c, $plugin->get_param(\%param) );
+		});
 	    $route->route('/@me/@all')->name('poco/@me/@all-2')->to( cb => \&me_all );
 
 	    # /@me/@all/{id}
 	    $route->route('/@me/@all/:id')->name('poco/@me/@all/{id}')->to(
 		cb => sub {
 		    my $c = shift;
+		    my %param;
+		    foreach ($c->param) {
+			$param{$_} = $c->param($_) if $c->param($_);
+		    };
 		    return $plugin->me_self_id($c,
 					       $c->stash('id'),
-					       $plugin->get_param($c) );
+					       $plugin->get_param(\%param) );
 		});
 
 	    # /@me/@self
@@ -126,15 +139,22 @@ sub register {
 
 # Return response for /@me/@self
 sub me_self {
+    my $plugin = shift;
     my $c = shift;
+    my $param = shift;
 
     my $poco = $c->stash('poco_user');
 
+    # Maybe different because of field values!
     unless ($poco) {
 	my $acct = $c->parse_acct($c->stash('user'));
 	$poco =
 	    $c->stash->{'poco_user'} =
-	    $c->poco('-webfinger' => $acct);
+	    $c->poco('/@me/@all' => {
+		%$param,
+		'filterBy'    => '-webfinger',
+		'filterValue' => $acct,
+		'filterOp'    => 'equals' });
     };
     
     return $c->render_not_found unless $poco;
@@ -154,9 +174,9 @@ sub me_self {
 # Return response for /@me/@all/{id}
 sub me_self_id {
     my $plugin = shift;
-    my $c = shift;
-    my $id = shift;
-    my $param = shift;
+    my $c      = shift;
+    my $id     = shift;
+    my $param  = shift;
 
     my $path = '/@me/@all/'.$id;
 
@@ -188,10 +208,10 @@ sub me_self_id {
 };
 
 sub me_all {
+    my $plugin = shift;
     my $c = shift;
 
-
-    my $poco_user = $c->stash->{poco_user};
+#    my $poco_user = $c->stash->{poco_user};
 # Temp:
 #    my $poco_user = $c->poco_load($c->stash('user'));
 #    hook!
@@ -199,7 +219,8 @@ sub me_all {
 #
 #    };
 
-    my $contacts = $poco_user->contacts( %{ $c->param } );
+    my $contacts;
+#    my $contacts = $poco_user->contacts( %{ $c->param } );
 
     my $success = $c->respond_to(
 	json => { data => $contacts->to_json },
@@ -215,8 +236,7 @@ sub me_all {
 
 sub get_param {
     my $self = shift;
-    my $c = shift;
-    my %param = %{ $c->param };
+    my %param = %{ shift(@_) };
     my %new_param;
     foreach my $cond (keys %CONDITIONS_RE) {
 	if (exists $param{$cond}) {
@@ -226,11 +246,33 @@ sub get_param {
 	    }
 	    # Not valid
 	    else {
-		$c->app->log->debug('Not a valid PoCo parameter: '.
-				    qq{"$cond": "$param{$cond}"});
+		#debug('Not a valid PoCo parameter: '.
+		#      qq{"$cond": "$param{$cond}"});
 	    };
 	};
     };
+
+    my $count = $self->count;
+
+    if (exists $new_param{count}) {
+	if ($count) {
+	    if ($count > $new_param{count}) {
+		$count =  delete $new_param{count};
+	    } else {
+		delete $new_param{count};
+		delete $new_param{startIndex};
+	    };
+	} else {
+	    $count = delete $new_param{count};
+	};
+    } else {
+	delete $new_param{startIndex};
+    };
+
+    if ($count) {
+	$new_param{count} = $count;
+    };
+
     return \%new_param;
 };
 

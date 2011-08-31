@@ -19,6 +19,15 @@ sub new {
     bless $self, $class;
 };
 
+sub entry {
+    my $self = shift;
+    return unless $self->{totalResults};
+
+    my $entry = $self->{entry};
+    return $entry if ref($entry) eq 'ARRAY';
+    return [$entry];
+};
+
 sub to_json {
     my $self = shift;
     my %response;

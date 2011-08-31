@@ -75,7 +75,7 @@ sub register {
 			
 			$xrd->add_link(
 			    $salmon_ns_replies,
-			    { 'href' => $c->get_endpoint('salmon-all-replies') }
+			    { 'href' => $c->endpoint('salmon-all-replies') }
 			    )->comment('Salmon Reply Endpoint');
 		    
 		    });
@@ -97,7 +97,7 @@ sub register {
 
 			$xrd->add_link(
 			    $salmon_ns_mentioned,
-			    { 'href' => $c->get_endpoint('salmon-mentioned') }
+			    { 'href' => $c->endpoint('salmon-mentioned') }
 			    )->comment('Salmon Mentioned Endpoint');
 
 		    });
