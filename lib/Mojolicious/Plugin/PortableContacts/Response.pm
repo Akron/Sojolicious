@@ -1,33 +1,29 @@
 package Mojolicious::Plugin::PortableContacts::Response;
+use Mojo::Base -base;
 use Mojolicious::Plugin::PortableContacts::Entry;
-use strict;
-use warnings;
-
 use Mojolicious::Plugin::XML::Serial;
 use Mojo::JSON;
 
+# Todo! Allow other valid values
 our @RESPONSE;
 BEGIN {
     our @RESPONSE = qw/startIndex itemsPerPage totalResults/;
 };
 
-# Todo! Allow other valid values
+has \@RESPONSE => 0;
 
-sub new {
-    my $class = shift;
-    my $self = shift;
-    bless $self, $class;
-};
-
+# Get entry values
 sub entry {
     my $self = shift;
     return unless $self->{totalResults};
 
+    # Always return an array ref
     my $entry = $self->{entry};
     return $entry if ref($entry) eq 'ARRAY';
     return [$entry];
 };
 
+# Serialize to JSON
 sub to_json {
     my $self = shift;
     my %response;
@@ -58,6 +54,7 @@ sub to_json {
     return Mojo::JSON->new->encode(\%response);
 };
 
+# Serialize to XML
 sub to_xml {
     my $self = shift;
     my $response = Mojolicious::Plugin::XML::Serial->new('response');
@@ -68,6 +65,8 @@ sub to_xml {
     };
 
     if ($self->{entry}) {
+
+	# Multiple entries
 	if (ref($self->{entry}) eq 'ARRAY') {
 	    if ($self->{entry}->[0]) {
 		foreach ( @{ $self->{entry} } ) {
@@ -81,6 +80,7 @@ sub to_xml {
 	    
 	}
 	
+	# Single entries
 	elsif (ref($self->{entry}) eq 'HASH' &&
 	       exists $self->{entry}->{id}) {
 	    $response->add(
@@ -95,3 +95,7 @@ sub to_xml {
 };
 
 1;
+
+__END__
+
+Mojolicious::Plugin::PortableContacts::Response

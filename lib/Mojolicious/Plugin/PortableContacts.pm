@@ -4,40 +4,31 @@ use Mojolicious::Plugin::PortableContacts::Response;
 
 has 'host';
 has 'secure' => 0;
-has 'count'  => 0;
 
-# http://www.w3.org/TR/2011/WD-contacts-api-20110616/
-# -> $c->poco_find(['emails','accounts'] => { filterBy => ...});
-
-# my $user = $c->poco('acct:akron@sojolicio.us');
-# print $user->get('emails')->where(type => 'private');
-# print $user->get(['emails','accounts'])->where(type => 'private');
-
-
-# my $response = $c->poco('/@me/@all', { filterBy    => '-webfinger',
-# 	  			         filterOp    => 'equals',
-#				         filterValue => 'acct:akron@sojolicio.us'});
+# Default count parameter.
+has 'count'  => 0; # unlimited
 
 # Set condition regex
-our %CONDITIONS_RE;
+our (%CONDITIONS_RE, $poco_ns);
 BEGIN {
     our %CONDITIONS_RE = (
-	'filterBy'     => qr/./,
-	'filterOp'     => qr/^(?:equals|contains|startswith|present)$/,
-	'filterValue'  => qr/./,
-	'updatedSince' => qr/./,
-	'sortBy'       => qr/./,
-	'sortOrder'    => qr/^(?:a|de)scending$/,
-	'startIndex'   => qr/^\d+$/,
-	'count'        => qr/^\d+$/,
-	'fields'       => qr/^(?:[a-zA-Z,\s]+|\@all)$/
+	filterBy     => qr/./,
+	filterOp     => qr/^(?:equals|contains|startswith|present)$/,
+	filterValue  => qr/./,
+	updatedSince => qr/./,
+	sortBy       => qr/./,
+	sortOrder    => qr/^(?:a|de)scending$/,
+	startIndex   => qr/^\d+$/,
+	count        => qr/^\d+$/,
+	fields       => qr/^(?:[a-zA-Z,\s]+|\@all)$/
 	);
+    our $poco_ns = 'http://portablecontacts.net/spec/1.0';
 };
 
 # Register Plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
-
+    
     # Load Host-Meta if not already loaded.
     # This automatically loads the 'XRD' and 'Util-Endpoint' plugin.
     unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
@@ -66,172 +57,114 @@ sub register {
 		    scheme => $plugin->secure ? 'https' : 'http'
 		});
 
-
-
 	    # Add Route to Hostmeta
-	    my $poco = { rel  => 'http://portablecontacts.net/spec/1.0',
+	    my $poco = { rel  => $poco_ns,
 			 href => $mojo->endpoint('poco') };
-	    my $link = $mojo->hostmeta->add('Link', $poco);
-	    $link->comment('Portable Contacts');
-	    $link->add('Title','Portable Contacts API Endpoint');
+	    for ($mojo->hostmeta->add('Link', $poco)) {
+		$_->comment('Portable Contacts');
+		$_->add('Title','Portable Contacts API Endpoint');
+	    };
 
-
-	    # Todo: Check OAuth2 and fill $c->stash->{'poco_user'}
+	    # Todo: Check OAuth2 and fill $c->stash->{'poco_user_id'}
 
 	    # /@me/@all/
-	    $route->route('/')->name('poco/@me/@all-1')->to(
+	    my $me_all = $route->waypoint('/')->name('poco/@me/@all-1')->to(
 		cb => sub {
-		    my $c = shift;
-		    my %param;
-		    foreach ($c->param) {
-			$param{$_} = $c->param($_) if $c->param($_);
-		    };
-		    $plugin->me_all($c, $plugin->get_param(\%param) );
+		    $plugin->me_multiple( shift );
 		});
-	    $route->route('/@me/@all')->name('poco/@me/@all-2')->to( cb => \&me_all );
+	    $me_all->route('/@me/@all')->name('poco/@me/@all-2')->to;
+
 
 	    # /@me/@all/{id}
 	    $route->route('/@me/@all/:id')->name('poco/@me/@all/{id}')->to(
 		cb => sub {
 		    my $c = shift;
-		    my %param;
-		    foreach ($c->param) {
-			$param{$_} = $c->param($_) if $c->param($_);
-		    };
-		    return $plugin->me_self_id($c,
-					       $c->stash('id'),
-					       $plugin->get_param(\%param) );
+		    $c->stash('poco_user_id' => $c->stash('id'));
+		    return $plugin->me_single($c);
 		});
 
+
 	    # /@me/@self
-	    $route->route('/@me/@self')->name('poco/@me/@self')->to( cb => \&me_self );
+	    $route->route('/@me/@self')->name('poco/@me/@self')->to(
+		cb => sub {
+		    my $c = shift;
+		    $c->stash('poco_user_id' => $c->stash('poco_me_id')); # ???
+		    return $plugin->me_single($c);
+		});
 	    
 	    return;
 	});
     
     # Add 'poco' helper
     # Todo: also for update and insert
-    $mojo->helper(
-	'poco' => sub {
-	    my $c = shift;
-
-	    # Path for requests
-	    my $path = '/@me/@all';
-	    if ($_[0] && !ref($_[0])) {
-		$path = shift;
-	    };
-
-	    # Params for request
-	    my $param = ref($_[0]) ? shift : {};
-
-	    # Init response object
-	    my $response = {};
-	    $mojo->plugins->run_hook('get_poco',
-				     $plugin,
-				     $c,
-				     $path,
-				     $param,
-				     $response);
-	    return $response;
-	});
-
+    $mojo->helper('poco' => sub { $plugin->get_poco( @_ ); } );
 };
 
-# Return response for /@me/@self
-sub me_self {
+# Get PortableContacts
+sub get_poco {
     my $plugin = shift;
     my $c = shift;
-    my $param = shift;
-
-    my $poco = $c->stash('poco_user');
-
-    # Maybe different because of field values!
-    unless ($poco) {
-	my $acct = $c->parse_acct($c->stash('user'));
-	$poco =
-	    $c->stash->{'poco_user'} =
-	    $c->poco('/@me/@all' => {
-		%$param,
-		'filterBy'    => '-webfinger',
-		'filterValue' => $acct,
-		'filterOp'    => 'equals' });
-    };
     
-    return $c->render_not_found unless $poco;
-    
-    my $success = $c->respond_to(
-	json => { data => $poco->to_json},
-	any  => { format => 'xml',
-		  data => $poco->to_xml }
-	);
-    
-    return $c->render_not_found unless $success;
-    
-    $c->rendered;
-    return;
-};
+    # Init response object
+    my $response = Mojolicious::Plugin::PortableContacts::Response->new;
 
-# Return response for /@me/@all/{id}
-sub me_self_id {
-    my $plugin = shift;
-    my $c      = shift;
-    my $id     = shift;
-    my $param  = shift;
+    # Return empty response if no parameter was set
+    return $response unless defined $_[0];
 
-    my $path = '/@me/@all/'.$id;
+    # Accept id or param hashref
+    my $param = ref($_[0]) ? shift : { id => $_[0] };
 
-    # Init response hash
-    my $response = {};
+    # Run 'get_poco' hook
     $c->app->plugins->run_hook('get_poco',
 			       $plugin,
 			       $c,
-			       $path,
 			       $param,
 			       $response);
-
-    # Does the user exist?
-    my $status = $response->{totalResults} == 0 ? 404 : 200;
-
-    $response =
-	Mojolicious::Plugin::PortableContacts::Response->new($response);
-
-    # Return value RESTful
-    return $c->respond_to(
-	xml => sub { shift->render('status' => $status,
-				   'format' => 'xml',
-				   'data'   => $response->to_xml)},
-
-	any => sub { shift->render('status' => $status,
-				   'format' => 'json',
-				   'data'   => $response->to_json) }
-	);
+    return $response;
 };
 
-sub me_all {
+# Return response for /@me/@self or /@me/@all/{id}
+sub me_single {
+    my ($plugin, $c) = @_;
+
+    my $id = $c->stash('poco_user_id');
+
+    my $response = Mojolicious::Plugin::PortableContacts::Response->new;
+    my $status = 404;
+
+    if ($id) {
+	my %param;
+	foreach ($c->param) {
+	    $param{$_} = $c->param($_) if $c->param($_);
+	};
+
+	$response = $plugin->get_poco(
+	    $c => {
+		%{ $plugin->get_param(\%param) },
+		id => $id
+	    });
+	$status = 200 if $response->totalResults;
+    };
+    
+    # Render poco
+    return $plugin->render_poco($c => $response, status => $status);
+};
+
+# Get /@me/@all
+sub me_multiple {
     my $plugin = shift;
     my $c = shift;
 
-#    my $poco_user = $c->stash->{poco_user};
-# Temp:
-#    my $poco_user = $c->poco_load($c->stash('user'));
-#    hook!
-#    unless ($poco_user) {
-#
-#    };
+    my %param;
+    foreach ($c->param) {
+	$param{$_} = $c->param($_) if $c->param($_);
+    };
+ 
+    # Get result
+    my $response = $plugin->get_poco($c => $plugin->get_param(\%param));
 
-    my $contacts;
-#    my $contacts = $poco_user->contacts( %{ $c->param } );
-
-    my $success = $c->respond_to(
-	json => { data => $contacts->to_json },
-	any  => { format => 'xml',
-		  data => $contacts->to_pretty_xml }
-	);
-
-    return $c->render_not_found unless $success;
-
-    $c->rendered;
-    return;
+    # Render poco
+    return $plugin->render_poco($c => $response);
 };
 
 sub get_param {
@@ -269,6 +202,7 @@ sub get_param {
 	delete $new_param{startIndex};
     };
 
+    # Set count parameter
     if ($count) {
 	$new_param{count} = $count;
     };
@@ -276,10 +210,37 @@ sub get_param {
     return \%new_param;
 };
 
+# respond to poco
+sub render_poco {
+    my $plugin   = shift;
+    my $c        = shift;
+    my $response = shift;
+    my %param    = @_;
+
+    # Return value RESTful
+    return $c->respond_to(
+	xml => sub { shift->render('status' => $param{status} || 200,
+				   'format' => 'xml',
+				   'data'   => $response->to_xml) },
+
+	any => sub { shift->render('status' => $param{status} || 200,
+				   'format' => 'json',
+				   'data'   => $response->to_json) }
+	);
+};
+
+
 1;
 
 __END__
 
+
+# http://www.w3.org/TR/2011/WD-contacts-api-20110616/
+# -> $c->poco_find(['emails','accounts'] => { filterBy => ...});
+
+# my $user = $c->poco('acct:akron@sojolicio.us');
+# print $user->get('emails')->where(type => 'private');
+# print $user->get(['emails','accounts'])->where(type => 'private');
 
 
 	    # Todo: return as hash of many users. Always.
