@@ -466,7 +466,7 @@ L<http://tools.ietf.org/html/rfc4287|RFC4287>.
 
 The helper C<new_atom> returns an Atom object.
 It accepts the arguments C<feed> or C<entry> or all
-parameters accepted by L<Mojolicious::Plugin::Serial::new>.
+parameters accepted by L<Mojolicious::Plugin::XML::Serial::new>.
 
 =head2 C<render_atom>
 
@@ -495,6 +495,8 @@ Returns a new Atom C<entry> object.
 
 =head2 C<new_text>
 
+  my $text = $atom->new_text('This is a test');
+  my $text = $atom->new_text(xhtml => 'This is a <strong>test</strong>!');
   my $text = $atom->new_text(type => 'xhtml',
                              content => 'This is a <strong>test</strong>!');
 

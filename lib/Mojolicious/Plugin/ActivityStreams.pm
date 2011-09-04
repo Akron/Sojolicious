@@ -208,7 +208,7 @@ L<http://activitystrea.ms/|ActivityStrea.ms>.
 
 The helper C<new_activity> returns an ActivityStreams object.
 It accepts the arguments C<feed> or C<entry> or all
-parameters accepted by L<Mojolicious::Plugin::Serial::new>.
+parameters accepted by L<Mojolicious::Plugin::XML::Serial::new>.
 
 =head1 METHODS
 
