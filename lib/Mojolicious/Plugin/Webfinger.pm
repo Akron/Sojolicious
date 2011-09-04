@@ -39,7 +39,7 @@ sub register {
 	    $acct =~ s/^acct://i;
 
 	    # Split user from domain
-	    my ($user, $domain) = split('@',$acct);
+	    my ($user, $domain) = split('@',lc $acct);
 	    
 	    # Use host domain if no domain is given
 	    $domain ||= $plugin->host;
@@ -47,7 +47,8 @@ sub register {
 	    # Create norm writing
 	    my $norm = 'acct:'.$user.'@'.$domain;
 
-	    return ($user, $domain, $norm);
+	    return ($user, $domain, $norm) if wantarray;
+	    return $norm;
 	});
 
     # Add 'webfinger' shortcut
@@ -317,10 +318,12 @@ is returned.
     # In Controllers:
     my ($user, $domain, $norm) =
         $self->parse_acct('acct:me@sojolicious');
+    my $norm = $self->parse_acct('me');
 
 Returns the the user and the domain part of an acct scheme and
 the normative writing. It accepts short writings like 'acct:me'
 and 'me' as well as full acct writings.
+In a string context, it returns the normative writing.
 
 =head1 SHORTCUTS
 

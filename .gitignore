@@ -1,6 +1,8 @@
 blib
+log
 Sandbox
 lib/Sojolicious
+lib/Sojourner
 lib/Mojolicious/Plugin/OAuth.pm
 lib/Mojolicious/Plugin/XRDS.pm
 lib/Mojolicious/Plugin/INames.pm

@@ -1,7 +1,5 @@
 package Mojolicious::Plugin::PortableContacts::Entry;
-use strict;
-use warnings;
-
+use Mojo::Base -base;
 use Mojolicious::Plugin::XML::Serial;
 
 use Exporter 'import';
@@ -36,12 +34,6 @@ BEGIN {
                             account)s$/x;
     our $VALID_RE = qr(^$SINGULAR_RE|$PLURAL_RE$);
     our $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
-};
-
-sub new {
-    my $class = shift;
-    my $self = shift;
-    bless $self, $class;
 };
 
 sub to_xml {

@@ -133,11 +133,14 @@ sub me_single {
     my $status = 404;
 
     if ($id) {
+
+	# Clone parameters with values 
 	my %param;
 	foreach ($c->param) {
 	    $param{$_} = $c->param($_) if $c->param($_);
 	};
 
+	# Get results
 	$response = $plugin->get_poco(
 	    $c => {
 		%{ $plugin->get_param(\%param) },
@@ -150,64 +153,21 @@ sub me_single {
     return $plugin->render_poco($c => $response, status => $status);
 };
 
-# Get /@me/@all
+# Return response for /@me/@all
 sub me_multiple {
-    my $plugin = shift;
-    my $c = shift;
+    my ($plugin, $c) = @_;
 
+    # Clone parameters with values 
     my %param;
     foreach ($c->param) {
 	$param{$_} = $c->param($_) if $c->param($_);
     };
  
-    # Get result
+    # Get results
     my $response = $plugin->get_poco($c => $plugin->get_param(\%param));
 
     # Render poco
     return $plugin->render_poco($c => $response);
-};
-
-sub get_param {
-    my $self = shift;
-    my %param = %{ shift(@_) };
-    my %new_param;
-    foreach my $cond (keys %CONDITIONS_RE) {
-	if (exists $param{$cond}) {
-	    # Valid
-	    if ($param{$cond} =~ $CONDITIONS_RE{$cond}) {
-		$new_param{$cond} = $param{$cond};
-	    }
-	    # Not valid
-	    else {
-		#debug('Not a valid PoCo parameter: '.
-		#      qq{"$cond": "$param{$cond}"});
-	    };
-	};
-    };
-
-    my $count = $self->count;
-
-    if (exists $new_param{count}) {
-	if ($count) {
-	    if ($count > $new_param{count}) {
-		$count =  delete $new_param{count};
-	    } else {
-		delete $new_param{count};
-		delete $new_param{startIndex};
-	    };
-	} else {
-	    $count = delete $new_param{count};
-	};
-    } else {
-	delete $new_param{startIndex};
-    };
-
-    # Set count parameter
-    if ($count) {
-	$new_param{count} = $count;
-    };
-
-    return \%new_param;
 };
 
 # respond to poco
@@ -229,10 +189,85 @@ sub render_poco {
 	);
 };
 
+# Check for valid parameters
+sub get_param {
+    my $plugin = shift;
+    my %param = %{ shift(@_) };
+
+    my %new_param;
+    foreach my $cond (keys %CONDITIONS_RE) {
+	if (exists $param{$cond}) {
+
+	    # Valid
+	    if ($param{$cond} =~ $CONDITIONS_RE{$cond}) {
+		$new_param{$cond} = $param{$cond};
+	    }
+
+	    # Not valid
+	    else {
+		$plugin->app->log->debug(
+		    'Not a valid PoCo parameter: '.
+		    qq{"$cond": "$param{$cond}"});
+	    };
+	};
+    };
+    
+    # Set correct count parameter
+    my $count = $plugin->count;
+    if (exists $new_param{count}) {
+	if ($count) {
+	    if ($count > $new_param{count}) {
+		$count =  delete $new_param{count};
+	    } else {
+		delete $new_param{count};
+		delete $new_param{startIndex};
+	    };
+	} else {
+	    $count = delete $new_param{count};
+	};
+    } else {
+	delete $new_param{startIndex};
+    };
+
+    if ($count) {
+	$new_param{count} = $count;
+    };
+
+    return \%new_param;
+};
+
 
 1;
 
 __END__
+
+=pod
+
+=head1 NAME
+
+Mojolicious::Plugin::PortableContacts
+
+=head1 SYNOPSIS
+
+  # Mojolicious
+  $app->plugin('PortableContacts');
+
+  # Mojolicious::Lite
+  plugin 'Portable::Contacts';
+
+  my $response = $c->poco({ filterBy    => 'name.givenName',
+                            filterOp    => 'startswith',
+                            filterValue => 'Ak',
+                            fields      => 'name, birthday'});
+
+  print $response->entry->[0]->to_xml;
+
+  return $c->render_poco($response);
+
+=cut
+
+
+
 
 
 # http://www.w3.org/TR/2011/WD-contacts-api-20110616/
