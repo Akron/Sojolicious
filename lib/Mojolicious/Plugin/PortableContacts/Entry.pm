@@ -36,6 +36,12 @@ BEGIN {
     our $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
 };
 
+# Unpretty!!!!
+sub to_pretty_xml {
+    my $self = shift;
+    return $self->to_xml->to_pretty_xml;
+};
+
 sub to_xml {
     my $self = shift;
 

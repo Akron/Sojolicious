@@ -106,10 +106,10 @@ sub get_poco {
     my $c = shift;
     
     # Init response object
-    my $response = Mojolicious::Plugin::PortableContacts::Response->new;
+    my $response = { entry => ref($_[0]) ? [] : +{}};
 
     # Return empty response if no parameter was set
-    return $response unless defined $_[0];
+    return $plugin->new_response($response) unless defined $_[0];
 
     # Accept id or param hashref
     my $param = ref($_[0]) ? shift : { id => $_[0] };
@@ -120,7 +120,7 @@ sub get_poco {
 			       $c,
 			       $param,
 			       $response);
-    return $response;
+    return $plugin->new_response($response);
 };
 
 # Return response for /@me/@self or /@me/@all/{id}
@@ -129,7 +129,7 @@ sub me_single {
 
     my $id = $c->stash('poco_user_id');
 
-    my $response = Mojolicious::Plugin::PortableContacts::Response->new;
+    my $response = {entry => +{}};
     my $status = 404;
 
     if ($id) {
@@ -150,7 +150,8 @@ sub me_single {
     };
     
     # Render poco
-    return $plugin->render_poco($c => $response, status => $status);
+    return $plugin->render_poco($c => $plugin->new_response($response),
+				status => $status);
 };
 
 # Return response for /@me/@all
@@ -236,6 +237,19 @@ sub get_param {
     return \%new_param;
 };
 
+sub new_response {
+    shift;
+    my $response;
+    if (ref($_[0]) eq
+	'Mojolicious::Plugin::PortableContacts::Response') {
+	$response = shift;
+    } else {
+	$response = 
+	    Mojolicious::Plugin::PortableContacts::Response->new(@_);
+    };
+
+    return $response;
+};
 
 1;
 

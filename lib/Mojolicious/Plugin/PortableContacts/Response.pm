@@ -12,6 +12,31 @@ BEGIN {
 
 has \@RESPONSE => 0;
 
+sub new {
+    my $class = shift;
+    my $self = $class->SUPER::new(@_);
+
+    if (exists $self->{entry}) {
+
+	# Multiple contacts
+	if (ref($self->{entry}) eq 'ARRAY') {
+	    $self->{entry} = [
+		map(
+		    Mojolicious::Plugin::PortableContacts::Entry->new($_),
+		    @{$self->{entry}}
+		)];
+	}
+
+	# Single contact
+	elsif (ref($self->{entry}) eq 'HASH') {
+	    $self->{entry} =
+		Mojolicious::Plugin::PortableContacts::Entry->new($self->{entry});
+	};
+    };
+
+    return $self;
+};
+
 # Get entry values
 sub entry {
     my $self = shift;
@@ -33,22 +58,18 @@ sub to_json {
     };
 
     if ($self->{entry}) {
-	if (ref($self->{entry}) eq 'ARRAY') {
 
-	    if ($self->{entry}->[0]) {
-		my @entries;
-		foreach ( @{ $self->{entry} } ) {
-		    push (@entries,
-			  $self->new_entry($_)->to_json);
-		};
-		$response{'entry'} = \@entries;
+	if (ref($self->{entry}) eq 'ARRAY') {
+	    my @entries;
+	    foreach ( @{ $self->{entry} } ) {
+		push (@entries, $_->to_json );
 	    };
+	    $response{entry} = \@entries;
 	}
 	
-	elsif (ref($self->{entry}) eq 'HASH' && exists $self->{entry}->{id}) {
-	    $response{entry} = Mojolicious::Plugin::PortableContacts::Entry->new
-		($self->{entry}
-		)->to_json
+	elsif (ref($self->{entry}) eq 'HASH' &&
+	       exists $self->{entry}->{id}) {
+	    $response{entry} = $self->{entry}->to_json
 	};
     }; 
     return Mojo::JSON->new->encode(\%response);
@@ -71,9 +92,7 @@ sub to_xml {
 	    if ($self->{entry}->[0]) {
 		foreach ( @{ $self->{entry} } ) {
 		    $response->add(
-			Mojolicious::Plugin::PortableContacts::Entry
-			->new($_)
-			->to_xml
+			$_->to_xml
 			);
 		};
 	    };
@@ -83,14 +102,11 @@ sub to_xml {
 	# Single entries
 	elsif (ref($self->{entry}) eq 'HASH' &&
 	       exists $self->{entry}->{id}) {
-	    $response->add(
-		Mojolicious::Plugin::PortableContacts::Entry
-		->new($self->{entry})
-		->to_xml
-		);
+	    $response->add($self->{entry}->to_xml);
 	};
     };
  
+    # Unpretty!!!
     return $response->to_pretty_xml;
 };
 
