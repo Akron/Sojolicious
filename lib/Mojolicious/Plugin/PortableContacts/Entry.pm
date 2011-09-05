@@ -36,13 +36,13 @@ BEGIN {
     our $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
 };
 
-# Unpretty!!!!
-sub to_pretty_xml {
-    my $self = shift;
-    return $self->to_xml->to_pretty_xml;
+# Return XML document
+sub to_xml {
+    return shift->_xml->to_pretty_xml;
 };
 
-sub to_xml {
+# Return cleaned xml serialized object
+sub _xml {
     my $self = shift;
 
     my $entry = Mojolicious::Plugin::XML::Serial->new('entry');
@@ -95,8 +95,13 @@ sub to_xml {
     return $entry;
 };
 
-# Return as JSON string
+# Return JSON document
 sub to_json {
+    return Mojo::JSON->new->encode( shift->_json );
+};
+
+# Return cleaned hash
+sub _json {
     # Only allow fine first values
     my %hash;
     foreach my $key (keys %{ $_[0] }) {

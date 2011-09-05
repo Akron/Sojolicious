@@ -22,7 +22,7 @@ sub new {
 	if (ref($self->{entry}) eq 'ARRAY') {
 	    $self->{entry} = [
 		map(
-		    Mojolicious::Plugin::PortableContacts::Entry->new($_),
+		    $self->new_entry($_),
 		    @{$self->{entry}}
 		)];
 	}
@@ -30,12 +30,23 @@ sub new {
 	# Single contact
 	elsif (ref($self->{entry}) eq 'HASH') {
 	    $self->{entry} =
-		Mojolicious::Plugin::PortableContacts::Entry->new($self->{entry});
+		$self->new_entry($self->{entry});
 	};
     };
 
     return $self;
 };
+
+sub new_entry {
+    shift;
+    if (ref($_[0]) eq
+	'Mojolicious::Plugin::PortableContacts::Entry') {
+	return $_[0];
+    } else {
+	return Mojolicious::Plugin::PortableContacts::Entry->new(@_);
+    };
+};
+
 
 # Get entry values
 sub entry {
@@ -48,7 +59,7 @@ sub entry {
     return [$entry];
 };
 
-# Serialize to JSON
+# Return JSON document
 sub to_json {
     my $self = shift;
     my %response;
@@ -59,23 +70,26 @@ sub to_json {
 
     if ($self->{entry}) {
 
+	# Multiple entries
 	if (ref($self->{entry}) eq 'ARRAY') {
 	    my @entries;
 	    foreach ( @{ $self->{entry} } ) {
-		push (@entries, $_->to_json );
+		next unless exists $_->{id};
+		push (@entries, $_->_json );
 	    };
 	    $response{entry} = \@entries;
 	}
 	
+	# Single entries
 	elsif (ref($self->{entry}) eq 'HASH' &&
 	       exists $self->{entry}->{id}) {
-	    $response{entry} = $self->{entry}->to_json
+	    $response{entry} = $self->{entry}->_json
 	};
     }; 
     return Mojo::JSON->new->encode(\%response);
 };
 
-# Serialize to XML
+# Return XML document
 sub to_xml {
     my $self = shift;
     my $response = Mojolicious::Plugin::XML::Serial->new('response');
@@ -89,24 +103,19 @@ sub to_xml {
 
 	# Multiple entries
 	if (ref($self->{entry}) eq 'ARRAY') {
-	    if ($self->{entry}->[0]) {
-		foreach ( @{ $self->{entry} } ) {
-		    $response->add(
-			$_->to_xml
-			);
-		};
+	    foreach ( @{ $self->{entry} } ) {
+		next unless exists $_->{id};
+		$response->add($_->_xml);
 	    };
-	    
 	}
 	
 	# Single entries
 	elsif (ref($self->{entry}) eq 'HASH' &&
 	       exists $self->{entry}->{id}) {
-	    $response->add($self->{entry}->to_xml);
+	    $response->add($self->{entry}->_xml);
 	};
     };
  
-    # Unpretty!!!
     return $response->to_pretty_xml;
 };
 

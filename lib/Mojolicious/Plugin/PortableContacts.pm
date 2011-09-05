@@ -239,16 +239,12 @@ sub get_param {
 
 sub new_response {
     shift;
-    my $response;
     if (ref($_[0]) eq
 	'Mojolicious::Plugin::PortableContacts::Response') {
-	$response = shift;
+	return $_[0];
     } else {
-	$response = 
-	    Mojolicious::Plugin::PortableContacts::Response->new(@_);
+	return Mojolicious::Plugin::PortableContacts::Response->new(@_);
     };
-
-    return $response;
 };
 
 1;
