@@ -2,12 +2,6 @@ package Mojolicious::Plugin::PortableContacts::Entry;
 use Mojo::Base -base;
 use Mojolicious::Plugin::XML::Serial;
 
-use Exporter 'import';
-#our @EXPORT_OK = ('SINGULAR_RE',
-#		  'PLURAL_RE',
-#		  'VALID_RE',
-#		  'FORMATTED_RE');
-
 # todo - allow further valid labels
 
 our ($SINGULAR_RE, $PLURAL_RE, $VALID_RE, $FORMATTED_RE);
@@ -49,7 +43,7 @@ sub _xml {
 
     foreach my $key (keys %$self) {
 
-	# Normal value
+	# Normal vattributes
 	if (!ref $self->{$key} && $key =~ $SINGULAR_RE) {
 
 	    unless ($key eq 'note') {
@@ -60,6 +54,7 @@ sub _xml {
 	    };
 	}
 
+	# Complex attributes
 	else {
 	    if (ref($self->{$key}) eq 'HASH'  && $key =~ $SINGULAR_RE) {
 		my $node = $entry->add($key);
@@ -68,16 +63,19 @@ sub _xml {
 		};
 	    }
 
+	    # Plural attributes
 	    elsif ($key =~ $PLURAL_RE) {
 		foreach my $sub_node (@{$self->{$key}}) {
 		    if ((ref $sub_node) eq 'HASH') {
 			my $node = $entry->add($key);
 			while (my ($sub_key, $sub_value) = each (%{$sub_node})) {
+
 			    # Can contain newlines
 			    if ($sub_key =~ $FORMATTED_RE) {
 				$node->add($sub_key => {-type => 'raw'} =>
 					   '<![CDATA['.$sub_value.']]>');
 			    }
+
 			    # Cannot contain newlines
 			    else {
 				$node->add($sub_key, $sub_value);
@@ -85,7 +83,7 @@ sub _xml {
 			};
 		    }
 		    else {
-			my $node = $entry->add($key, $sub_node);
+			$entry->add($key, $sub_node);
 		    };
 		};
 	    };
@@ -115,3 +113,57 @@ sub _json {
 1;
 
 __END__
+
+=pod
+
+=head1 NAME
+
+Mojolicious::Plugin::PortableContacts::Entry
+
+=head1 SYNOPSIS
+
+  my $res = { id => 15,
+              name => {
+                givenName  => 'Bender',
+                familyName => 'Rodriguez'
+            }};
+
+  my $entry =
+       Mojolicious::Plugin::PortableContacts::Entry->new($res);
+
+  print $entry->to_xml;
+
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::PortableContacts::Entry> is the object class
+of entries for L<Mojolicious::Plugin::PortableContacts::Response>.
+
+=head1 METHODS
+
+=head2 C<to_json>
+
+  my $entry = $entry->to_json;
+
+Returns a JSON string representing the entry.
+The entry will contain only valid keys.
+
+=head2 C<to_xml>
+
+  my $entry = $entry->to_xml;
+
+Returns an XML string representing the entry.
+The entry will contain only valid keys.
+
+=head1 DEPENDENCIES
+
+L<Mojolicious>,
+L<Mojolicious::Plugin::XML::Serial>.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
+
+=cut

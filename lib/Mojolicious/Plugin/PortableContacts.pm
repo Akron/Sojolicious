@@ -106,21 +106,21 @@ sub get_poco {
     my $c = shift;
     
     # Init response object
-    my $response = { entry => ref($_[0]) ? [] : +{}};
+    my $response = { entry => (@_ > 1 ? [] : +{} ) };
 
     # Return empty response if no parameter was set
-    return $plugin->new_response($response) unless defined $_[0];
+    return _new_response($response) unless defined $_[0];
 
     # Accept id or param hashref
-    my $param = ref($_[0]) ? shift : { id => $_[0] };
-
+    my $param = (@_ > 1) ? { @_ } : { id => $_[0] };
+    
     # Run 'get_poco' hook
     $c->app->plugins->run_hook('get_poco',
 			       $plugin,
 			       $c,
 			       $param,
 			       $response);
-    return $plugin->new_response($response);
+    return _new_response($response);
 };
 
 # Return response for /@me/@self or /@me/@all/{id}
@@ -141,16 +141,15 @@ sub me_single {
 	};
 
 	# Get results
-	$response = $plugin->get_poco(
-	    $c => {
-		%{ $plugin->get_param(\%param) },
-		id => $id
-	    });
+	$response = $plugin->get_poco( $c =>
+				       $plugin->get_param(\%param),
+				       id => $id
+	    );
 	$status = 200 if $response->totalResults;
     };
     
     # Render poco
-    return $plugin->render_poco($c => $plugin->new_response($response),
+    return $plugin->render_poco($c => _new_response($response),
 				status => $status);
 };
 
@@ -165,7 +164,8 @@ sub me_multiple {
     };
  
     # Get results
-    my $response = $plugin->get_poco($c => $plugin->get_param(\%param));
+    my $response = $plugin->get_poco( $c =>
+				      $plugin->get_param(\%param));
 
     # Render poco
     return $plugin->render_poco($c => $response);
@@ -234,11 +234,11 @@ sub get_param {
 	$new_param{count} = $count;
     };
 
-    return \%new_param;
+    return %new_param;
 };
 
-sub new_response {
-    shift;
+# Private function for response objects
+sub _new_response {
     if (ref($_[0]) eq
 	'Mojolicious::Plugin::PortableContacts::Response') {
 	return $_[0];
