@@ -327,6 +327,8 @@ In a string context, it returns the normative writing.
 
 =head1 SHORTCUTS
 
+=head2 C<webfinger>
+
   $r->route('/test/:uri')->webfinger;
   # Webfinger at /test/{uri}
 
@@ -349,7 +351,7 @@ loading the plugin, so the path is correct.
 
 =head1 HOOKS
 
-=over 2
+=over2
 
 =item C<before_fetching_webfinger>
 

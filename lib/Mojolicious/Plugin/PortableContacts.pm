@@ -25,6 +25,9 @@ BEGIN {
     our $poco_ns = 'http://portablecontacts.net/spec/1.0';
 };
 
+# Todo:
+# Updates via http://www.w3.org/TR/2011/WD-contacts-api-20110616/
+
 # Register Plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
@@ -70,7 +73,7 @@ sub register {
 	    # /@me/@all/
 	    my $me_all = $route->waypoint('/')->name('poco/@me/@all-1')->to(
 		cb => sub {
-		    $plugin->me_multiple( shift );
+		    $plugin->multiple( shift );
 		});
 	    $me_all->route('/@me/@all')->name('poco/@me/@all-2')->to;
 
@@ -80,7 +83,7 @@ sub register {
 		cb => sub {
 		    my $c = shift;
 		    $c->stash('poco_user_id' => $c->stash('id'));
-		    return $plugin->me_single($c);
+		    return $plugin->single($c);
 		});
 
 
@@ -89,7 +92,7 @@ sub register {
 		cb => sub {
 		    my $c = shift;
 		    $c->stash('poco_user_id' => $c->stash('poco_me_id')); # ???
-		    return $plugin->me_single($c);
+		    return $plugin->single($c);
 		});
 	    
 	    return;
@@ -124,7 +127,7 @@ sub get_poco {
 };
 
 # Return response for /@me/@self or /@me/@all/{id}
-sub me_single {
+sub _single {
     my ($plugin, $c) = @_;
 
     my $id = $c->stash('poco_user_id');
@@ -142,7 +145,7 @@ sub me_single {
 
 	# Get results
 	$response = $plugin->get_poco( $c =>
-				       $plugin->get_param(\%param),
+				       $plugin->_get_param(\%param),
 				       id => $id
 	    );
 	$status = 200 if $response->totalResults;
@@ -154,7 +157,7 @@ sub me_single {
 };
 
 # Return response for /@me/@all
-sub me_multiple {
+sub _multiple {
     my ($plugin, $c) = @_;
 
     # Clone parameters with values 
@@ -165,33 +168,14 @@ sub me_multiple {
  
     # Get results
     my $response = $plugin->get_poco( $c =>
-				      $plugin->get_param(\%param));
+				      $plugin->_get_param(\%param));
 
     # Render poco
     return $plugin->render_poco($c => $response);
 };
 
-# respond to poco
-sub render_poco {
-    my $plugin   = shift;
-    my $c        = shift;
-    my $response = shift;
-    my %param    = @_;
-
-    # Return value RESTful
-    return $c->respond_to(
-	xml => sub { shift->render('status' => $param{status} || 200,
-				   'format' => 'xml',
-				   'data'   => $response->to_xml) },
-
-	any => sub { shift->render('status' => $param{status} || 200,
-				   'format' => 'json',
-				   'data'   => $response->to_json) }
-	);
-};
-
 # Check for valid parameters
-sub get_param {
+sub _get_param {
     my $plugin = shift;
     my %param = %{ shift(@_) };
 
@@ -260,129 +244,110 @@ Mojolicious::Plugin::PortableContacts
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('PortableContacts');
+  $app->plugin('PortableContacts' => { count => 20});
 
   # Mojolicious::Lite
-  plugin 'Portable::Contacts';
+  plugin 'PortableContacts', count => 20;
 
-  my $response = $c->poco({ filterBy    => 'name.givenName',
-                            filterOp    => 'startswith',
-                            filterValue => 'Ak',
-                            fields      => 'name, birthday'});
+  my $response = $c->poco( filterBy    => 'name.givenName',
+                           filterOp    => 'startswith',
+                           filterValue => 'Ak',
+                           fields      => 'name,birthday');
 
   print $response->entry->[0]->to_xml;
 
   return $c->render_poco($response);
 
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::PortableContacts> provides tools for
+the PortableContacts API as described in L<http://portablecontacts.net/draft-spec.html>.
+
+This plugin is database agnostic. Communication with a datastore
+can be enabled via Hooks.
+
+=head1 ATTRIBUTES
+
+=head2 C<host>
+
+  $pc->host('sojolicio.us');
+  my $host = $pc->host;
+
+The host for the PortableContacts Endpoint.
+
+=head2 C<secure>
+
+  $pc->secure(1);
+  my $sec = $pc->secure;
+
+Use C<http> or C<https>.
+
+=head2 C<count>
+
+  $pc->count(1);
+  my $count = $pc->count;
+
+Default and maximum number of items per page.
+Defaults to 0, which means that there is no limit.
+
+=head1 HELPERS
+
+=head2 C<poco>
+
+  # In Controller:
+  my $response = $c->poco( filterBy    => 'name.givenName',
+                           filterOp    => 'startswith',
+                           filterValue => 'Ak',
+                           fields      => 'name,birthday');
+
+The helper C<poco> returns the result set of a PortableContacts
+Query as a L<Mojolicious::Plugin::PortableContacts::Response> object.
+The minimal set of possible parameters are described
+L<http://portablecontacts.net/draft-spec.html>.
+In addition to that, user ids (as in /@me/@all/{id}) can be 
+provided as C<me_id => {id}> and C<id => {id}>.
+
+=head1 SHORTCUTS
+
+=head2 C<poco>
+
+  $r->route('/contacts')->poco;
+  # PoCo Endpoint
+  # Establishes the routes for
+  #  /contacts/
+  #  /contacts/@me/@all
+  #  /contacts/@me/@self
+  #  /contacts/@me/@all/{id}
+
+L<Mojolicious::Plugin::PortableContacts> provides a route shortcut
+for serving the PortableContacts API endpoint.
+
+=head1 HOOKS
+
+=over2
+
+=item C<get_poco>
+
+This hook is run to retrieve the PortableContacts query result set
+from a data store.
+The hook passes the current plugin object, the current Controller object,
+the query parameters as a hash reference and an empty
+L<Mojolicious::Plugin::PortableContacts::Response> object, expected to
+be filled with the requested resultset.
+
+=back
+
+=head1 DEPENDENCIES
+
+L<Mojolicious>,
+L<Mojolicious::Plugin::HostMeta>,
+L<Mojolicious::Plugin::PortableContacts::Response>.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2011, Nils Diewald.
+
+This program is free software, you can redistribute it
+and/or modify it under the same terms as Perl.
+
 =cut
-
-
-
-
-
-# http://www.w3.org/TR/2011/WD-contacts-api-20110616/
-# -> $c->poco_find(['emails','accounts'] => { filterBy => ...});
-
-# my $user = $c->poco('acct:akron@sojolicio.us');
-# print $user->get('emails')->where(type => 'private');
-# print $user->get(['emails','accounts'])->where(type => 'private');
-
-
-	    # Todo: return as hash of many users. Always.
-# Structure:
-#{
-#  "startIndex": 10,
-#  "itemsPerPage": 10,
-#  "totalResults": 12,
-#  "entry": [
-#    {
-#      "id": "123",
-#      "displayName": "Minimal Contact"
-#    },
-
-# startIndex ... in DB!
-#	    my $response = {
-#		totalResults => @$user_array || '0'
-#	    };
-
-	    # Add entries
-
-    $mojo->helper(
-	# TODO: Allow also for update and insert
-	'poco' => sub {
-	    my $c = shift;
-	    my $type = $_[1] ? shift : 'id';
-	    my $id = shift;
-	    
-	    my $user_hash = {};
-	    $mojo->plugins->run_hook('get_poco',
-				     $plugin,
-				     $c,
-				     $type,
-				     $id,
-				     $user_hash);
-	    
-	    return unless exists $user_hash->{id};
-	    
-	    my $user = Mojolicious::Plugin::PortableContacts::User
-		->new($user_hash);
-	    return $user;
-	});
-
-
-
-sub parse {
-    my $self = shift;
-    # json or xml or hash_refxs
-    my $object = shift;
-
-    return $self = bless $object, ref($self);
-};
-
-
-
-__END__
-
-sub get {
-    my $self = shift;
-    my $key = shift;
-
-    # singular attribute
-    if ($key =~ $SINGULAR_RE) {
-	return $self->{$key};
-    }
-
-    # plural attribute
-    elsif ($key =~ $PLURAL_RE) {
-	my $plural = defined $self->{$key} ? $self->{$key} : [];
-	return Mojolicious::Plugin::PortableContacts::User::Plural->new($plural);
-    };
-
-    warn('Unknown attribute');
-    return;
-};
-
-
-package Mojolicious::Plugin::PortableContacts::User::Plural;
-use strict;
-use warnings;
-
-sub new {
-    my $class = ref($_[0]) ? ref(shift(@_)) : shift;
-    my $self = shift || [];
-    bless $self, $class;
-};
-
-sub where {
-    my $self = shift;
-    my %conditions = @_;
-    my @array = @$self;
-
-    while (my ($key, $value) = each %conditions) {
-	@array = grep ($_->{$key} eq $value, @array);
-    };
-
-    return $self->new(\@array);
-};
-
-
