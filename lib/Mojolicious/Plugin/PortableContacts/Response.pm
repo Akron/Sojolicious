@@ -180,7 +180,7 @@ Number of query results in total.
 Array ref of entries in the query results.
 This will return an array ref, even if a
 single entry is expected. The items are
-L<Mjolicious::Plugin::PortableContacts::Entry>
+L<Mojolicious::Plugin::PortableContacts::Entry>
 objects.
 
 =head1 METHODS

@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::PortableContacts;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojolicious::Plugin::PortableContacts::Response;
+use Mojolicious::Plugin::PortableContacts::Entry;
 
 has 'host';
 has 'secure' => 0;
@@ -73,7 +74,7 @@ sub register {
 	    # /@me/@all/
 	    my $me_all = $route->waypoint('/')->name('poco/@me/@all-1')->to(
 		cb => sub {
-		    $plugin->multiple( shift );
+		    $plugin->_multiple( shift );
 		});
 	    $me_all->route('/@me/@all')->name('poco/@me/@all-2')->to;
 
@@ -82,8 +83,8 @@ sub register {
 	    $route->route('/@me/@all/:id')->name('poco/@me/@all/{id}')->to(
 		cb => sub {
 		    my $c = shift;
-		    $c->stash('poco_user_id' => $c->stash('id'));
-		    return $plugin->single($c);
+		    $c->stash('poco.user_id' => $c->stash('id'));
+		    return $plugin->_single($c);
 		});
 
 
@@ -91,8 +92,8 @@ sub register {
 	    $route->route('/@me/@self')->name('poco/@me/@self')->to(
 		cb => sub {
 		    my $c = shift;
-		    $c->stash('poco_user_id' => $c->stash('poco_me_id')); # ???
-		    return $plugin->single($c);
+		    $c->stash('poco.user_id' => $c->stash('poco_me_id'));
+		    return $plugin->_single($c);
 		});
 	    
 	    return;
@@ -100,11 +101,11 @@ sub register {
     
     # Add 'poco' helper
     # Todo: also for update and insert
-    $mojo->helper('poco' => sub { $plugin->get_poco( @_ ); } );
+    $mojo->helper('poco' => sub { $plugin->find( @_ ); } );
 };
 
 # Get PortableContacts
-sub get_poco {
+sub find {
     my $plugin = shift;
     my $c = shift;
     
@@ -126,11 +127,50 @@ sub get_poco {
     return _new_response($response);
 };
 
+# Add PortableContacts Entry
+sub add { return shift->_set('add' => @_) };
+
+# Update PortableContacts Entry
+sub update { return shift->_set('update' => @_) };
+
+# Delete PortableContacts Entry
+sub delete { return shift->_set('delete' => @_) };
+
+# Change PortableContacts Entry
+sub _set {
+    my $plugin = shift;
+    my $action  = shift;
+    my $c      = shift;
+
+    # New Entry
+    my $entry = Mojolicious::Plugin::PortableContacts::Entry->new(@_);
+
+    return unless $entry;
+
+    if ($action eq 'add') {
+	delete $entry->{id};
+    } elsif (not exists $entry->{id}) {
+	$c->app->log->debug('No ID given on $_.');
+	return;
+    };
+
+    # Run 'x_poco' hook
+    my $ok = 0;
+    $c->app->plugins->run_hook($action . '_poco',
+			       $plugin,
+			       $c,
+			       $entry,
+			       \$ok);
+
+    return $entry if $ok;
+    return;
+};
+
 # Return response for /@me/@self or /@me/@all/{id}
 sub _single {
     my ($plugin, $c) = @_;
 
-    my $id = $c->stash('poco_user_id');
+    my $id = $c->stash('poco.user_id');
 
     my $response = {entry => +{}};
     my $status = 404;
@@ -144,9 +184,9 @@ sub _single {
 	};
 
 	# Get results
-	$response = $plugin->get_poco( $c =>
-				       $plugin->_get_param(\%param),
-				       id => $id
+	$response = $plugin->find( $c =>
+				     $plugin->_get_param(\%param),
+				     id => $id
 	    );
 	$status = 200 if $response->totalResults;
     };
@@ -167,8 +207,8 @@ sub _multiple {
     };
  
     # Get results
-    my $response = $plugin->get_poco( $c =>
-				      $plugin->_get_param(\%param));
+    my $response = $plugin->find( $c =>
+				    $plugin->_get_param(\%param));
 
     # Render poco
     return $plugin->render_poco($c => $response);
@@ -304,7 +344,7 @@ The helper C<poco> returns the result set of a PortableContacts
 Query as a L<Mojolicious::Plugin::PortableContacts::Response> object.
 The minimal set of possible parameters are described
 L<http://portablecontacts.net/draft-spec.html>.
-In addition to that, user ids (as in /@me/@all/{id}) can be 
+In addition to that, user ids (as in /@me/@all/{id}) should be 
 provided as C<me_id => {id}> and C<id => {id}>.
 
 =head1 SHORTCUTS
@@ -341,6 +381,7 @@ be filled with the requested resultset.
 
 L<Mojolicious>,
 L<Mojolicious::Plugin::HostMeta>,
+L<Mojolicious::Plugin::PortableContacts::Entry>,
 L<Mojolicious::Plugin::PortableContacts::Response>.
 
 =head1 COPYRIGHT AND LICENSE

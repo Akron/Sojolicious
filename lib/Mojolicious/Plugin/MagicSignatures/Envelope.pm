@@ -1,5 +1,4 @@
 package Mojolicious::Plugin::MagicSignatures::Envelope;
-
 use Mojo::Base '-base';
 use Mojolicious::Plugin::MagicSignatures::Key qw(b64url_encode b64url_decode);
 use Mojo::Command;
@@ -249,8 +248,6 @@ sub to_xml {
 
     # The me has to be signed
     return unless $self->{signed};
-
-#    my $cmd = Mojo::Command->new;
 
     my $template = Mojo::Command->new->get_data(
 	'magicenvelope.xml.ep',
