@@ -92,7 +92,7 @@ sub register {
 	    $route->route('/@me/@self')->name('poco/@me/@self')->to(
 		cb => sub {
 		    my $c = shift;
-		    $c->stash('poco.user_id' => $c->stash('poco_me_id'));
+		    $c->stash('poco.user_id' => $c->stash('poco.me_id'));
 		    return $plugin->_single($c);
 		});
 	    
