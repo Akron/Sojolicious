@@ -100,12 +100,15 @@ sub register {
 	});
     
     # Add 'poco' helper
-    # Todo: also for update and insert
-    $mojo->helper('poco' => sub { $plugin->find( @_ ); } );
+    $mojo->helper('poco'        => sub { $plugin->read( @_ ); } );
+    $mojo->helper('create_poco' => sub { $plugin->create( @_ ); } );
+    $mojo->helper('update_poco' => sub { $plugin->update( @_ ); } );
+    $mojo->helper('delete_poco' => sub { $plugin->delete( @_ ); } );
+    $mojo->helper('render_poco' => sub { $plugin->render( @_ ); } );
 };
 
 # Get PortableContacts
-sub find {
+sub read {
     my $plugin = shift;
     my $c = shift;
     
@@ -119,7 +122,7 @@ sub find {
     my $param = (@_ > 1) ? { @_ } : { id => $_[0] };
     
     # Run 'get_poco' hook
-    $c->app->plugins->run_hook('get_poco',
+    $c->app->plugins->run_hook('read_poco',
 			       $plugin,
 			       $c,
 			       $param,
@@ -128,7 +131,7 @@ sub find {
 };
 
 # Add PortableContacts Entry
-sub add    { return shift->_set('add'    => @_) };
+sub create { return shift->_set('create'    => @_) };
 
 # Update PortableContacts Entry
 sub update { return shift->_set('update' => @_) };
@@ -147,7 +150,7 @@ sub _set {
 
     return unless $entry;
 
-    if ($action eq 'add') {
+    if ($action eq 'create') {
 	delete $entry->{id};
     } elsif (not exists $entry->{id}) {
 	$c->app->log->debug("No ID given on PoCo $action.");
@@ -184,16 +187,16 @@ sub _single {
 	};
 
 	# Get results
-	$response = $plugin->find( $c =>
-				     $plugin->_get_param(\%param),
-				     id => $id
+	$response = $plugin->read( $c =>
+				   $plugin->_get_param(\%param),
+				   id => $id
 	    );
 	$status = 200 if $response->totalResults;
     };
     
     # Render poco
-    return $plugin->render_poco($c => _new_response($response),
-				status => $status);
+    return $plugin->render($c => _new_response($response),
+			   status => $status);
 };
 
 # Return response for /@me/@all
@@ -207,11 +210,11 @@ sub _multiple {
     };
  
     # Get results
-    my $response = $plugin->find( $c =>
-				    $plugin->_get_param(\%param));
+    my $response = $plugin->read( $c =>
+				  $plugin->_get_param(\%param));
 
     # Render poco
-    return $plugin->render_poco($c => $response);
+    return $plugin->render($c => $response);
 };
 
 # Check for valid parameters
@@ -269,6 +272,25 @@ sub _new_response {
     } else {
 	return Mojolicious::Plugin::PortableContacts::Response->new(@_);
     };
+};
+
+# respond to poco
+sub render {
+    my $plugin = shift;
+    my $c = shift;
+    my $response = shift;
+    my %param = @_;
+    
+    # Return value RESTful
+    return $c->respond_to(
+	xml => sub { shift->render('status' => $param{status} || 200,
+				   'format' => 'xml',
+				   'data' => $response->to_xml) },
+	
+	any => sub { shift->render('status' => $param{status} || 200,
+				   'format' => 'json',
+				   'data' => $response->to_json) }
+	);
 };
 
 1;
@@ -346,6 +368,23 @@ The minimal set of possible parameters are described
 L<http://portablecontacts.net/draft-spec.html>.
 In addition to that, user ids (as in /@me/@all/{id}) should be 
 provided as C<me_id => {id}> and C<id => {id}>.
+
+
+=head2 C<create_poco>
+
+  my $entry = $c->create_poco( displayName => 'Homer',
+                               name => {
+                                 givenName => 'Homer',
+                                 familyName => 'Simpson'
+                               });
+  print $entry->{id};
+
+The helper C<create_poco> saves a new PortableContacts entry.
+Returns the new PortableContacts entry.
+
+=head2 C<update_poco>
+=head2 C<delete_poco>
+
 
 =head1 SHORTCUTS
 
