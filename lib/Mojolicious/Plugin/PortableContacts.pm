@@ -128,7 +128,7 @@ sub find {
 };
 
 # Add PortableContacts Entry
-sub add { return shift->_set('add' => @_) };
+sub add    { return shift->_set('add'    => @_) };
 
 # Update PortableContacts Entry
 sub update { return shift->_set('update' => @_) };
@@ -138,9 +138,9 @@ sub delete { return shift->_set('delete' => @_) };
 
 # Change PortableContacts Entry
 sub _set {
-    my $plugin = shift;
-    my $action  = shift;
-    my $c      = shift;
+    my $plugin  = shift;
+    my $action  = lc( shift(@_) );
+    my $c       = shift;
 
     # New Entry
     my $entry = Mojolicious::Plugin::PortableContacts::Entry->new(@_);
@@ -150,7 +150,7 @@ sub _set {
     if ($action eq 'add') {
 	delete $entry->{id};
     } elsif (not exists $entry->{id}) {
-	$c->app->log->debug('No ID given on $_.');
+	$c->app->log->debug("No ID given on PoCo $action.");
 	return;
     };
 
