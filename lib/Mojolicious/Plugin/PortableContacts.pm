@@ -378,13 +378,31 @@ provided as C<me_id => {id}> and C<id => {id}>.
                                  familyName => 'Simpson'
                                });
   print $entry->{id};
+  # 15
 
 The helper C<create_poco> saves a new PortableContacts entry.
 Returns the new PortableContacts entry.
 
 =head2 C<update_poco>
+
+  my $entry = $c->update_poco( displayName => 'Homer J.',
+                               id => 15 );
+  print $entry->{displayName},' ',$entry->{name}->{familyName};
+  # Homer J. Simpson
+
+The helper C<update_poco> updates an existing PortableContacts entry,
+identified by the given C<id> parameter.
+Returns the updated PortableContacts entry.
+The exact behaviour (e.g., for plural values or deletion of partial data)
+is undefined and depends on the storage implementation.
+
 =head2 C<delete_poco>
 
+  my $entry = $c->delete_poco( id => 15 );
+
+The helper C<delete_poco> deletes an existing PortableContacts entry,
+identified by the given C<id> parameter.
+Returns an empty PortableContacts entry.
 
 =head1 SHORTCUTS
 

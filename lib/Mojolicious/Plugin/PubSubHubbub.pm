@@ -44,7 +44,7 @@ sub register {
 	'pubsub' => sub {
 	    my ($route, $param) = @_;
 
-	    return unless $param eq 'cb' or $param eq 'hub';
+	    return unless $param eq 'cb'; # or $param eq 'hub';
 	    # or $param eq 'hub'
 	    # Internal hub is currently not supported
 	    
@@ -73,9 +73,7 @@ sub register {
 
 			    # Is Atom or RSS feed
 			    if ($ct =~ m{application\/(?:rss|atom)\+xml}) {
-				$mojo->run_hook( 'on_pubsub_callback' =>
-						 $c );
-				return 1;
+				$plugin->callback($c);
 			    }
 
 			    # Bad request
@@ -88,13 +86,13 @@ sub register {
 			    };
 			};
 		    });
-	    }
-
-	    # Add 'hub' route
-	    # Not implemented yet
-	    else {
-		$route->via('post')
-		    ->to( cb => \&hub($plugin, @_) );
+#	    }
+#
+# Add 'hub' route
+# Not implemented yet
+#	    else {
+#		$route->via('post')
+#		    ->to( cb => \&hub($plugin, @_) );
 	    };
 
 	});
@@ -108,7 +106,6 @@ sub register {
 	'pubsub_subscribe' => sub {
 	    return $plugin->change_subscription( shift,
 						 mode => 'subscribe',
-						 topic => shift,
 						 @_);
 	});
     
@@ -117,7 +114,6 @@ sub register {
 	'pubsub_unsubscribe' => sub {
 	    return $plugin->change_subscription( shift,
 						 mode => 'unsubscribe',
-						 topic => shift,
 						 @_ );
 	});
 };
@@ -125,11 +121,14 @@ sub register {
 # Ping a hub for topics
 sub publish {
     my $plugin = shift;
-    my $c = shift;
+    my $c      = shift;
+
+    return unless @_;
 
     # Create post message
     my $post = 'hub.mode=publish';
     foreach ( @_ ) {
+	next if $_ !~ m{^https?://}i;
 	$post .= '&hub.url='.b($c->url_for($_)
 			         ->to_abs
                                  ->to_string)->url_escape;
@@ -139,6 +138,7 @@ sub publish {
     return $post;
 
     # Post to hub
+    # Todo: Maybe better post_form
     my $res = $c->ua
 	->max_redirects(3)
 	->post( $plugin->hub,
@@ -146,18 +146,10 @@ sub publish {
 		$post);
 
     # is 2xx, incl. 204 aka successful
-    if ($res->is_status_class(200)) {
-	return 1;
-    };
+    return 1 if $res->is_status_class(200);
     
     # Not successful
     return 0;
-};
-
-sub callback {
-    my $self = shift;
-    my $c = shift;
-
 };
 
 # Verify a changed subscription or automatically refresh
@@ -169,16 +161,18 @@ sub verify {
     unless ($c->param('hub.mode') ||
 	    $c->param('hub.topic') ||
 	    $c->param('hub.challenge')) {
+
 	return $c->render(
 	    'template'       => 'pubsub-endpoint',
 	    'template_class' => __PACKAGE__,
-	    'status'         => 400 # bad request
+	    'status'         => 400  # bad request
 	    );
     }
     
     # Correct
     else {
 	my $challenge = $c->param('hub.challenge');
+
 	# Not verified
 	my $ok = 0;
 	
@@ -192,12 +186,15 @@ sub verify {
 	};
 
 	# Run hook to see, if verification is granted.
-	$plugin->app->run_hook( 'on_pubsub_verification' =>
-				$c, \%param, \$ok );
+	$plugin->app->run_hook( 'on_pubsub_verification' => (
+				    $plugin,
+				    $c,
+				    \%param,
+				    \$ok ) );
 
 	if ($ok) {
 	    return $c->render(
-		'code'   => 200,
+		'status' => 200,
 		'format' => 'text',
 		'data'   => $challenge
 		);
@@ -211,34 +208,25 @@ sub verify {
 # subscribe or unsubscribe from a topic
 sub change_subscription {
     my $plugin = shift;
-    my $c = shift;
-    my %param = @_;
+    my $c      = shift;
+    my %param  = @_;
 
     # No topic url given
-    if (!exists $param{topic} ||
-	$param{topic} !~ m{^https?://} ||
-	!exists $param{hub} ||
-	$param{hub} !~ m{^https?://} ) {
+    if (!exists $param{topic} || $param{topic} !~ m{^https?://}i ||
+	!exists $param{hub}   || $param{hub}   !~ m{^https?://}i ) {
 	return;
     };
 
-    # lease seconds is no integer or not necessary
+    # delete lease seconds if no integer or not necessary
     if ( ( exists $param{lease_seconds} &&
-	   $param{lease_seconds} =~ /^\d+$/ ) ||
-	 # lease_seconds is not necessary for unsubscribe
-	 $param{mode} eq 'unsubscribe') {
-
+	   $param{lease_seconds} =~ /^\d+$/
+	 ) || $param{mode} eq 'unsubscribe') {
 	delete $param{lease_seconds};
     };
 
     # Get callback endpoint
     # Works only if endpoints provided
     $param{'callback'} = $c->get_endpoint('pubsub-cb');
-
-
-    $plugin->app->run_hook(
-	'before_pubsub_'.$param{mode} => $c, \%param
-	);
 
     # Render post string
     my $post = '';
@@ -247,15 +235,29 @@ sub change_subscription {
                  topic
                  verify
                  lease_seconds
-                 secret
-                 verify_token/ ) {
+                 secret/ ) {
 	if (exists $param{$_}) {
-	    $post .= '&hub.'.$_.'='.b($param{$_})->url_escape;
+	    $post .= '&hub.' . $_ . '='. b($param{$_})->url_escape;
 	};
     };
 
-    $post .= '&hub.verify='.$_.'sync' foreach ('a','');
+    $post .= '&hub.verify_token=';
+    if (exists $param{verify_token}) {
+	$post .= b($param{verify_token})->url_escape;
+    } else {
+	$post .= ($param{verify_token} = _challenge(12));
+    };
 
+    $post .= '&hub.verify=' . $_ . 'sync' foreach ('a','');
+
+    $plugin->app->run_hook(
+	'before_pubsub_'.$param{mode} => ( $plugin
+					   $c,
+					   \%param,
+					   \$post ));
+
+
+    # Todo: better post_form
     # Temporary
     return $post;
 
@@ -266,15 +268,72 @@ sub change_subscription {
 	->post($param{hub},
 	       $global_param,
 	       $post);
-    # $ua->max_redirects(0);
     
     # is 2xx, incl. 204 aka successful
-    return 1 if $res->is_status_class(200);
-    
-    # Not successful
-    return 0;
+    #         and 202 aka accepted
+    if ($res->is_status_class(200)) {
+	return 1;
+    } else {
+	# Not successful
+	return 0;
+    };
+
+# Todo with successvalue:
+#    $plugin->app->run_hook(
+#	'after_pubsub_'.$param{mode} => ( $plugin
+#					  $c,
+#					  \%param,
+#					  $res->status,
+#					  $res->body ));
+
 };
 
+sub callback {
+    my $plugin = shift;
+    my $c      = shift;
+
+# Todo Verification:
+# 1. Check if the feed is wanted
+#    Atom: Maybe it is aggregated (bulk distribution).
+#          In this case, all entry->sources have to be checked and
+#          new feeds have to be generated.
+# Proposal:
+#  my $topics = ['https://wanted1', 'https://not-wanted', 'https://wanted2'];
+#  my $secret = '';
+#  $c->app->run_hook( 'on_pubsub_acceptance' => ($plugin, $c, $topics, \$secret ));
+#  $topics eq ['https://wanted1', 'https://wanted2'];
+#  $secret eq 'ngtdcbhjhbfgh';
+# 2. If a secret was given, is there a signature?
+#    my $req = $c->req;
+#    my $signature = $req->headers->header('X-Hub-Signature');
+#    $signature = s/^sha1=/;
+#    $stream = b($req->body)->hmac_sha1_sum($secret);
+# 3. If everything is allright:
+#      foreach (entry that's wanted) {
+#        Better 'on_pubsub_content'
+
+    $c->app->run_hook( 'on_pubsub_callback' =>
+		     ( $plugin, $c, $c->req ));
+    
+#      }
+#    else ignore:
+#    $c->log->info("Hub ($hub) sent ill-signed Feed ($feed)");
+
+    # Possibly X-Hub-On-Behalf-Of header ...
+    return $c->render(
+	'status' => 204,
+	'format' => 'text',
+	'data'   => ''
+	);
+};
+
+sub _challenge {
+    my $chal;
+    for (1..$_[0] || 8) {
+        $chal .= $challenge_chars[int(rand(@challenge_chars))];
+    };
+    return $chal;
+};
 
 1;
 
@@ -324,11 +383,14 @@ Mojolicious::Plugin::PubSubHubbub
   # Publish a feed
   $c->publish('https://sojolicio.us/blog.atom',
               'https://sojolicio.us/activity.atom');
+
   # Subscribe to a feed
-  $c->subscribe( topic => 'https://sojolicio.us/feed.atom',
-                 lease_seconds => 154354367 );
+  $c->subscribe( topic   => 'https://sojolicio.us/feed.atom',
+                 hub     => 'https://hub.sojolicio.us');
+
   # Unsubscribe from a feed
-  $c->unsubscribe( topic => 'https://sojolicio.us/feed.atom');
+  $c->unsubscribe( topic => 'https://sojolicio.us/feed.atom',
+                   hub   => 'https://hub.sojolicio.us' );
 
   # Mojolicious::Lite
   plugin 'PubSubHubbub' => { hub => 'https://hub.example.org' };
@@ -399,48 +461,71 @@ Publish a list of feeds.
 =head2 C<subscribe>
 
   # In Controllers
-  $c->subscribe('https://sojolicio.us/feed.atom' =>
+  $c->subscribe(topic => 'https://sojolicio.us/feed.atom',
+                hub   => 'https://hub.sojolicio.us' );
                 lease_seconds => 123456 );
 
-Subscribe to a topic. Allowed parameters are 'lease_seconds',
-'secret', and 'verify_token'.
+Subscribe to a topic.
+Relevant parameters are 'hub',
+'lease_seconds', 'secret', 'verify_token', and 'callback'.
+Additional parameters are possible and can be used in the hooks.
+If no 'verify_token' is given, it is automatically generated.
+If no 'callback' is given, the route callback is used.
+If no 'lease_seconds' is given, the subscription will
+not automatically terminate.
+If a secret is given, it must be unique for every 'callback'
+and 'hub' combination to allow fur bulk distribution.
 
 =head2 C<unsubscribe>
 
   # In Controllers
-  $c->unsubscribe('https://sojolicio.us/feed.atom');
+  $c->unsubscribe(topic => 'https://sojolicio.us/feed.atom',
+                  hub   => 'https://hub.sojolicio.us' );
 
-Unsubscribe from a topic. Allowed parameters are 'secret' and
-'verify_token'.
+Unsubscribe from a topic.
+Relevant parameters are 'hub', 'secret', and 'verify_token'.
+Additional parameters are possible and can be used in the hooks.
 
 =head1 HOOKS
 
 =head2 C<on_pubsub_callback>
 
-This hook is released, when content is snd to the pubsub endpoint.
-The parameters include ??? and the current Controllers object.
+This hook is released, when desired content is send to the pubsub
+endpoint. The parameters include the plugin object, the current
+Controller object and the request object.
+
+This hook is EXPERIMENTAL. In next versions, this hook may not contain
+the request object but a feed object, that can differ from what the hub
+has sent (In case of, e.g., bulk distribution).
 
 =head2 C<before_pubsub_subscribe>
 
 This hook is released, before a subscription request is sent to a hub.
-The parameters include ???, the current Controllers object, and the
-parameters for subscription.
+The parameters include the Plugin, the current Controllers object, the
+parameters for subscription as a Hash ref and the C<POST> string as a
+string ref.
+This hook can be used to store subscription information and establish
+a secret value.
 
 =head2 C<before_pubsub_unsubscribe>
 
 This hook is released, before an unsubscription request is sent
-to a hub. The parameters include ???, the current Controllers
-object, and the parameters for unsubscription.
+to a hub.
+The parameters include the Plugin, the current Controllers object, the
+parameters for subscription as a Hash ref and the C<POST> string as a
+string ref.
+This hook can be used to store unsubscription information.
 
 =head2 C<on_pubsub_verification>
 
 This hook is released, when a verification is requested. The parameters
-are ???, The current controller object, and a string reference to a
+are the Plugin, the current controller object, and a string reference to a
 false value. If verification is granted, this value has to be set to true.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>.
+L<Mojolicious>,
+L<Mojolicious::Plugin::Util::Endpoint> (optional).
 
 =head1 COPYRIGHT AND LICENSE
 
