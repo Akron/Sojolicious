@@ -104,17 +104,17 @@ sub register {
     # Add 'subscribe' helper
     $mojo->helper(
 	'pubsub_subscribe' => sub {
-	    return $plugin->change_subscription( shift,
-						 mode => 'subscribe',
-						 @_);
+	    return $plugin->_change_subscription( shift,
+						  mode => 'subscribe',
+						  @_);
 	});
     
     # Add 'unsubscribe' helper
     $mojo->helper(
 	'pubsub_unsubscribe' => sub {
-	    return $plugin->change_subscription( shift,
-						 mode => 'unsubscribe',
-						 @_ );
+	    return $plugin->_change_subscription( shift,
+						  mode => 'unsubscribe',
+						  @_ );
 	});
 };
 
@@ -128,7 +128,6 @@ sub publish {
     # Create post message
     my $post = 'hub.mode=publish';
     foreach ( @_ ) {
-	next if $_ !~ m{^https?://}i;
 	$post .= '&hub.url='.b($c->url_for($_)
 			         ->to_abs
                                  ->to_string)->url_escape;
@@ -206,7 +205,7 @@ sub verify {
 };
 
 # subscribe or unsubscribe from a topic
-sub change_subscription {
+sub _change_subscription {
     my $plugin = shift;
     my $c      = shift;
     my %param  = @_;
