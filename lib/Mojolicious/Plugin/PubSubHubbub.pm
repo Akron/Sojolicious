@@ -11,7 +11,8 @@ has lease_seconds => (30 * 24 * 60 * 60);
 
 
 our ($global_param,
-     @challenge_chars);
+     @challenge_chars,
+     $atom_ns);
 
 BEGIN {
     $global_param = {
@@ -19,6 +20,7 @@ BEGIN {
 	    'application/x-www-form-urlencoded'
     };
     @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9);
+    $atom_ns = 'http://www.w3.org/2005/Atom';
 };
 
 # Register plugin
@@ -69,21 +71,7 @@ sub register {
 			
 			# Hook on callback
 			else {
-			    my $ct = $c->req->headers->header('Content-Type');
-
-			    # Is Atom or RSS feed
-			    if ($ct =~ m{application\/(?:rss|atom)\+xml}) {
-				$plugin->callback($c);
-			    }
-
-			    # Bad request
-			    else {
-				return $c->render(
-				    'template'       => 'pubsub-endpoint',
-				    'template_class' => __PACKAGE__,
-				    'status'         => 400 # bad request
-				    );
-			    };
+			    $plugin->callback($c);
 			};
 		    });
 #	    }
@@ -270,48 +258,136 @@ sub _change_subscription {
     
     # is 2xx, incl. 204 aka successful
     #         and 202 aka accepted
-    if ($res->is_status_class(200)) {
-	return 1;
-    } else {
-	# Not successful
-	return 0;
-    };
 
-# Todo with successvalue:
-#    $plugin->app->run_hook(
-#	'after_pubsub_'.$param{mode} => ( $plugin
-#					  $c,
-#					  \%param,
-#					  $res->status,
-#					  $res->body ));
+    $plugin->app->run_hook(
+	'after_pubsub_'.$param{mode} => ( $plugin
+					  $c,
+					  \%param,
+					  $res->status,
+					  $res->body ));
 
+    my $success = $res->is_status_class(200) ? 1 : 0;
+
+    return ($success, $res->{body}) if wantarray;
+    return $success;
 };
 
 sub callback {
     my $plugin = shift;
     my $c      = shift;
+    my $mojo   = $c->app;
 
-# Todo Verification:
-# 1. Check if the feed is wanted
-#    Atom: Maybe it is aggregated (bulk distribution).
-#          In this case, all entry->sources have to be checked and
-#          new feeds have to be generated.
-# Proposal:
-#  my $topics = ['https://wanted1', 'https://not-wanted', 'https://wanted2'];
-#  my $secret = '';
-#  $c->app->run_hook( 'on_pubsub_acceptance' => ($plugin, $c, $topics, \$secret ));
-#  $topics eq ['https://wanted1', 'https://wanted2'];
-#  $secret eq 'ngtdcbhjhbfgh';
-# 2. If a secret was given, is there a signature?
-#    my $req = $c->req;
-#    my $signature = $req->headers->header('X-Hub-Signature');
-#    $signature = s/^sha1=/;
-#    $stream = b($req->body)->hmac_sha1_sum($secret);
+    # No secret
+    my ($secret,
+	$dom,
+	@topics);
+
+    my $aggregated = 0;
+
+    my $ct = $c->req->headers->header('Content-Type');
+
+    # Is RSS
+    if ($ct eq 'application/rss+xml') {
+	$dom = $c->req->dom;
+
+	my $link = $dom->at('feed > link[rel="self"]');
+	@topics = $link->attrs('href') if $link;
+
+	unless (@topics) {
+	    # Possible
+	    $link = $dom->at('channel > item > source');
+	    @topics = ->attrs('url') if $link;
+	};
+    }
+
+    # Is Atom
+    elsif ($ct eq 'application/atom+xml') {
+	$dom = $c->req->dom;
+
+	# Possibly aggregated feed
+	$aggregated = 1;
+
+	my $link = $dom->find('feed > entry > source > link[rel="self"]');
+	@topics = $link->map( sub { $_->attrs('href') } ) if $link;
+
+	# obviously not aggregated
+	if (!@topics) {
+
+	    # One feed or entry
+	    $link = $dom->at('link[rel="self"]');
+
+	    @topics = $link->attrs('href') if $link;
+
+	    # Not aggregated
+	    $aggregated = 0;
+	}
+
+        # Make unique
+	elsif (@topics > 1) {
+
+	    # return only unique topics
+	    my %topic_hash;
+	    $topic_hash{$_} = 1 foreach (@topics);
+	    @topics = keys %topic_hash;
+	}
+
+	# Not aggregated
+	else {
+	    $aggregated = 0;
+	};
+    }
+
+    # Unsupported content type
+    else {
+	return $c->render(
+	    'template'       => 'pubsub-endpoint',
+	    'template_class' => __PACKAGE__,
+	    'status'         => 400 # bad request
+	    );
+    };
+
+    # No topics to process
+    return _return_for_good($c) unless @topics;
+
+    $x_hub_on_behalf_of = 0;
+
+    # Check for secret and which topics are wanted
+    $app->run_hook(
+	'before_pubsub_acceptance' => ( $plugin,
+					$c,
+					\@topics,
+					\$secret,
+					\$x_hub_on_behalf_of ));
+    
+    # No topics to process
+    return _return_for_good($c) unless @topics;
+
+    # Is a secret needed?
+    if ($secret) {
+	my $req = $c->req;
+
+	# Get signature
+	my $signature = $req->headers->header('X-Hub-Signature');
+
+	# Signature expected but not given
+	return _return_for_good($c)
+	    unless $signature;
+
+	$signature = s/^sha1=//;
+
+	# Generate check signature
+	$signature_check = b($req->body)->hmac_sha1_sum( $secret );
+
+	# Return if signature check fails
+	return _return_for_good($c)
+	    if ($signature ne $signature_check);
+    };
+	
 # 3. If everything is allright:
 #      foreach (entry that's wanted) {
 #        Better 'on_pubsub_content'
 
-    $c->app->run_hook( 'on_pubsub_callback' =>
+    $mojo->run_hook( 'on_pubsub_content' =>
 		     ( $plugin, $c, $c->req ));
     
 #      }
@@ -319,12 +395,28 @@ sub callback {
 #    $c->log->info("Hub ($hub) sent ill-signed Feed ($feed)");
 
     # Possibly X-Hub-On-Behalf-Of header ...
+
+    return _return_for_good($c => $x_hub_on_behalf_of);
+};
+
+sub _return_for_good {
+    my $c = shift;
+    my $x_hub_on_behalf_of = shift;
+
+    # Set X-Hub-On-Behalf-Of header
+    if ($x_hub_on_behalf_of &&
+	$x_hub_on_behalf_of =~ /^\d+$/) {
+	$c->res->headers->header('X-Hub-On-Behalf-Of' =>
+				 $x_hub_on_behalf_of);
+    };
+
     return $c->render(
 	'status' => 204,
 	'format' => 'text',
 	'data'   => ''
 	);
 };
+
 
 sub _challenge {
     my $chal;
@@ -455,7 +547,7 @@ is enabled.
                'https://sojolicio.us/feed.atom' # absolute uris
              ):
 
-Publish a list of feeds.
+Publish a list of feeds in terms of a notification to the hub.
 
 =head2 C<subscribe>
 
@@ -465,6 +557,7 @@ Publish a list of feeds.
                 lease_seconds => 123456 );
 
 Subscribe to a topic.
+
 Relevant parameters are 'hub',
 'lease_seconds', 'secret', 'verify_token', and 'callback'.
 Additional parameters are possible and can be used in the hooks.
@@ -474,6 +567,9 @@ If no 'lease_seconds' is given, the subscription will
 not automatically terminate.
 If a secret is given, it must be unique for every 'callback'
 and 'hub' combination to allow fur bulk distribution.
+The method returns a true value on succes and a false value
+if an error occured. If called in an array context, the
+hub's response message body is returned additionally.
 
 =head2 C<unsubscribe>
 
@@ -482,20 +578,41 @@ and 'hub' combination to allow fur bulk distribution.
                   hub   => 'https://hub.sojolicio.us' );
 
 Unsubscribe from a topic.
+
 Relevant parameters are 'hub', 'secret', and 'verify_token'.
 Additional parameters are possible and can be used in the hooks.
+The method returns a true value on succes and a false value
+if an error occured. If called in an array context, the
+hub's response message body is returned additionally.
 
 =head1 HOOKS
 
-=head2 C<on_pubsub_callback>
+=head2 C<before_pubsub_acceptance>
 
-This hook is released, when desired content is send to the pubsub
+This hook is released, when content arrived the pubsub
 endpoint. The parameters include the plugin object, the current
-Controller object and the request object.
+Controller object an array reference of topics, an empty string
+reference for a possible secret, and a string reference
+for the C<X-Hub-On-Behalf-Of> value, initially 0.
 
-This hook is EXPERIMENTAL. In next versions, this hook may not contain
-the request object but a feed object, that can differ from what the hub
-has sent (In case of, e.g., bulk distribution).
+This hook can be used to filter unwanted topics, to give a
+necessary secret for signed content, and information on
+the user count of the subscription to the processor.
+
+If the list is returned as an empty list, the processing will stop.
+
+If nothing in this hook happens, the complete content will be processed.
+
+=head2 C<on_pubsub_content>
+
+This hook is released, when desired content is delivered.
+The parameters include the plugin object, the current
+Controller object, and chunks of th content as a
+L<Mojo::DOM> object.
+If a feed containing multiple entries is returned (whether
+as an aggregated bulk feed with multiple topics or a simple
+feed with multiple entries on one topic) each entry will
+invoke this hook.
 
 =head2 C<before_pubsub_subscribe>
 
@@ -506,6 +623,15 @@ string ref.
 This hook can be used to store subscription information and establish
 a secret value.
 
+=head2 C<after_pubsub_subscribe>
+
+This hook is released, after a subscription request is sent to a hub
+and the response is processed.
+The parameters include the Plugin, the current Controllers object, the
+parameters for subscription as a Hash ref, the response status, and
+the response body.
+This hook can be used to deal with errors.
+
 =head2 C<before_pubsub_unsubscribe>
 
 This hook is released, before an unsubscription request is sent
@@ -514,6 +640,15 @@ The parameters include the Plugin, the current Controllers object, the
 parameters for subscription as a Hash ref and the C<POST> string as a
 string ref.
 This hook can be used to store unsubscription information.
+
+=head2 C<after_pubsub_unsubscribe>
+
+This hook is released, after an unsubscription request is sent to a hub
+and the response is processed.
+The parameters include the Plugin, the current Controllers object, the
+parameters for subscription as a Hash ref, the response status, and
+the response body.
+This hook can be used to deal with errors.
 
 =head2 C<on_pubsub_verification>
 

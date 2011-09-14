@@ -249,6 +249,7 @@ sub to_xml {
     # The me has to be signed
     return unless $self->{signed};
 
+    # Todo - better: renderer-> get_data_template?
     my $template = Mojo::Command->new->get_data(
 	'magicenvelope.xml.ep',
 	__PACKAGE__);
