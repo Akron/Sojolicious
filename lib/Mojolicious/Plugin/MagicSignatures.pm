@@ -167,7 +167,7 @@ sub get_magickeys {
 	    # Discovery based on spec-01
 	    # Key id is not specified
 	    unless (exists $param{key_id}) {
-		foreach (@{ $wf_xrd->find(qq{Property[type="$me_ns"})}) {
+		foreach (@{ $wf_xrd->find(qq{Property[type="$me_ns"]})}) {
 		    
 		    # Create key from property
 		    my @key = ($plugin->magickey($c, $_->text(0)));
@@ -185,7 +185,7 @@ sub get_magickeys {
 	    # Key id is specified, maybe undef
 	    else {
 		my $key_id = $param{key_id};
-		foreach (@{$wf_xrd->find(qq{Property[type="$me_ns"]"})}) {
+		foreach (@{$wf_xrd->find(qq{Property[type="$me_ns"]})}) {
 		    
 		    # Get key_ids from property
 		    my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
