@@ -31,7 +31,7 @@ sub register {
     if (exists $param->{host}) {
 	$plugin->host( $param->{host} );
     } else {
-	unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
+	if (exists $mojo->renderer->helpers->{'hostmeta'}) {
 	    $plugin->host( $mojo->hostmeta('host') || 'localhost' );
 	} else {
 	    $plugin->host( 'localhost' );
@@ -238,7 +238,7 @@ sub _change_subscription {
     $post .= '&hub.verify=' . $_ . 'sync' foreach ('a','');
 
     $plugin->app->run_hook(
-	'before_pubsub_'.$param{mode} => ( $plugin
+	'before_pubsub_'.$param{mode} => ( $plugin,
 					   $c,
 					   \%param,
 					   \$post ));
@@ -260,7 +260,7 @@ sub _change_subscription {
     #         and 202 aka accepted
 
     $plugin->app->run_hook(
-	'after_pubsub_'.$param{mode} => ( $plugin
+	'after_pubsub_'.$param{mode} => ( $plugin,
 					  $c,
 					  \%param,
 					  $res->status,
@@ -296,7 +296,7 @@ sub callback {
 	unless (@topics) {
 	    # Possible
 	    $link = $dom->at('channel > item > source');
-	    @topics = ->attrs('url') if $link;
+	    @topics = $link->attrs('url') if $link;
 	};
     }
 
@@ -349,10 +349,10 @@ sub callback {
     # No topics to process
     return _return_for_good($c) unless @topics;
 
-    $x_hub_on_behalf_of = 0;
+    my $x_hub_on_behalf_of = 0;
 
     # Check for secret and which topics are wanted
-    $app->run_hook(
+    $mojo->run_hook(
 	'before_pubsub_acceptance' => ( $plugin,
 					$c,
 					\@topics,
@@ -376,7 +376,7 @@ sub callback {
 	$signature = s/^sha1=//;
 
 	# Generate check signature
-	$signature_check = b($req->body)->hmac_sha1_sum( $secret );
+	my $signature_check = b($req->body)->hmac_sha1_sum( $secret );
 
 	# Return if signature check fails
 	return _return_for_good($c)
