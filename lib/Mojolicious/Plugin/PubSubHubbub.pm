@@ -2,13 +2,15 @@ package Mojolicious::Plugin::PubSubHubbub;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream ('b');
 use Mojo::Util qw/trim/;
+use Mojo::IOLoop;
 
-has [qw/hub host/];
+has 'host';
 has 'secure' => 0;
 
 # Default lease seconds before automatic subscription refreshing
-has lease_seconds => (30 * 24 * 60 * 60);
+has 'lease_seconds' => (30 * 24 * 60 * 60);
 
+has 'hub';
 
 our ($global_param,
      @challenge_chars,
@@ -272,25 +274,93 @@ sub _change_subscription {
     return $success;
 };
 
+# Incoming data callback
 sub callback {
     my $plugin = shift;
     my $c      = shift;
     my $mojo   = $c->app;
 
-    # No secret
-    my ($secret,
+    # Find topics in Payload
+    my ($type,
+	$topics,
 	$dom,
-	@topics);
+	$aggregated) = _find_topics($c);
+
+    # Payload had wrong content type
+    return $c->render(
+	'template'       => 'pubsub-endpoint',
+	'template_class' => __PACKAGE__,
+	'status'         => 400 # bad request
+	) unless $type;
+
+    # No topics to process
+    return _render_success($c) unless $topics->[0];
+    
+    my $secret;
+    my $x_hub_on_behalf_of = 0;
+
+    my @old_topics = @$topics;
+
+    # Check for secret and which topics are wanted
+    $mojo->run_hook(
+	'on_pubsub_acceptance' => ( $plugin,
+				    $c,
+				    $topics,
+				    \$secret,
+				    \$x_hub_on_behalf_of ));
+    
+    _render_success( $c => $x_hub_on_behalf_of );
+
+    # No topics to process
+    return unless $topics->[0];
+
+    # Process content
+    Mojo::IOLoop->timer(
+	0 => sub {
+	    
+	    # Secret is needed
+	    if ($secret) {
+		return unless _check_signature($c, $secret);
+	    };
+	    
+	    # Some topics are unwanted
+	    if (@$topics != @old_topics) {
+		# filter dom based on topics
+		$dom = _filter_topics($dom, $type, $topics);
+	    };
+	    
+	    $mojo->run_hook( 'on_pubsub_content' =>
+			     ( $plugin,
+			       $c,
+			       $type,
+			       $dom ));
+	    return;
+	});
+
+    return;
+};
+
+# Find topics of entries
+sub _find_topics {
+    my $c = shift;
+
+    # No secret
+    my ($dom,
+	@topics,
+	$type);
 
     my $aggregated = 0;
 
-    my $ct = $c->req->headers->header('Content-Type');
+    my $ct = $c->req->headers->header('Content-Type') || 'text';
 
     # Is RSS
     if ($ct eq 'application/rss+xml') {
+	$type = 'rss';
+
 	$dom = $c->req->dom;
 
-	my $link = $dom->at('feed > link[rel="self"]');
+	# From Atom namespace
+	my $link = $dom->at('channel > link[rel="self"]');
 	@topics = $link->attrs('href') if $link;
 
 	unless (@topics) {
@@ -302,6 +372,8 @@ sub callback {
 
     # Is Atom
     elsif ($ct eq 'application/atom+xml') {
+	$type = 'atom';
+
 	$dom = $c->req->dom;
 
 	# Possibly aggregated feed
@@ -325,10 +397,8 @@ sub callback {
         # Make unique
 	elsif (@topics > 1) {
 
-	    # return only unique topics
-	    my %topic_hash;
-	    $topic_hash{$_} = 1 foreach (@topics);
-	    @topics = keys %topic_hash;
+	    my %topics = map {$_ => 1 } @topics;
+	    @topics = keys %topics;
 	}
 
 	# Not aggregated
@@ -339,67 +409,95 @@ sub callback {
 
     # Unsupported content type
     else {
-	return $c->render(
-	    'template'       => 'pubsub-endpoint',
-	    'template_class' => __PACKAGE__,
-	    'status'         => 400 # bad request
-	    );
+	return;
     };
 
-    # No topics to process
-    return _return_for_good($c) unless @topics;
-
-    my $x_hub_on_behalf_of = 0;
-
-    # Check for secret and which topics are wanted
-    $mojo->run_hook(
-	'before_pubsub_acceptance' => ( $plugin,
-					$c,
-					\@topics,
-					\$secret,
-					\$x_hub_on_behalf_of ));
-    
-    # No topics to process
-    return _return_for_good($c) unless @topics;
-
-    # Is a secret needed?
-    if ($secret) {
-	my $req = $c->req;
-
-	# Get signature
-	my $signature = $req->headers->header('X-Hub-Signature');
-
-	# Signature expected but not given
-	return _return_for_good($c)
-	    unless $signature;
-
-	$signature = s/^sha1=//;
-
-	# Generate check signature
-	my $signature_check = b($req->body)->hmac_sha1_sum( $secret );
-
-	# Return if signature check fails
-	return _return_for_good($c)
-	    if ($signature ne $signature_check);
-    };
-	
-# 3. If everything is allright:
-#      foreach (entry that's wanted) {
-#        Better 'on_pubsub_content'
-
-    $mojo->run_hook( 'on_pubsub_content' =>
-		     ( $plugin, $c, $c->req ));
-    
-#      }
-#    else ignore:
-#    $c->log->info("Hub ($hub) sent ill-signed Feed ($feed)");
-
-    # Possibly X-Hub-On-Behalf-Of header ...
-
-    return _return_for_good($c => $x_hub_on_behalf_of);
+    return ($type, \@topics, $dom, $aggregated)
 };
 
-sub _return_for_good {
+# filter entries based on their topic 
+sub _filter_topics {
+    my $dom     = shift;
+    my $type    = shift;
+    my %allowed = map { $_ => 1 } @{ shift(@_) };
+
+    my $topic_elem = $dom->at('link[rel="self"]');
+    my $feed_topic = $topic_elem->attrs('href') if $topic_elem;
+
+    # atom entries
+    if ($type eq 'atom') {
+	$dom->find('entry')->each(
+	    sub {
+		my $entry = shift;
+		
+		# Find topic of the entry
+		$topic_elem =
+		    $entry->at('source > link[rel="self"]');
+		my $topic = $topic_elem ?
+		    $topic_elem->attrs('href') : $feed_topic;
+		
+		# Delete entry
+		unless ($topic || exists $allowed{$topic}) {
+		    $entry->replace('');
+		};
+		return;
+	    });
+    }
+
+    # rss entries
+    else {
+	$dom->find('item')->each(
+	    sub {
+		my $entry = shift;
+		
+		# Find topic of the entry
+		my $topic;
+		$topic_elem = $entry->at('source[url]');
+		
+		if ($topic_elem) {
+		    $topic = $topic_elem->attrs('url');
+		} else {
+		    $topic_elem =
+			$entry->at('source > link[rel="self"]');
+		    $topic = $topic_elem ?
+			$topic_elem->attrs('href') : $feed_topic;
+		};
+		
+		# Delete entry
+		unless ($topic || exists $allowed{$topic}) {
+		    $entry->replace('');
+		};
+		return;
+	    });
+    };
+    return $dom;
+};
+
+# Check signature
+sub _check_signature {
+    my ($c, $secret) = @_;
+
+    my $req = $c->req;
+	    
+    # Get signature
+    my $signature = $req->headers->header('X-Hub-Signature');
+	    
+    # Signature expected but not given
+    return unless $signature;
+	    
+    $signature = s/^sha1=//;
+	    
+    # Generate check signature
+    my $signature_check = b($req->body)->hmac_sha1_sum( $secret );
+	    
+    # Return true  if signature check succeeds
+    return 1 if $signature eq $signature_check;
+
+    return;
+};
+
+# Render success
+sub _render_success {
     my $c = shift;
     my $x_hub_on_behalf_of = shift;
 
@@ -410,6 +508,7 @@ sub _return_for_good {
 				 $x_hub_on_behalf_of);
     };
 
+    # Render success with no content
     return $c->render(
 	'status' => 204,
 	'format' => 'text',
@@ -487,7 +586,7 @@ Mojolicious::Plugin::PubSubHubbub
   plugin 'PubSubHubbub' => { hub => 'https://hub.example.org' };
 
   my $ps = any '/:user/callback_url';
-  $ps->pubsub('cb);
+  $ps->pubsub('cb');
 
 
 =head1 DESCRIPTION
