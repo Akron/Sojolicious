@@ -6,7 +6,7 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 11;
+use Test::More tests => 17;
 use Test::Mojo;
 use Mojolicious::Lite;
 use Mojo::ByteStream 'b';
@@ -96,3 +96,62 @@ is($app->endpoint('test4' => {
    'q=' . b($acct)->url_escape . 
    '&start=' . b($btables)->url_escape,
    'endpoint 11');
+
+$r_test->endpoint(test5 => {
+    query => [ a => '{foo?}',
+	       b => '{bar?}',
+	       c => '{foo}',
+	       d => '{BAR}'
+	]});
+
+is($app->endpoint('test5' =>
+		  {
+		      bar => 'This is a {test}'
+		  }),
+   '/suggest?a={foo?}&b=This%20is%20a%20%7Btest%7D&c={foo}&d={BAR}',
+   'endpoint 12');
+
+is($app->endpoint('test5' =>
+		  {
+		      BAR => '?'
+		  }),
+   '/suggest?a={foo?}&b={bar?}&c={foo}&d=%3F',
+   'endpoint 13');
+
+is($app->endpoint('test5' =>
+		  {
+		      bar => '}&{'
+		  }),
+   '/suggest?a={foo?}&b=%7D%26%7B&c={foo}&d={BAR}',
+   'endpoint 14');
+
+is($app->endpoint('test5' =>
+		  {
+		      '?' => undef
+		  }),
+   '/suggest?c={foo}&d={BAR}',
+   'endpoint 15');
+
+$r_test->endpoint(test6 => {
+    query => [ a => '{foo?}',
+	       b => '{bar?}',
+	       c => '{foo}',
+	       d => '{BAR}',
+	       e => '{test:foo?}',
+	       f => '*'
+	]});
+
+is($app->endpoint('test6' =>
+		  {
+		      '?' => undef
+		  }),
+   '/suggest?c={foo}&d={BAR}&f=%2A',
+   'endpoint 16');
+
+is($app->endpoint('test6' =>
+		  {
+		      'test:foo' => 'check',
+		      '?' => undef
+		  }),
+   '/suggest?c={foo}&d={BAR}&e=check&f=%2A',
+   'endpoint 17');

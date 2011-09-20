@@ -1,12 +1,13 @@
 package Mojolicious::Plugin::Util::Endpoint;
 use Mojo::Base 'Mojolicious::Plugin';
-use Mojo::Util 'url_escape';
+use Mojo::ByteStream 'b';
 use Mojo::URL;
 
+# Register Plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
-    # Establish 'endpoint' shortcut
+    # Add 'endpoint' shortcut
     $mojo->routes->add_shortcut(
 	'endpoint' => sub {
 	    my ($route, $name, $param) = @_;
@@ -67,8 +68,10 @@ sub register {
 	    };
 
 	    my $endpoint = $endpoint_url->to_string;
-	    $endpoint =~ s/\%7B([^\%]+?)\%3F\%7D/{$1?}/ig;
-	    $endpoint =~ s/\%7B([^\%]+?)\%7D/{$1}/ig;
+
+	    # Unescape template variables
+	    $endpoint =~
+		s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
 
 	    # Set to stash
 	    $mojo->defaults('endpoint.'.$name => $endpoint);
@@ -77,7 +80,7 @@ sub register {
 	});
     
 
-    # Establish 'endpoint' helper
+    # Add 'endpoint' helper
     $mojo->helper(
 	'endpoint' => sub {
 	    my $c           = shift;
@@ -117,17 +120,21 @@ sub register {
 		};
 
 		if (defined $fill) {
-		    url_escape($fill);
-		    $endpoint =~ s/\{$val\??\}/$fill/;
+		    $endpoint =~ s/\{$val\??\}/b($fill)->url_escape/e;
 		};
 
 		# Reset search position
 		pos($endpoint) = $p;
 	    };
 	    
+	    # Ignore optional placeholders
 	    if (exists $given_param->{'?'} &&
 		!defined $given_param->{'?'}) {
-		$endpoint =~ s/\&[^=]+?=\{[^\?\}]+?\?\}//g;
+		for ($endpoint) {
+		    s/(?<=[\&\?])[^=]+?=\{[^\?\}]+?\?\}//g;
+		    s/([\?\&])\&*/$1/g;
+		    s/\&$//g;
+		};
 	    };
 
 	    return $endpoint;
@@ -163,19 +170,18 @@ Mojolicious::Plugin::Util::Endpoint
               ]
             });
 
-  # Get endpoint
-  print $self->endpoint('webfinger');
+  return $self->endpoint('webfinger');
   # https://sojolicio.us/{user}?q={uri}
 
   $self->stash(user => 'Akron');
 
-  print $self->endpoint('webfinger');
+  return $self->endpoint('webfinger');
   # https://sojolicio.us/Akron?q={uri}
 
-  print $self->endpoint('webfinger' => {
-                           uri => 'acct:akron@sojolicio.us'
-                        });
-  # https://sojolicio.us/Akron?q=acct:akron@sojolicio.us
+  return $self->endpoint('webfinger' => {
+                            uri => 'acct:akron@sojolicio.us'
+                         });
+  # https://sojolicio.us/Akron?q=acct%3Aakron%40sojolicio.us
 
 
 =head1 DESCRIPTION
@@ -201,7 +207,7 @@ but includes support for template URIs with parameters
                       ]
                     });
 
-Stores an endpoint defined for a service.
+Establishes an endpoint defined for a service.
 It accepts optional parameters C<scheme>, C<host>,
 a C<port> and query parameters (C<query>).
 Template parameters need curly brackets, optional
@@ -218,12 +224,14 @@ Optional path placeholders are currenty not supported.
   return $self->endpoint('webfinger', { user => 'me' } );
 
 Returns the endpoint defined for a specific service.
-It accepts additional stash values for the route. These
-stash values override existing stash values from the
-controller and fill the template variables.
+It accepts additional stash values for the route.
+These stash values override existing stash values from
+the controller and fill the template variables.
 
+  # In Controller:
   return $self->endpoint('opensearch');
-  # https://sojolicio.us/suggest?q={searchTerms}&start={startIndex?}
+  # https://sojolicio.us/suggest?q={searchTerms}
+                                &start={startIndex?}
 
   return $self->endpoint('opensearch' => {
                             searchTerms => 'simpson',
@@ -231,8 +239,8 @@ controller and fill the template variables.
                          });
   # https://sojolicio.us/suggest?q=simpson
 
-The special parameter C<?> can be set to C<undef> to ignore
-all optional template parameters.
+The special parameter C<?> can be set C<undef> to ignore
+all undefined optional template parameters.
 
 =head1 DEPENDENCIES
 
