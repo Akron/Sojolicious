@@ -1,6 +1,6 @@
 package Mojolicious::Plugin::PubSubHubbub;
 use Mojo::Base 'Mojolicious::Plugin';
-use Mojo::ByteStream ('b');
+use Mojo::ByteStream 'b';
 use Mojo::Util qw/trim/;
 use Mojo::IOLoop;
 
@@ -9,7 +9,6 @@ has 'secure' => 0;
 
 # Default lease seconds before automatic subscription refreshing
 has 'lease_seconds' => (30 * 24 * 60 * 60);
-
 has 'hub';
 
 our ($global_param,
@@ -48,9 +47,7 @@ sub register {
 	'pubsub' => sub {
 	    my ($route, $param) = @_;
 
-	    return unless $param eq 'cb'; # or $param eq 'hub';
-	    # or $param eq 'hub'
-	    # Internal hub is currently not supported
+	    return unless $param eq 'cb'; # 'hub' is currently not supported
 	    
 	    # Set endpoint if enabled
 	    if (exists $mojo->renderer->helpers->{'endpoint'}) {
@@ -76,20 +73,12 @@ sub register {
 			    $plugin->callback($c);
 			};
 		    });
-#	    }
-#
-# Add 'hub' route
-# Not implemented yet
-#	    else {
-#		$route->via('post')
-#		    ->to( cb => \&hub($plugin, @_) );
 	    };
 
 	});
     
     # Add 'publish' helper
-    # $c->pubsub_publish('feed1', 'feed2', ...);
-    $mojo->helper( 'pubsub_publish' => \&publish ); # ($plugin, @_) );
+    $mojo->helper( 'pubsub_publish' => \&publish );
     
     # Add 'subscribe' helper
     $mojo->helper(
@@ -124,7 +113,7 @@ sub publish {
     };
 
     # Temporary
-    return $post;
+    # return $post;
 
     # Post to hub
     # Todo: Maybe better post_form

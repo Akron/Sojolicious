@@ -7,6 +7,7 @@ use lib '../lib';
 
 use Test::More tests => 8;
 use Test::Mojo;
+use Mojo::ByteStream 'b';
 use Mojolicious::Lite;
 
 my $t = Test::Mojo->new;
@@ -22,7 +23,7 @@ is($app->hostmeta->get_link('lrdd')->attrs->{template},
    'Correct uri');
 
 is ($app->endpoint('webfinger' => {uri => $acct}),
-    'https://sojolicio.us/webfinger?q='.$acct,
+    'https://sojolicio.us/webfinger?q='.b($acct)->url_escape,
     'Webfinger endpoint');
 
 $app->hook('before_serving_webfinger' => sub {

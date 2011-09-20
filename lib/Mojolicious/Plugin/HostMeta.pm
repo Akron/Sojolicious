@@ -76,13 +76,6 @@ sub register {
 	    host   => $plugin->host,
 	});
 
-#    $c->set_endpoint(
-#	'hostmeta' => {
-#	    scheme => $plugin->secure ? 'https' : 'http',
-#	    host   => $plugin->host,
-#	    route  => $route
-#	});
-
     # Set route callback
     $route->to(
 	cb => sub {
@@ -114,42 +107,6 @@ sub register {
 
 };
 
-# discover rel from dom
-sub discover_rel {
-    die 'This is deprecated!';
-
-    my $self = shift;
-    my $c = shift;
-    my $dom = shift;
-    my $rel = shift;
-
-    if (ref($dom) ne 'Mojo::DOM') {
-
-	# Get file
-	my $ua = $c->ua;
-	
-	$ua->max_redirects(3);
-	my $res = $ua->get($dom);
-	$ua->max_redirects(0);
-	
-	# is 2xx, incl. 204 aka successful
-	if (!$res->is_status_class(200)) {
-	    return 0;
-	};
-	
-	$dom = $res->dom;
-    };
-    
-    return () unless $dom;
-    
-    my @rels;
-    $dom->find('link,Link[rel="$rel"]')->each(
-	sub {
-	    push(@rels, shift->attrs->{href});
-	});
-    
-    return @rels;
-};
 
 # Get HostMeta document
 sub _get_hostmeta {
@@ -205,19 +162,7 @@ sub _get_hostmeta {
     $hostmeta_xrd =
 	$c->new_xrd($host_hm->res->body);
 
-    # Deprecated host validation
-    # Validate host
-    # if (my $host_e = $hostmeta_xrd->dom->at('Host')) {
-    #   if ($host_e->namespace eq 'http://host-meta.net/xrd/1.0') {
-    #
-    #	    # Is the given domain the expected one?
-    #	    if (lc($host_e->text) ne $host) {
-    #		$c->app->log->info('The domains "'.$host.'"'.
-    #			      ' and "'.$host_e->text.'" do not match.');
-    #		return undef;
-    #	    };
-    #  	};
-    # };
+    # Host validation is now deprecated
 
     # Hook for caching
     $c->app->plugins->run_hook(
@@ -322,18 +267,18 @@ document.
 =item C<before_fetching_hostmeta>
 
 This hook is run before a foreign hostmeta document is retrieved.
-This can be used for caching.
-The hook returns the current ??? object, the host name, and an empty
-string reference, meant to refer to the XRD object.
+The hook returns the current controller object, the host name,
+and an empty string reference meant to refer to the XRD object.
 If the XRD reference is filled, the fetching will not proceed. 
+This can be used for caching.
 
 =item C<after_fetching_hostmeta>
 
 This hook is run after a foreign hostmeta document is retrieved.
-This can be used for caching.
-The hook returns the current ??? object, the host name, a string
-reference, meant to refer to the XRD object, and the
+The hook returns the current controller object, the host name,
+a string reference meant to refer to the XRD object, and the
 L<Mojo::Message::Response> object from the request.
+This can be used for caching.
 
 =back
 

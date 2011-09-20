@@ -71,10 +71,7 @@ sub register {
 		});
 
 	    # Retrieve Endpoint-Uri
-	    my $endpoint = $mojo->endpoint(
-		'webfinger' => {
-		    'uri' => '{uri}'
-		});
+	    my $endpoint = $mojo->endpoint('webfinger');
 	    
 	    # If It's a template, point the lrdd to it
 	    if ($endpoint =~ m/\{(?:.+?)\}/) {

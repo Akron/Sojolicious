@@ -6,10 +6,10 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 6;
+use Test::More tests => 11;
 use Test::Mojo;
 use Mojolicious::Lite;
-
+use Mojo::ByteStream 'b';
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
@@ -59,3 +59,40 @@ is($app->endpoint('test3', {var2 => 'd'}),
 is($app->endpoint('test3', {var1 => 'c', var2 => 'd'}),
    'http://sojolicio.us/test?a=c&b=d',
    'endpoint 6');
+
+$r_test = $app->routes->route('/suggest');
+$r_test->endpoint(test4 => {
+		      host => 'sojolicio.us',
+		      query => [ q => '{searchTerms}',
+		                 start => '{startIndex?}'
+			  ]});
+
+is($app->endpoint('test4'),
+   'http://sojolicio.us/suggest?q={searchTerms}&start={startIndex?}',
+   'endpoint 7');
+
+is($app->endpoint('test4' => { searchTerms => 'simpsons'}),
+   'http://sojolicio.us/suggest?q=simpsons&start={startIndex?}',
+   'endpoint 8');
+
+is($app->endpoint('test4' => { startIndex => 4}),
+   'http://sojolicio.us/suggest?q={searchTerms}&start=4',
+   'endpoint 9');
+
+is($app->endpoint('test4' => {
+                     searchTerms => 'simpsons',
+                     '?' => undef
+                  }),
+   'http://sojolicio.us/suggest?q=simpsons',
+   'endpoint 10');
+
+my $acct    = 'acct:akron@sojolicio.us';
+my $btables = 'hmm&bobby=tables';
+is($app->endpoint('test4' => {
+                     searchTerms => $acct,
+                     startIndex => $btables
+                  }),
+   'http://sojolicio.us/suggest?' . 
+   'q=' . b($acct)->url_escape . 
+   '&start=' . b($btables)->url_escape,
+   'endpoint 11');
