@@ -1,13 +1,10 @@
 package Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Base -base;
+use Mojolicious::Plugin::Util::Base64url;
 
 # Implement alternative with PARI if existent
 use Math::BigInt try => 'GMP,Pari';
-use MIME::Base64;
 use Digest::SHA qw(sha256);
-use Exporter 'import';
-our @EXPORT_OK = qw(b64url_encode
-                    b64url_decode);
 
 has [qw/n d emLen/] => 0;
 has e => 65537;
@@ -404,36 +401,6 @@ sub _bitsize ($) {
     return ( length( $x->as_bin ) - 2 );
 };
 
-# Returns the b64 urlsafe encoding of a string
-sub b64url_encode {
-    my $v = shift;
-    return '' unless $v;
-
-    utf8::encode $v if utf8::is_utf8 $v;
-    $v = encode_base64($v, '');
-    $v =~ tr{+/}{-_};
-
-    $v =~ tr{\t-\x0d }{}d;
-
-    # No trailing paddings follows spec:
-    # Salmon protocol - rfc.section.3.1
-    # $v =~ s/=+$//s;
-    return $v;
-};
-
-# Returns the b64 urlsafe decoded string
-sub b64url_decode {
-    my $v = shift;
-    return '' unless $v;
-    $v =~ tr{-_}{+/};
-
-    if (my $padding = (length($v) % 4)) {
-	$v .= '=' x (4 - $padding);
-    };
-    
-    return decode_base64($v);
-};
-
 1;
 
 __END__
@@ -516,18 +483,6 @@ Returns the string in compact notation as described in [...].
 
 L<Mojolicious::Plugin::MagicKey> implements the following functions,
 that can be imported.
-
-=head2 C<b64url_encode>
-
-  print b64url_encode('This is a message');
-
-Encodes a string 64-based with URL safe characters.
-
-=head2 C<b64url_encode>
-
-  print b64url_decode('VGhpcyBpcyBhIG1lc3NhZ2U=');
-
-Decodes a 64-based string with URL safe characters.
 
 =head1 DEPENDENCIES
 

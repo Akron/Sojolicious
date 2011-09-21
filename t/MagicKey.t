@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-use Test::More tests => 26;
+use Test::More tests => 27;
 use Math::BigInt try => 'GMP,Pari';
 use strict;
 use warnings;
@@ -11,8 +11,8 @@ use lib '../lib';
 our $module;
 BEGIN {
     our $module = 'Mojolicious::Plugin::MagicSignatures::Key';
-    use_ok($module, qw(b64url_encode
-                       b64url_decode));            # 1
+    use_ok($module);                                # 1
+    use_ok('Mojolicious::Plugin::Util::Base64url'); # 2
 };
 
 my $test_msg = 'This is a small message test.';

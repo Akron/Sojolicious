@@ -47,7 +47,8 @@ sub register {
 	'pubsub' => sub {
 	    my ($route, $param) = @_;
 
-	    return unless $param eq 'cb'; # 'hub' is currently not supported
+	    return unless $param eq 'cb';
+	    # 'hub' is currently not supported
 	    
 	    # Set endpoint if enabled
 	    if (exists $mojo->renderer->helpers->{'endpoint'}) {

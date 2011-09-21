@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::MagicSignatures::Envelope;
 use Mojo::Base '-base';
-use Mojolicious::Plugin::MagicSignatures::Key qw(b64url_encode b64url_decode);
+# use Mojolicious::Plugin::MagicSignatures::Key qw(b64url_encode b64url_decode);
+use Mojolicious::Plugin::Util::Base64url;
 use Mojo::Command;
 use Mojo::DOM;
 use Mojo::Template;

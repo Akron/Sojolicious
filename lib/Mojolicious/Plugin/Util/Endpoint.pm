@@ -3,6 +3,9 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 use Mojo::URL;
 
+# Endpoint hash
+our %endpoints;
+
 # Register Plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
@@ -13,9 +16,9 @@ sub register {
 	    my ($route, $name, $param) = @_;
 
 	    # Endpoint already defined
-	    if ($mojo->defaults('endpoint.'.$name)) {
+	    if (exists $endpoints{$name}) {
 		$mojo->log->debug(qq{Route endpoint "$name" already defined.});
-		return $route;
+		return $route;		
 	    };
 
 	    # Route defined
@@ -74,7 +77,7 @@ sub register {
 		s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
 
 	    # Set to stash
-	    $mojo->defaults('endpoint.'.$name => $endpoint);
+	    $endpoints{$name} = $endpoint;
 
 	    return $route;
 	});
@@ -88,25 +91,25 @@ sub register {
 	    my $given_param = shift || {};
 	    
 	    # Endpoint undefined
-	    unless (defined $mojo->defaults('endpoint.'.$name)) {
+	    unless (defined $endpoints{$name}) {
 		$c->app->log->debug(qq{Endpoint "$name" not defined.});
 		return '';
 	    };
 
 	    # Get url for route
-	    my $endpoint = $mojo->defaults('endpoint.' . $name);;
+	    my $endpoint = $endpoints{$name};
 
 	    # Get stash or defaults hash
-	    my $stash_param = ref($c) eq 'Mojolicious::Controller' ? $c->stash : 
-		ref($c) eq 'Mojolicious' ? $c->defaults : {};
+	    my $stash_param = ref($c) eq 'Mojolicious::Controller' ?
+		$c->stash : ref($c) eq 'Mojolicious' ? $c->defaults : {};
 	    	       
 	    # Interpolate template
 	    pos($endpoint) = 0;
 	    while ($endpoint =~ /\{([^\}\?}\?]+)\??\}/g) {
 		# Save search position
 		# Todo: Not exact!
-		my $p = pos($endpoint) - length($1) + 2;
 		my $val = $1;
+		my $p = pos($endpoint) - length($val) - 1;
 
 		my $fill = undef;
 		# Look in given param
@@ -120,11 +123,13 @@ sub register {
 		};
 
 		if (defined $fill) {
-		    $endpoint =~ s/\{$val\??\}/b($fill)->url_escape/e;
+		    $fill = b($fill)->url_escape;
+		    $endpoint =~ s/\{$val\??\}/$fill/;
 		};
 
 		# Reset search position
-		pos($endpoint) = $p;
+		# (not exact if it was optional)
+		pos($endpoint) = $p + length($fill);
 	    };
 	    
 	    # Ignore optional placeholders
@@ -138,6 +143,21 @@ sub register {
 	    };
 
 	    return $endpoint;
+	});
+
+    # Add 'endpoints' helper
+    $mojo->helper(
+	'endpoints' => sub {
+	    my $c = shift;
+
+	    # Get all endpoints
+	    my %endpoint_hash;
+	    foreach (keys %endpoints) {
+		$endpoint_hash{$_} = $c->endpoint($_);
+	    };
+
+	    # Return endpoint hash
+	    return \%endpoint_hash;
 	});
 };
 
@@ -241,6 +261,18 @@ the controller and fill the template variables.
 
 The special parameter C<?> can be set C<undef> to ignore
 all undefined optional template parameters.
+
+=head2 C<endpoints>
+
+  # In Controller:
+  my $hash = $self->endpoints;
+
+  while (my ($key, $value) = each %$hash) {
+    print $key, ' => ', $value, "\n";
+  };
+
+Returns a hash of all endpoints, intterpolated with the current
+controller stash.
 
 =head1 DEPENDENCIES
 

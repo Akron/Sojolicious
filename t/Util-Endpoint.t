@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 use strict;
 use warnings;
 
@@ -6,8 +6,9 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 17;
+use Test::More tests => 23;
 use Test::Mojo;
+
 use Mojolicious::Lite;
 use Mojo::ByteStream 'b';
 
@@ -155,3 +156,29 @@ is($app->endpoint('test6' =>
 		  }),
    '/suggest?c={foo}&d={BAR}&e=check&f=%2A',
    'endpoint 17');
+
+my $hash = $app->endpoints;
+
+is ($hash->{test1},
+    'https://sojolicio.us/test',
+    'hash-test 1');
+
+is ($hash->{test2},
+    'https://sojolicio.us/test?a={var1}',
+    'hash-test 2');
+
+is ($hash->{test3},
+    'http://sojolicio.us/test?a={var1}&b={var2}',
+    'hash-test 3');
+
+is ($hash->{test4},
+    'http://sojolicio.us/suggest?q={searchTerms}&start={startIndex?}',
+    'hash-test 4');
+
+is ($hash->{test5},
+    '/suggest?a={foo?}&b={bar?}&c={foo}&d={BAR}',
+    'hash-test 5');
+
+is ($hash->{test6},
+    '/suggest?a={foo?}&b={bar?}&c={foo}&d={BAR}&e={test:foo?}&f=%2A',
+    'hash-test 6');
