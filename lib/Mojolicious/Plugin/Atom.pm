@@ -1,10 +1,7 @@
 package Mojolicious::Plugin::Atom;
 use Mojo::Base 'Mojolicious::Plugin';
 
-our $atom_ns;
-BEGIN {
-    our $atom_ns =  'http://www.w3.org/2005/Atom';
-};
+use constant ATOM_NS =>  'http://www.w3.org/2005/Atom';
 
 # Register Plugin
 sub register {
@@ -48,11 +45,11 @@ sub new {
 	
 	return Mojolicious::Plugin::Atom::Document->new(
 	    $type,
-	    { 'xmlns' => $atom_ns });
+	    { 'xmlns' => ATOM_NS });
     } elsif (@_ == 3 && $_[1] eq 'extension') {
 	return Mojolicious::Plugin::Atom::Document->new(
 	    $_[0],
-	    { 'xmlns'      => $atom_ns,
+	    { 'xmlns'      => ATOM_NS,
 	      'serial:ext' => join(';', @{ $_[2] })
 	    })
     };
@@ -67,11 +64,8 @@ use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
 use Mojo::ByteStream 'b';
 use Mojolicious::Plugin::Date::RFC3339;
 
-our $xhtml_ns;
-BEGIN {
-    # Namespace declaration
-    our $xhtml_ns = 'http://www.w3.org/1999/xhtml';
-};
+# Namespace declaration
+use constant XHTML_NS => 'http://www.w3.org/1999/xhtml';
 
 # see http://search.cpan.org/~aristotle/XML-Atom-SimpleFeed-0.86/lib/XML/Atom/SimpleFeed.pm
 
@@ -185,7 +179,7 @@ sub new_text {
 					       %hash });
 
 	$c_node->add('div',
-		     { xmlns => $xhtml_ns,
+		     { xmlns => XHTML_NS,
 		       -type => 'raw' },
 		     $content);
 	

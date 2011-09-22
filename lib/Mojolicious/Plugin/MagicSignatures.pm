@@ -4,10 +4,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojolicious::Plugin::MagicSignatures::Envelope;
 use Mojolicious::Plugin::MagicSignatures::Key;
 
-our $me_ns;
-BEGIN {
-    $me_ns = 'http://salmon-protocol.org/ns/magic-key';
-};
+use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
 # Register plugin
 sub register {
@@ -22,7 +19,7 @@ sub register {
 
     # Load Webfinger if not already loaded.
     unless (exists $mojo->renderer->helpers->{'webfinger'}) {
-	$mojo->plugin('Webfinger',
+	$mojo->plugin('Webfinger' =>
 		      {
 			  host   => $param->{'host'},
 			  secure => $param->{'secure'}
@@ -32,11 +29,9 @@ sub register {
     # Add 'magicenvelope' helper
     $mojo->helper(
 	'magicenvelope' => sub {
-	    shift;
-
 	    # New MagicEnvelope instance object
 	    my $me = Mojolicious::Plugin::MagicSignatures::Envelope
-		->new( @_ );
+		->new( @_[1..$#_] );
 	    
 	    # MagicEnvelope can not be build
 	    return if (!$me || !$me->data);
@@ -48,32 +43,30 @@ sub register {
     # Add 'magickey' helper
     $mojo->helper(
 	'magickey' => sub {
-	    shift;
-
 	    # New MagicKey instance object
 	    return Mojolicious::Plugin::MagicSignatures::Key
-		->new(@_);
+		->new( @_[1..$#_] );
 	});
 
     # Add 'verify_magicenvelope' helper
     $mojo->helper(
 	'verify_magicenvelope' => sub {
-	    return $plugin->verify_magicenvelope(@_);
+	    return $plugin->verify_magicenvelope( @_ );
 	});
 
     # Add 'get_magickeys' helper
     $mojo->helper(
 	'get_magickeys' => sub {
-	    return $plugin->get_magickeys(@_);
+	    return $plugin->get_magickeys( @_ );
 	});    
 
-    # Add magickey to webfinger
+    # Add magickey to webfinger document
     $mojo->hook(
 	'before_serving_webfinger' => sub {
 	    my ($c, $acct, $xrd) = @_;
 
 	    # Get keys
-	    my $mkeys = $c->get_magickeys('acct' => $acct,
+	    my $mkeys = $c->get_magickeys('acct'      => $acct,
 					  'discovery' => 0);
 
 	    return unless defined $mkeys->[0];
@@ -98,15 +91,16 @@ sub register {
 		my %att_hash = ('-type' => 'base64');
 
 		if ($mkey->[1]) {
-		    $xrd->add_ns('mk' => $me_ns) unless $first++;
+		    $xrd->add_ns('mk' => ME_NS) unless $first++;
 		    $att_hash{'mk:key_id'} = $mkey->[1] ;
 		};
 
-		$xrd->add_property($me_ns,
+		$xrd->add_property(ME_NS,
 				   \%att_hash,
 				   $mkey->[0]->to_string
 		    )->comment('MagicKey based on MagicSignatures-01');
 	    };
+	    return;
 	});
 };
 
@@ -152,7 +146,7 @@ sub get_magickeys {
 	    # Discovery based on spec-01
 	    # Key id is not specified
 	    unless (exists $param{key_id}) {
-		foreach (@{ $wf_xrd->find(qq{Property[type="$me_ns"]})}) {
+		foreach (@{ $wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
 		    
 		    # Create key from property
 		    my @key = ($plugin->magickey($c, $_->text(0)));
@@ -170,7 +164,7 @@ sub get_magickeys {
 	    # Key id is specified, maybe undef
 	    else {
 		my $key_id = $param{key_id};
-		foreach (@{$wf_xrd->find(qq{Property[type="$me_ns"]})}) {
+		foreach (@{$wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
 		    
 		    # Get key_ids from property
 		    my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });

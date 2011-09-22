@@ -8,13 +8,10 @@ has 'epoch';
 
 # Based on Mojo::Date
 
-our $RFC3339_RE;
-BEGIN {
-    # rfc3339 timestamp
-    our $RFC3339_RE = qr/^(\d{4})-(\d?\d)-(\d?\d)[Tt]
-                          (\d?\d):(\d?\d):(\d?\d)(?:\.\d*)?
-                          ([zZ]|[\-\+]?\d?\d(?::\d?\d)?)$/x;
-};
+# rfc3339 timestamp
+my $RFC3339_RE = qr/^(\d{4})-(\d?\d)-(\d?\d)[Tt]
+                     (\d?\d):(\d?\d):(\d?\d)(?:\.\d*)?
+                     ([zZ]|[\-\+]?\d?\d(?::\d?\d)?)$/x;
 
 # Constructor
 sub new {

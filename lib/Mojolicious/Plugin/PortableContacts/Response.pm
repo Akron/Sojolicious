@@ -5,10 +5,7 @@ use Mojolicious::Plugin::XML::Serial;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
 # Todo! Allow other valid values
-our @RESPONSE;
-BEGIN {
-    our @RESPONSE = qw/startIndex itemsPerPage totalResults/;
-};
+my @RESPONSE = qw/startIndex itemsPerPage totalResults/;
 
 has [qw/startIndex totalResults/] => 0;
 has 'itemsPerPage';

@@ -2,10 +2,7 @@ package Mojolicious::Plugin::ActivityStreams;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojolicious::Plugin::Atom;
 
-our $as_ns;
-BEGIN {
-    $as_ns = 'http://activitystrea.ms/schema/1.0/';
-};
+use constant AS_NS => 'http://activitystrea.ms/schema/1.0/';
 
 # Register Plugin
 sub register {
@@ -43,7 +40,7 @@ sub new {
 	bless($self,
 	      (ref($class) ? ref($class) : $class).'::Document');
 
-	$self->add_ns('activity' => $as_ns);
+	$self->add_ns('activity' => AS_NS);
 	return $self;
 
     };
@@ -59,10 +56,7 @@ package Mojolicious::Plugin::ActivityStreams::Document;
 use Mojolicious::Plugin::Atom;
 use Mojo::Base 'Mojolicious::Plugin::Atom::Document';
 
-our $as_ns;
-BEGIN {
-    $as_ns = $Mojolicious::Plugin::ActivityStreams::as_ns;
-};
+use constant AS_NS => 'http://activitystrea.ms/schema/1.0/';
 
 # New feed
 sub new_feed {
@@ -78,7 +72,7 @@ sub new_entry {
 sub add_actor {
     my $self = shift;
     my $actor = $self->SUPER::add_author( @_ );
-    $actor->add('activity:object-type', $as_ns.'person');
+    $actor->add('activity:object-type', AS_NS . 'person');
     return $actor;
 };
 
@@ -91,7 +85,7 @@ sub add_verb {
     # Add ns prefix if not given
     my $verb = shift;
     if (index($verb, '/') == -1) {
-	$verb = $as_ns.$verb;
+	$verb = AS_NS . $verb;
     };
 
     return $self->add('activity:verb', $verb);
@@ -111,7 +105,7 @@ sub _add_object_construct {
 
 	# Add ns prefix if not given
 	if (index($type, '/') == -1) {
-	    $type = $as_ns.lc($type);
+	    $type = AS_NS . lc($type);
 	};
 
 	$obj->add('activity:object-type', $type);

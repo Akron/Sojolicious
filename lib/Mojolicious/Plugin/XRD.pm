@@ -43,10 +43,9 @@ use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
 use Mojolicious::Plugin::Date::RFC3339;
 
 # Namespace declaration
-our ($xrd_ns, $xsi_ns);
-BEGIN {
-    our $xrd_ns = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
-    our $xsi_ns = 'http://www.w3.org/2001/XMLSchema-instance';
+use constant {
+    XRD_NS => 'http://docs.oasis-open.org/ns/xri/xrd-1.0',
+    XSI_NS => 'http://www.w3.org/2001/XMLSchema-instance'
 };
 
 # Constructor
@@ -57,8 +56,8 @@ sub new {
     unless ($_[0]) {
 	return $class->SUPER::new(
 	    'XRD', {
-		'xmlns'     => $xrd_ns,
-		'xmlns:xsi' => $xsi_ns
+		'xmlns'     => XRD_NS,
+		'xmlns:xsi' => XSI_NS
 	    });
     };
     

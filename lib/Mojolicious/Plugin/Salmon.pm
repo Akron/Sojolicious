@@ -4,15 +4,10 @@ use Mojo::Base 'Mojolicious::Plugin';
 has 'host';
 has 'secure' => 0;
 
-our ($salmon_ns_replies,
-     $salmon_ns_mentioned,
-     $me_mime);
-
-BEGIN {
-    $salmon_ns_replies   = 'http://salmon-protocol.org/ns/salmon-replies';
-    $salmon_ns_mentioned = 'http://salmon-protocol.org/ns/salmon-mention';
-    $me_mime             = 'application/magic-envelope';
-}
+use constant {
+    SALMON_REPLIES_NS   => 'http://salmon-protocol.org/ns/salmon-replies',
+    SALMON_MENTIONED_NS => 'http://salmon-protocol.org/ns/salmon-mention'
+};
 
 # Register plugin
 sub register {
@@ -70,7 +65,7 @@ sub register {
 			my ($c, $acct, $xrd) = @_;
 			
 			$xrd->add_link(
-			    $salmon_ns_replies,
+			    SALMON_REPLIES_NS,
 			    { 'href' => $c->endpoint('salmon-all-replies') }
 			    )->comment('Salmon Reply Endpoint');
 		    
@@ -91,7 +86,7 @@ sub register {
 			my ($c, $acct, $xrd) = @_;
 
 			$xrd->add_link(
-			    $salmon_ns_mentioned,
+			    SALMON_MENTIONED_NS,
 			    { 'href' => $c->endpoint('salmon-mentioned') }
 			    )->comment('Salmon Mentioned Endpoint');
 
@@ -132,7 +127,7 @@ sub salmon {
 
     my $ct = $c->req->headers->content_type;
 
-    if (index($ct, $me_mime) == 0) {
+    if (index($ct, 'application/magic-envelope') == 0) {
         my ($unwrapped_ct,
 	    $unwrapped_body) =
 		$c->magicenvelope($c->req->body)->data;

@@ -12,11 +12,9 @@ has encoding  => 'base64url';
 has data_type => 'text/plain';
 
 
-our ($me_ns, @val_array);
-BEGIN {
-    our $me_ns     = 'http://salmon-protocol.org/ns/magic-env';
-    our @val_array = qw/data data_type encoding alg sigs/;
-};
+use constant ME_NS => 'http://salmon-protocol.org/ns/magic-env';
+
+my @val_array = qw/data data_type encoding alg sigs/;
 
 # Constructor
 sub new {
@@ -34,7 +32,7 @@ sub new {
 	# Succesfull extracted envelope?
 	my $env = $dom->at('env');
 	$env = $dom->at('provenance') unless $env;
-	return if (!$env || $env->namespace ne $me_ns);
+	return if (!$env || $env->namespace ne ME_NS);
 
 	# Retrieve and edit data
 	my $data = $env->at('data');

@@ -4,15 +4,11 @@ use warnings;
 use Mojo::Base 'Mojo::DOM';
 use Mojo::ByteStream 'b';
 
-our ($indent, $serial_ns, $pi);
-BEGIN {
-    # Indentation for pretty printing
-    $indent = '  ';
-
-    # Namespace
-    $serial_ns = 'http://sojolicio.us/ns/xml-serial';
-
-    $pi = q(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>);
+use constant {
+    I         => '  ',
+    SERIAL_NS => 'http://sojolicio.us/ns/xml-serial',
+    PI        => '<?xml version="1.0" encoding="UTF-8" '.
+                 'standalone="yes"?>'
 };
 
 sub new {
@@ -32,12 +28,14 @@ sub new {
 	my $att  = shift if (ref( $_[0] ) eq 'HASH');
 	my $text = shift;
 
-	my $element = qq(<$name xmlns:serial="$serial_ns" />);
+	my $element = qq(<$name xmlns:serial=").SERIAL_NS.'"';
 	if ($text) {
-	    $element = qq(<$name xmlns:serial="$serial_ns">$text</$name>);
+	    $element .= ">$text</$name>";
+	} else {
+	    $element .= ' />';
 	};
 
-	my $root = $class->SUPER::new($pi . $element, xml => 1);
+	my $root = $class->SUPER::new(PI . $element, xml => 1);
 
 	# Transform special attributes
 	foreach my $special (grep(/^-/, keys %$att)) {
@@ -195,13 +193,13 @@ sub _render_pretty {
     }
     
     elsif ($e eq 'comment') {
-	my $comment = join("\n     ".($indent x $i),
+	my $comment = join("\n     ".(I x $i),
 			   split('; ',$tree->[1]));
-	return "\n".($indent x $i).'<!-- '.$comment." -->\n";
+	return "\n".(I x $i).'<!-- '.$comment." -->\n";
     }
     
     elsif ($e eq 'pi') {
-	return ($indent x $i).'<?' . $tree->[1] . "?>\n";
+	return (I x $i).'<?' . $tree->[1] . "?>\n";
 
     } elsif ($e eq 'root') {
 
@@ -232,10 +230,10 @@ sub _element ($$) {
 	unless $qname =~ /^(?:[a-zA-Z_]+:)?[^\s]+$/;
 
     # Start start tag
-    my $content = ($indent x $i).'<'.$qname;
+    my $content = (I x $i).'<'.$qname;
 
     # Add attributes
-    $content .= _attr(($indent x $i).(' ' x (length($qname) + 2)), $attr);
+    $content .= _attr((I x $i).(' ' x (length($qname) + 2)), $attr);
 
     # Has the element a child?
     if ($child->[0]) {
@@ -260,13 +258,13 @@ sub _element ($$) {
 # temp
 #		    my @lines = grep($_, split(/(.{64})/, $b64_string));
 #		    foreach (@lines) {
-#			$content .= ($indent x ($i + 1)).$_."\n"
+#			$content .= (I x ($i + 1)).$_."\n"
 #		    };
 
-		    $content .= $indent x ($i + 1);
-		    $content .= join( "\n" . ( $indent x ($i + 1) ),
+		    $content .= I x ($i + 1);
+		    $content .= join( "\n" . ( I x ($i + 1) ),
 				      ( unpack '(A60)*', $b64_string ) );
-		    $content .= "\n" . ($indent x $i);
+		    $content .= "\n" . (I x $i);
 		}
 
 		elsif ($attr->{'serial:type'} eq 'escape') {
@@ -305,7 +303,7 @@ sub _element ($$) {
 	    };
 
 	    # Correct Indent
-	    $content .= ($indent x $i);
+	    $content .= (I x $i);
 
 	};
 

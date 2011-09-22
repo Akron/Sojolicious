@@ -4,6 +4,8 @@ use Mojo::ByteStream 'b';
 use Mojo::Util qw/trim/;
 use Mojo::IOLoop;
 
+use constant ATOM_NS => 'http://www.w3.org/2005/Atom';
+
 has 'host';
 has 'secure' => 0;
 
@@ -12,8 +14,7 @@ has 'lease_seconds' => (30 * 24 * 60 * 60);
 has 'hub';
 
 our ($global_param,
-     @challenge_chars,
-     $atom_ns);
+     @challenge_chars);
 
 BEGIN {
     $global_param = {
@@ -21,7 +22,6 @@ BEGIN {
 	    'application/x-www-form-urlencoded'
     };
     @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9);
-    $atom_ns = 'http://www.w3.org/2005/Atom';
 };
 
 # Register plugin

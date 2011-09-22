@@ -1,10 +1,7 @@
 package Mojolicious::Plugin::OStatus;
 use Mojo::Base 'Mojolicious::Plugin';
 
-our $ostatus_ns;
-BEGIN {
-    $ostatus_ns = 'http://ostatus.org/schema/1.0/';
-};
+use constant OSTATUS_NS => 'http://ostatus.org/schema/1.0/';
 
 # Register plugin
 sub register {
@@ -100,7 +97,7 @@ sub add_attention {
     my $self = shift;
     my $entry = shift;
 
-    $entry->add_ns('ostatus' => $ostatus_ns);
+    $entry->add_ns('ostatus' => OSTATUS_NS);
 
     $entry->add_link(
 	rel => 'ostatus:attention',
@@ -110,7 +107,7 @@ sub add_attention {
 
 sub add_conversation {
     my $self = shift;
-    $entry->add_ns('ostatus' => $ostatus_ns);
+    $entry->add_ns('ostatus' => OSTATUS_NS);
     $entry->add_link(
 	rel => 'ostatus:attention',
 	href => shift

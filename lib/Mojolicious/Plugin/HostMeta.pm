@@ -6,10 +6,7 @@ use Storable 'dclone';
 has 'host';
 has 'secure' => 0;
 
-our $WKPATH;
-BEGIN {
-    our $WKPATH = '/.well-known/host-meta';
-};
+use constant WK_PATH => '/.well-known/host-meta';
 
 # Register plugin
 sub register {
@@ -67,7 +64,7 @@ sub register {
     
     
     # Establish /.well-known/host-meta route
-    my $route = $mojo->routes->route($WKPATH);
+    my $route = $mojo->routes->route( WK_PATH );
 
     # Define endpoint
     $route->endpoint(
@@ -127,7 +124,7 @@ sub _get_hostmeta {
     return $hostmeta_xrd if $hostmeta_xrd;
 
     # 1. Check https:, then http:
-    my $host_hm_path = $host.$WKPATH;
+    my $host_hm_path = $host . WK_PATH;
 
     # Get user agent
     my $ua = $c->ua->max_redirects(3);
@@ -136,7 +133,7 @@ sub _get_hostmeta {
     # Fetch Host-Meta XRD
     # First try ssl
     my $secure = 'https://';
-    my $host_hm = $ua->get($secure.$host_hm_path);
+    my $host_hm = $ua->get($secure . $host_hm_path);
 
     if (!$host_hm ||
 	!$host_hm->res->is_status_class(200)
