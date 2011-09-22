@@ -19,8 +19,7 @@ sub register {
     # Add 'render_xrd' helper
     $mojo->helper(
 	'render_xrd' => sub {
-	    my $c = shift;
-	    my $xrd = shift;
+	    my ($c, $xrd) = @_;
 
 	    $c->stash('format' => $c->param('format')) unless $c->stash('format');
 
@@ -58,8 +57,8 @@ sub new {
     unless ($_[0]) {
 	return $class->SUPER::new(
 	    'XRD', {
-		'xmlns'     => 'http://docs.oasis-open.org/ns/xri/xrd-1.0',
-		'xmlns:xsi' => 'http://www.w3.org/2001/XMLSchema-instance'
+		'xmlns'     => $xrd_ns,
+		'xmlns:xsi' => $xsi_ns
 	    });
     };
     
@@ -75,7 +74,8 @@ sub add_property {
 	type => shift,
 	%{ shift(@_) } 
 	);
-    return $self->add('Property', \%hash, @_ );
+
+    return $self->add('Property' => \%hash => @_ );
 };
 
 # Get Property
@@ -97,7 +97,7 @@ sub add_link {
 	rel => shift,
 	%{ shift(@_) } 
 	);
-    return $self->add('Link', \%hash, @_ );
+    return $self->add('Link' => \%hash => @_ );
 };
 
 # Get Link
@@ -119,9 +119,7 @@ sub get_expiration {
  
     return 0 unless $exp;
 
-    return Mojolicious::Plugin::Date::RFC3339->new($exp)->epoch;
-
-    return 0;
+    return Mojolicious::Plugin::Date::RFC3339->new($exp->text)->epoch;
 };
 
 # Render JRD
@@ -187,7 +185,7 @@ sub _to_json_titles {
     my %titles;
     $node->find('Title')->each(
 	sub {
-	    my $val = $_->text;
+	    my $val  = $_->text;
 	    my $lang = $_->attrs->{'xml:lang'} || 'default';
 	    $titles{$lang} = $val;
 	});

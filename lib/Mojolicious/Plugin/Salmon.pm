@@ -1,14 +1,13 @@
 package Mojolicious::Plugin::Salmon;
-use strict;
-use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 
 has 'host';
-has secure => 0;
+has 'secure' => 0;
 
 our ($salmon_ns_replies,
      $salmon_ns_mentioned,
      $me_mime);
+
 BEGIN {
     $salmon_ns_replies   = 'http://salmon-protocol.org/ns/salmon-replies';
     $salmon_ns_mentioned = 'http://salmon-protocol.org/ns/salmon-mention';
@@ -19,10 +18,8 @@ BEGIN {
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
-
-    # Dependencies
     # Load magic signatures if not loaded
-    # Automatically loads webfinger and hostmeta and endpoint and xrd.
+    # Automatically loads webfinger, hostmeta, endpoint and xrd.
     unless (exists $mojo->renderer->helpers->{'magicenvelope'}) {
 	$mojo->plugin('MagicSignatures', {'host' => $param->{'host'}} );
     };
@@ -38,7 +35,6 @@ sub register {
     # Does it need ssl or not
     $plugin->secure( $param->{secure} );
 
-    # Shortcuts
     # Add 'salmon' shortcut
     $mojo->routes->add_shortcut(
 	'salmon' => sub {
@@ -84,7 +80,6 @@ sub register {
 		$route->post->to(
 		    'cb' => sub { $plugin->_all_replies( @_ ) }
 		    );
-
 	    }
 
 	    # Mention route
@@ -120,7 +115,7 @@ sub register {
 		    { href => $salmon_signer_url }
 		    );
 		$link->comment('Salmon Signer Endpoint');
-		$link->add('Title', 'Salmon Endpoint');
+		$link->add('Title' => 'Salmon Endpoint');
 
 
 		$route->post->to(
@@ -135,10 +130,10 @@ sub salmon {
     my $plugin = shift;
     my $c = shift;
 
-    my $content_type = $c->req->headers->content_type;
+    my $ct = $c->req->headers->content_type;
 
-    if (index($content_type, $me_mime) == 0) {
-        my ($unwrapped_content_type,
+    if (index($ct, $me_mime) == 0) {
+        my ($unwrapped_ct,
 	    $unwrapped_body) =
 		$c->magicenvelope($c->req->body)->data;
 
@@ -157,12 +152,12 @@ sub salmon {
 	$c->respond_to(
 	    'me+xml'  => { text =>
 			       'XML: '.
-			       $unwrapped_content_type.
+			       $unwrapped_ct.
 			       "\n\n".
 			       $unwrapped_body },
 	    'me+json' => { text =>
 			       'JSON: '.
-			       $unwrapped_content_type.
+			       $unwrapped_ct.
 			       "\n\n".
 			       $unwrapped_body}
 	    );
@@ -234,8 +229,8 @@ sub _all_replies {
 		template => 'salmon',
 		title    => 'Salmon Error',
 		content  => 'The posted magic '.
-		'envelope seems '.
-		'to be empty.',
+		            'envelope seems '.
+		            'to be empty.',
 		template_class => __PACKAGE__
 		);
 	};
@@ -259,8 +254,8 @@ sub _all_replies {
 
 	unless ($c->rendered) {
 	    $c->render(
-		status => 200,
-		template => 'salmon-reply-ok',
+		status         => 200,
+		template       => 'salmon-reply-ok',
 		template_class => __PACKAGE__
 		);
 	};
@@ -273,8 +268,8 @@ sub _all_replies {
 	    template => 'salmon',
 	    title    => 'Salmon Error',
 	    content  => 'The posted magic '.
-	    'envelope seems '.
-	    'to be empty.',
+	                'envelope seems '.
+	                'to be empty.',
 	    template_class => __PACKAGE__
 	    );
     };
@@ -294,8 +289,8 @@ sub _mentioned {
 		template => 'salmon',
 		title    => 'Salmon Error',
 		content  => 'The posted magic '.
-		'envelope seems '.
-		'to be empty.',
+		            'envelope seems '.
+		            'to be empty.',
 		template_class => __PACKAGE__
 		);
 	};
@@ -323,8 +318,8 @@ sub _mentioned {
 	    template => 'salmon',
 	    title    => 'Salmon Error',
 	    content  => 'The posted magic '.
-	    'envelope seems '.
-	    'to be empty.',
+	                'envelope seems '.
+	                'to be empty.',
 	    template_class => __PACKAGE__
 	    );
     };

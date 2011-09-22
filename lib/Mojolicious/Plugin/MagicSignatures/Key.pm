@@ -1,15 +1,30 @@
 package Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Base -base;
 use Mojolicious::Plugin::Util::Base64url;
-
-# Implement alternative with PARI if existent
-use Math::BigInt try => 'GMP,Pari';
 use Digest::SHA qw(sha256);
+
+# Implement with GMP or PARI if existent
+use Math::BigInt try => 'GMP,Pari';
 
 has [qw/n d emLen/] => 0;
 has e => 65537;
 
-# has ns => sub { 'http://salmon-protocol.org/ns/magic-key' };
+use constant {
+    # http://www.ietf.org/rfc/rfc3447.txt
+    # [Ch. 9.2 Notes 1]
+    DER_MD2    => "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48".
+	          "\x86\xf7\x0d\x02\x02\x05\x00\x04\x10",
+    DER_MD5    => "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48".
+                  "\x86\xf7\x0d\x02\x05\x05\x00\x04\x10",
+    DER_SHA1   => "\x30\x21\x30\x09\x06\x05\x2b\x0e\x03".
+                  "\x02\x1a\x05\x00\x04\x14",
+    DER_SHA256 => "\x30\x31\x30\x0d\x06\x09\x60\x86\x48".
+                  "\x01\x65\x03\x04\x02\x01\x05\x00\x04\x20",
+    DER_SHA384 => "\x30\x41\x30\x0d\x06\x09\x60\x86\x48".
+                  "\x01\x65\x03\x04\x02\x02\x05\x00\x04\x30",
+    DER_SHA512 => "\x30\x51\x30\x0d\x06\x09\x60\x86\x48".
+                  "\x01\x65\x03\x04\x02\x03\x05\x00\x04\x40"
+};
 
 # Construct a new MagicSignature object
 # Needs a key (private or public)
@@ -28,7 +43,10 @@ sub new {
 
 	$self = $class->SUPER::new;
 
+	# Delete whitespace
 	$string =~ s/\s+//mg;
+
+	# Split MagicKey
 	my ( $type, $mod, $exp, $private_exp )
 	    = split(/\./, $string);
 	
@@ -143,25 +161,9 @@ sub to_string {
     return $mkey;
 };
 
-# http://www.ietf.org/rfc/rfc3447.txt
-# Ch. 9.2 Notes 1
-#sub _der_md2    { "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48".
-#	          "\x86\xf7\x0d\x02\x02\x05\x00\x04\x10"     };
-#sub _der_md5    { "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48".
-#                  "\x86\xf7\x0d\x02\x05\x05\x00\x04\x10"     };
-#sub _der_sha1   { "\x30\x21\x30\x09\x06\x05\x2b\x0e\x03".
-#                  "\x02\x1a\x05\x00\x04\x14"                 };
-sub _der_sha256 { "\x30\x31\x30\x0d\x06\x09\x60\x86\x48".
-                  "\x01\x65\x03\x04\x02\x01\x05\x00\x04\x20" };
-#sub _der_sha384 { "\x30\x41\x30\x0d\x06\x09\x60\x86\x48".
-#                  "\x01\x65\x03\x04\x02\x02\x05\x00\x04\x30" };
-#sub _der_sha512 { "\x30\x51\x30\x0d\x06\x09\x60\x86\x48".
-#                  "\x01\x65\x03\x04\x02\x03\x05\x00\x04\x40" };
 
-
-# http://www.ietf.org/rfc/rfc3447.txt
-# Ch. 8.1.1
 sub _sign_emsa_pkcs1_v1_5 ($$) {
+    # http://www.ietf.org/rfc/rfc3447.txt [Ch. 8.1.1]
     my ($K, $M) = @_;
 
     my $k = $K->emLen;
@@ -175,18 +177,18 @@ sub _sign_emsa_pkcs1_v1_5 ($$) {
 #      "intended encoded message length too short," output "RSA modulus
 #      too short" and stop.
 
-    my $m = _os2ip($EM);
-    my $s = _rsasp1($K, $m);
-    my $S = _i2osp($s, $k);
+    my $m  = _os2ip($EM);
+    my $s  = _rsasp1($K, $m);
+    my $S  = _i2osp($s, $k);
     my $ES = Math::BigInt->new($s);
 
     return $ES;
 };
 
-# http://www.ietf.org/rfc/rfc3447.txt
-# Ch. 8.2.2
 sub _verify_emsa_pkcs1_v1_5 {
-    my ($K, $M, $S) = @_; # k => key, M -> message, s -> signature
+    # http://www.ietf.org/rfc/rfc3447.txt [Ch. 8.2.2]
+    my ($K, $M, $S) = @_;
+    # key, message, signature
 
     my $k = $K->emLen;
 
@@ -226,9 +228,8 @@ sub _verify_emsa_pkcs1_v1_5 {
     # additional code.
 };
 
-# http://www.ietf.org/rfc/rfc3447.txt
-# Ch. 5.2.1 
 sub _rsasp1 {
+    # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.1] 
     my ($K, $m) = @_;
 
     if ($m > $K->n) {
@@ -237,7 +238,8 @@ sub _rsasp1 {
     };
 
     if ($K->n) {
-	return Math::BigInt->new($m)->bmodpow($K->d, $K->n);
+	return Math::BigInt->new($m)
+	                   ->bmodpow($K->d, $K->n);
     };
 
     # Not implemented yet
@@ -249,9 +251,8 @@ sub _rsasp1 {
     return 0;
 };
 
-# http://www.ietf.org/rfc/rfc3447.txt
-# Ch. 5.2.2
 sub _rsavp1 {
+    # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.2]
     my ($K, $s) = @_;
 
     if ($s > ($K->n->bsub(1))) {
@@ -263,9 +264,8 @@ sub _rsavp1 {
     return Math::BigInt->new($s)->bmodpow($K->e, $K->n);
 };
 
-# http://www.ietf.org/rfc/rfc3447.txt
-# Ch. 9.2
 sub _emsa_encode {
+    # http://www.ietf.org/rfc/rfc3447.txt [Ch. 9.2]
     my ($M, $emLen, $hash_digest) = @_;
 
     $hash_digest ||= 'sha-256';
@@ -277,7 +277,7 @@ sub _emsa_encode {
     if ($hash_digest eq 'sha-256') {
 	$H = sha256($M);  # hex?
 #	$H = Digest::SHA->new('sha-256')->add($M)->digest;  # hex?
-	$T = _der_sha256 . $H;
+	$T = DER_SHA256 . $H;
 	$tLen = length( $T );
     }
 
@@ -317,10 +317,11 @@ sub _emsa_encode {
     return $EM;
 };
 
-# http://cpansearch.perl.org/src/GBARR/Convert-ASN1-0.22/lib/Convert/ASN1.pm
-# http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
-# Convert from an octet string to a bigint
+# Convert from octet string to bigint
 sub _os2ip ($) {
+    # http://cpansearch.perl.org/src/GBARR/Convert-ASN1-0.22/lib/Convert/ASN1.pm
+    # http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
+
     my $os = shift;
     my $result = Math::BigInt->new(0);
 
@@ -334,28 +335,9 @@ sub _os2ip ($) {
     return $neg ? ($result + 1) * -1 : $result;
 }
 
-# http://cpansearch.perl.org/src/GBARR/Convert-ASN1-0.22/lib/Convert/ASN1.pm
-# Convert from a bigint to an octet string
-sub xxx_i2osp {
-    my $num = Math::BigInt->new( shift );
-    my $neg = $num < 0 and $num = abs($num+1);
-
-    my $result = '';
-
-    while($num != 0) {
-        my $r = $num % 256;
-        $num = ($num - $r) / 256;
-        $result .= chr( $r );
-    }
-
-    $result ^= chr(255) x length($result) if $neg;
-
-    return scalar reverse $result;
-};
-
-# Convert from a bigint to an octet string
-# http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
+# Convert from bigint to octet string
 sub _i2osp {
+    # http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
     my $num = Math::BigInt->new( shift ); 
     my $l = shift || 0;
 
@@ -397,8 +379,9 @@ sub _octet_len {
 
 # Returns the bitlength of the integer
 sub _bitsize ($) {
-    my $x = Math::BigInt->new( shift );
-    return ( length( $x->as_bin ) - 2 );
+    my $int = Math::BigInt->new( shift );
+    return 0 unless $int;
+    return ( length( $int->as_bin ) - 2 );
 };
 
 1;
@@ -486,7 +469,8 @@ that can be imported.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>.
+L<Mojolicious>,
+L<Mojolicious::Plugin::Util::Base64url>.
 Either L<Math::BigInt::GMP> or L<Math::BigInt::Pari> are recommended.
 
 

@@ -1,17 +1,16 @@
 package Mojolicious::Plugin::Webfinger;
-use strict;
-use warnings;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 
 has 'host';
 has 'secure' => 0;
 
+# Register Plugin
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
     # Load Host-Meta if not already loaded.
-    # This automatically loads the 'XRD' plugin.
+    # This automatically loads the XRD and Endpoints plugins.
     unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
 	$mojo->plugin('HostMeta', {'host' => $param->{'host'} });
     };
@@ -39,13 +38,13 @@ sub register {
 	    $acct =~ s/^acct://i;
 
 	    # Split user from domain
-	    my ($user, $domain) = split('@',lc $acct);
+	    my ($user, $domain) = split('@', lc $acct);
 	    
 	    # Use host domain if no domain is given
 	    $domain ||= $plugin->host;
 
 	    # Create norm writing
-	    my $norm = 'acct:'.$user.'@'.$domain;
+	    my $norm = 'acct:' . $user . '@' . $domain;
 
 	    return ($user, $domain, $norm) if wantarray;
 	    return $norm;
@@ -54,36 +53,30 @@ sub register {
     # Add 'webfinger' shortcut
     $mojo->routes->add_shortcut(
 	'webfinger' => sub {
-	    my $route = shift;
-	    my $param_key = shift;
-
-	    my $lrdd = { type => 'application/xrd+xml' };
-    
-	    # Make hash from param
-	    my $param = $param_key ? [ $param_key => '{uri}' ] : undef;
+	    my ($route, $param_key) = @_;
 
 	    # Set endpoint-uri
 	    $route->endpoint(
 		'webfinger' => {
 		    scheme => $plugin->secure ? 'https' : 'http',
 		    host   => $plugin->host,
-		    query  => $param
+		    query  => $param_key ? [ $param_key => '{uri}' ] : undef
 		});
 
 	    # Retrieve Endpoint-Uri
 	    my $endpoint = $mojo->endpoint('webfinger');
+
+	    # Create lrdd link attributes
+	    my $lrdd = { type => 'application/xrd+xml' };
 	    
 	    # If It's a template, point the lrdd to it
-	    if ($endpoint =~ m/\{(?:.+?)\}/) {
-		$lrdd->{template} = $endpoint;
-	    } else {
-		$lrdd->{href} = $endpoint;
-	    };
+	    my $type = index($endpoint, '{uri}') > 0 ? 'template' : 'href';
+	    $lrdd->{$type} = $endpoint;
 
 	    # Add Route to Hostmeta
-	    my $link = $mojo->hostmeta->add_link('lrdd' => $lrdd);
-	    $link->comment('Webfinger');
-	    $link->add('Title','Resource Descriptor');
+	    $mojo->hostmeta->add_link('lrdd' => $lrdd)
+		 ->comment('Webfinger')
+		 ->add('Title','Resource Descriptor');
 
 	    # Point the route to a callback
 	    $route->to(
@@ -92,40 +85,35 @@ sub register {
 
 		    # Get uri from route
 		    my $uri = $c->stash('uri');
-  
-		    $uri = $c->param($param_key) if ($param_key && !$uri);
-
+  		    $uri = $c->param($param_key) if ($param_key && !$uri);
 		    $uri = $c->parse_acct($uri);
 
+		    # Run 'on_prepare_webfinger' hook
 		    my $ok = 0;
 		    $mojo->plugins->run_hook(
-			'on_prepare_webfinger' => $plugin,
-			$c,
-			$uri,
-			\$ok
-			);
+			'on_prepare_webfinger' => (
+			    $plugin, $c, $uri, \$ok
+			));
 
-		    unless ($ok) {
-			return $c->render_not_found;
-		    };
+		    # uri was not resolved
+		    return $c->render_not_found unless $ok;
 
-		    my $xrd = $plugin->_get_finger($c,$uri);
+		    # Get local xrd document
+		    my $xrd = $plugin->_get_finger($c, $uri);
 		    
-		    if ($xrd) {
-			return $c->render_xrd($xrd);
-		    }
-		    
+		    # Serve local XRD document
+		    return $c->render_xrd($xrd) if $xrd;
+
 		    # Not found
-		    else {
-			$c->render_not_found;
-		    };
+		    return $c->render_not_found;
 		});
 	});
 };
 
+# Fetch webfinger
 sub _get_webfinger {
     my $plugin = shift;
-    my $c = shift;
+    my $c      = shift;
 
     # Get user and domain
     my ($user, $domain, $norm) = $c->parse_acct( shift );
@@ -137,11 +125,11 @@ sub _get_webfinger {
     # Hook for caching
     my $acct_xrd;
     $c->app->plugins->run_hook(
-	'before_fetching_webfinger',
-	$c,
-	$norm,
-	\$acct_xrd
-	);
+	'before_fetching_webfinger' => (
+	    $c,	$norm,\$acct_xrd
+	));
+
+    # Serve XRD from cache
     return $acct_xrd if $acct_xrd;
 
     # Get host-meta from domain
@@ -191,64 +179,59 @@ sub _get_webfinger {
 #
 #     } else {
 	  
+    # Webfinger XRD document
     my $acct_xrd_doc = $ua->get($webfinger_uri);
+
+    # Webfinger request was a success
     if ($acct_xrd_doc &&
-	$acct_xrd_doc->res->is_status_class(200)
-	) {
+	$acct_xrd_doc->res->is_status_class(200)) {
 	
 	# Return Mojolicious::Plugin::XRD object
 	$acct_xrd = $c->new_xrd($acct_xrd_doc->res->body);
 
+	# Retrieved document is no XRD
+	return undef unless $acct_xrd;
+	
 	# Hook for caching
 	$c->app->plugins->run_hook(
-	    'after_fetching_webfinger',
-	    $c,
-	    $norm,
-	    \$acct_xrd,
-	    $acct_xrd_doc->res
-	    );
-	return $acct_xrd;
-	
-    } else {
-	
-	# Found no webfinger document
-	return undef;
-    };
+	    'after_fetching_webfinger'=> (
+		$c, $norm, \$acct_xrd, $acct_xrd_doc->res
+	    ));
 
-    $ua->max_redirects(0);
+	return $acct_xrd;
+    };	
+
+    # Found no webfinger document
+    return undef;
 };
 
 # Serve webfinger
 sub _get_finger {
     my $plugin = shift;
-    my $c = shift;
+    my $c      = shift;
 
+    # Parse acct (normally not necessary, as it is norm)
     my ($user, $domain, $norm) = $c->parse_acct( shift );
-
-    $domain ||= $plugin->host;
 
     # Get local account data
     if (!$domain ||
 	$domain eq $plugin->host) {
 
 	my $wf_xrd = $c->new_xrd;
-	$wf_xrd->add('Subject', $norm);
+	$wf_xrd->add('Subject' => $norm);
 
 	# Run hook
 	$c->app->plugins->run_hook(
-	    'before_serving_webfinger',
-	    $c,
-	    $norm,
-	    $wf_xrd
-	    );
+	    'before_serving_webfinger' => (
+		$c, $norm, $wf_xrd
+	    ));
 
 	# Return webfinger document
 	return $wf_xrd;
 
-    } else {
-
-	return undef;
     };
+
+    return undef;
 };
 
 1;
@@ -274,8 +257,7 @@ Mojolicious::Plugin::Webfinger - Webfinger Plugin
 
   # Mojolicious::Lite
   plugin 'Webfinger';
-  my $wf = any '/webfinger';
-  $wf->webfinger;
+  (any '/webfinger')->webfinger;
 
 =head1 DESCRIPTION
 

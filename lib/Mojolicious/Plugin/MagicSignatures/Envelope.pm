@@ -1,6 +1,5 @@
 package Mojolicious::Plugin::MagicSignatures::Envelope;
 use Mojo::Base '-base';
-# use Mojolicious::Plugin::MagicSignatures::Key qw(b64url_encode b64url_decode);
 use Mojolicious::Plugin::Util::Base64url;
 use Mojo::Command;
 use Mojo::DOM;
@@ -594,6 +593,7 @@ Returns the magic envelope as a compact representation.
 =head1 DEPENDENCIES
 
 L<Mojolicious> (best with SSL support),
+L<Mojolicious::Plugin::Util::Base64url>,
 L<Mojolicious::Plugin::MagicSignatures::Key>.
 
 =head1 KNOWN BUGS AND LIMITATIONS

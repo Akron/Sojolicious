@@ -157,7 +157,7 @@ is($app->endpoint('test6' =>
    '/suggest?c={foo}&d={BAR}&e=check&f=%2A',
    'endpoint 17');
 
-my $hash = $app->endpoints;
+my $hash = $app->get_endpoints;
 
 is ($hash->{test1},
     'https://sojolicio.us/test',

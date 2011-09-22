@@ -13,6 +13,7 @@ BEGIN {
 sub register {
     my ($plugin, $mojo, $param) = @_;
 
+    # Set mime-types
     for ($mojo->types) {
 	$_->type('mkey'    => 'application/magic-key');
 	$_->type('me+xml'  => 'application/magic-envelope+xml');
@@ -28,22 +29,39 @@ sub register {
 		      });
     };
 
+    # Add 'magicenvelope' helper
     $mojo->helper(
 	'magicenvelope' => sub {
-	    return $plugin->magicenvelope(@_);
+	    shift;
+
+	    # New MagicEnvelope instance object
+	    my $me = Mojolicious::Plugin::MagicSignatures::Envelope
+		->new( @_ );
+	    
+	    # MagicEnvelope can not be build
+	    return if (!$me || !$me->data);
+	    
+	    # Return MagicEnvelope
+	    return $me;
 	});
 
+    # Add 'magickey' helper
     $mojo->helper(
 	'magickey' => sub {
-	    return $plugin->magickey(@_);
+	    shift;
+
+	    # New MagicKey instance object
+	    return Mojolicious::Plugin::MagicSignatures::Key
+		->new(@_);
 	});
 
+    # Add 'verify_magicenvelope' helper
     $mojo->helper(
 	'verify_magicenvelope' => sub {
 	    return $plugin->verify_magicenvelope(@_);
 	});
 
-    # Retrieve MagicKey
+    # Add 'get_magickeys' helper
     $mojo->helper(
 	'get_magickeys' => sub {
 	    return $plugin->get_magickeys(@_);
@@ -92,57 +110,24 @@ sub register {
 	});
 };
 
-# MagicEnvelope
-sub magicenvelope {
-    my $plugin = shift;
-    shift; # Controller is not interesting
-    # Possibly interesting for $c->push_to('http://...');
-    
-    # New MagicEnvelope instance object.
-    my $me = Mojolicious::Plugin::MagicSignatures::Envelope->new( @_ );
-
-    # MagicEnvelope can not be build
-    if (!$me || !$me->data) {
-	warn 'Unable to create magic envelope';
-	return;
-    };
-
-    # Return MagicEnvelope
-    return $me;
-};
-
-# MagicKey
-sub magickey {
-    my $plugin = shift;
-    shift;  # Controller is not interesting
-    # Possibly interesting for $c->push_to('http://...');
-   
-    # New MagicKey instance
-    return Mojolicious::Plugin::MagicSignatures::Key->new(@_);
-};
-
 # Get MagicKeys
 sub get_magickeys {
     my $plugin = shift;
-    my $c = shift;
-    my %param = @_;
+    my $c      = shift;
+    my %param  = @_;
 
     # Enable discovery if not explicitely forbidden
-    $param{discovery} = 1 if !exists $param{discovery};
+    $param{discovery} = 1 unless exists $param{discovery};
 
     my @magickeys;
 
     # Run hook for caching or database retrieval
     $c->app->plugins->run_hook(
-	'before_fetching_magickeys',
-	$plugin,
-	$c,
-	\%param,
-	\@magickeys
-	);
+	'before_fetching_magickeys' => (
+	    $plugin, $c, \%param, \@magickeys
+	));
 
     # Discover public key
-
     if (!$magickeys[0] && $param{discovery}) {
 	my $acct;
 	
@@ -246,9 +231,9 @@ sub get_magickeys {
 # Verify MagicEnvelope
 sub verify_magicenvelope {
     my $plugin = shift;
-    my $c = shift;
-    my $me = shift;
-    my %param = %{ shift(@_) };
+    my $c      = shift;
+    my $me     = shift;
+    my %param  = %{ shift(@_) };
 
     my $mkey = $param{'key'} || undef;
 

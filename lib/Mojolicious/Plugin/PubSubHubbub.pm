@@ -575,8 +575,7 @@ Mojolicious::Plugin::PubSubHubbub
   # Mojolicious::Lite
   plugin 'PubSubHubbub' => { hub => 'https://hub.example.org' };
 
-  my $ps = any '/:user/callback_url';
-  $ps->pubsub('cb');
+  (any '/:user/callback_url')->pubsub('cb');
 
 
 =head1 DESCRIPTION

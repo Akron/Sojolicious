@@ -147,9 +147,9 @@ sub register {
 
     # Add 'endpoints' helper
     $mojo->helper(
-	'endpoints' => sub {
+	'get_endpoints' => sub {
 	    my $c = shift;
-
+	    
 	    # Get all endpoints
 	    my %endpoint_hash;
 	    foreach (keys %endpoints) {
@@ -262,10 +262,10 @@ the controller and fill the template variables.
 The special parameter C<?> can be set C<undef> to ignore
 all undefined optional template parameters.
 
-=head2 C<endpoints>
+=head2 C<get_endpoints>
 
   # In Controller:
-  my $hash = $self->endpoints;
+  my $hash = $self->get_endpoints;
 
   while (my ($key, $value) = each %$hash) {
     print $key, ' => ', $value, "\n";
