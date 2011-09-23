@@ -1,5 +1,6 @@
 package Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Base -base;
+
 use Mojolicious::Plugin::Util::Base64url;
 use Digest::SHA qw(sha256);
 
@@ -96,19 +97,19 @@ sub new {
 sub sign {
     my $self = shift;
     my $message = shift;
-
+    
     warn 'You can only sign with a private key'
 	and return unless $self->d;
-
+    
     my $encoded_message = _sign_emsa_pkcs1_v1_5($self, $message);
 
     # From: https://github.com/sivy/Salmon/
     for ($encoded_message) {
 	$_ = $_->as_hex;
 	$_ =~ s/^0x//;
-	$_ = ( ( length $_ ) % 2 > 0 ) ? "0$_" : $_;
+	$_ = ( ( ( length $_ ) % 2) > 0 ) ? "0$_" : $_;
 	$_ = pack( "H*", $_ );
-	$_ = b64url_encode($_);
+	$_ = b64url_encode( $_ );
     };
 
     # Append padding - although that's not defined
@@ -121,8 +122,8 @@ sub sign {
 
 # Verify a signature for a message
 sub verify {
-    my $self = shift;
-    my $message = shift; # basestring!
+    my $self            = shift;
+    my $message         = shift; # basestring!
     my $encoded_message =  shift;
 
     # From: https://github.com/sivy/Salmon/
@@ -382,6 +383,22 @@ sub _bitsize ($) {
     my $int = Math::BigInt->new( shift );
     return 0 unless $int;
     return ( length( $int->as_bin ) - 2 );
+};
+
+sub _warn {
+    my $self = shift;
+
+    # log established
+    if ($self->log) {
+	$self->log->warn($_[0]);
+    }
+
+    # No log established
+    else {
+	warn $_[0];
+    };
+
+    return;
 };
 
 1;
