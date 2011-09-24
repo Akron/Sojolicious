@@ -9,30 +9,33 @@ our @EXPORT = qw(b64url_encode
 
 # Returns the b64 urlsafe encoding of a string
 sub b64url_encode {
-    my $v = shift;
-    return '' unless $v;
+  my $v = shift;
+  my $p = defined $_[0] ? shift : 1;
 
-    utf8::encode $v if utf8::is_utf8 $v;
-    $v = encode_base64($v, '');
-    $v =~ tr{+/}{-_};
-    $v =~ tr{\t-\x0d }{}d;
+  return '' unless $v;
 
-    return $v;
+  utf8::encode $v if utf8::is_utf8 $v;
+  $v = encode_base64($v, '');
+  $v =~ tr{+/}{-_};
+  $v =~ tr{\t-\x0d }{}d;
+  $v =~ s/\=+$// unless $p;
+
+  return $v;
 };
 
 # Returns the b64 urlsafe decoded string
 sub b64url_decode {
-    my $v = shift;
-    return '' unless $v;
+  my $v = shift;
+  return '' unless $v;
 
-    $v =~ tr{-_}{+/};
+  $v =~ tr{-_}{+/};
 
-    # Add padding
-    if (my $padding = (length($v) % 4)) {
-	$v .= '=' x (4 - $padding);
-    };
-    
-    return decode_base64($v);
+  # Add padding
+  if (my $padding = (length($v) % 4)) {
+    $v .= chr(61) x (4 - $padding);
+  };
+
+  return decode_base64($v);
 };
 
 1;
@@ -61,8 +64,11 @@ URL safe Base64 encoding and decoding.
 =head2 C<b64url_encode>
 
   print b64url_encode('This is a message');
+  print b64url_encode('This is a message', 0);
 
 Encodes a string 64-based with URL safe characters.
+A second parameter indicates, if trailing equal signs
+are wanted. The default is true.
 
 =head2 C<b64url_decode>
 

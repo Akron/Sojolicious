@@ -32,10 +32,10 @@ sub register {
 	    # New MagicEnvelope instance object
 	    my $me = Mojolicious::Plugin::MagicSignatures::Envelope
 		->new( @_[1..$#_] );
-	    
+
 	    # MagicEnvelope can not be build
 	    return if (!$me || !$me->data);
-	    
+
 	    # Return MagicEnvelope
 	    return $me;
 	});
@@ -58,7 +58,7 @@ sub register {
     $mojo->helper(
 	'get_magickeys' => sub {
 	    return $plugin->get_magickeys( @_ );
-	});    
+	});
 
     # Add magickey to webfinger document
     $mojo->hook(
@@ -124,30 +124,30 @@ sub get_magickeys {
     # Discover public key
     if (!$magickeys[0] && $param{discovery}) {
 	my $acct;
-	
+
 	# Use direct key access
 	if (exists $param{key_url}) {
 	    # todo
 	    # application/metadata+json. If so, look for the "magic_public_keys
 	}
-	
+
 	# Use webfinger information
 	elsif (exists $param{acct}) {
 	    $acct = $param{acct};
 	};
-	
+
 	# Discover based on Webfinger acct
 	if (!$magickeys[0] && $acct) {
 	    my $wf_xrd = $c->webfinger($acct);
-	    
+
 	    # Unable to find public MagicKey
 	    return 0 unless $wf_xrd;
-	    
+
 	    # Discovery based on spec-01
 	    # Key id is not specified
 	    unless (exists $param{key_id}) {
 		foreach (@{ $wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
-		    
+
 		    # Create key from property
 		    my @key = ($plugin->magickey($c, $_->text(0)));
 		    next unless $key[0];
@@ -165,10 +165,10 @@ sub get_magickeys {
 	    else {
 		my $key_id = $param{key_id};
 		foreach (@{$wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
-		    
+
 		    # Get key_ids from property
 		    my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
-		    
+
 		    # Return public mkey if key_id is correct
 		    if (
 			(!defined $key_id && !$key_id_key) ||

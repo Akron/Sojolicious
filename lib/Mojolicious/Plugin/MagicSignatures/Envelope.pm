@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::MagicSignatures::Envelope;
 use Mojo::Base '-base';
 use Mojolicious::Plugin::Util::Base64url;
+use Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Command;
 use Mojo::DOM;
 use Mojo::Template;
@@ -11,336 +12,389 @@ has alg       => 'RSA-SHA256';
 has encoding  => 'base64url';
 has data_type => 'text/plain';
 
-
 use constant ME_NS => 'http://salmon-protocol.org/ns/magic-env';
 
 my @val_array = qw/data data_type encoding alg sigs/;
 
 # Constructor
 sub new {
-    my $class = shift;
+  my $class = shift;
 
-    my $self = $class->SUPER::new;
-    $self->{sigs} = [];
+  my $self = $class->SUPER::new;
+  $self->{sigs} = [];
+  $self->{sig_base} = '';
 
-    # Message is me-xml:
-    if ($_[0] =~ /^[\s\n]*\</) {
+  # Message is me-xml:
+  if ($_[0] =~ /^[\s\n]*\</) {
 
-	my $dom = Mojo::DOM->new(xml => 1);
-	$dom->parse( shift );
-	
-	# Succesfull extracted envelope?
-	my $env = $dom->at('env');
-	$env = $dom->at('provenance') unless $env;
-	return if (!$env || $env->namespace ne ME_NS);
+    my $dom = Mojo::DOM->new(xml => 1);
+    $dom->parse( shift );
 
-	# Retrieve and edit data
-	my $data = $env->at('data');
-	$self->data_type( $data->attrs->{type} );
-	$self->data( b64url_decode ( $data->text ) );
-	
-	# Check algorithm
-	return if ($env->at('alg') &&
-		   ($env->at('alg')->text ne 'RSA-SHA256'));
-	
-	# Check encoding
-	return if ($env->at('encoding') && 
-		   ($env->at('encoding')->text ne 'base64url'));
-	
-	# Retrieve signature
-	$env->find('sig')->each(
-	    sub {
-		my %sig = ( value => b64url_decode( $_->text ) );
-		
-		$sig{key_id} = $_->attrs->{key_id}
-		  if exists $_->attrs->{key_id};
+    # Succesfull extracted envelope?
+    my $env = $dom->at('env');
+    $env = $dom->at('provenance') unless $env;
+    return if (!$env || $env->namespace ne ME_NS);
 
-		push( @{ $self->{sigs} }, \%sig );
+    # Retrieve and edit data
+    my $data = $env->at('data');
+    $self->data_type( $data->attrs->{type} );
+    $self->data( b64url_decode ( $data->text ) );
 
-		$self->{signed} = 1;
-	    });
-    }
+    # Check algorithm
+    return if ($env->at('alg') &&
+		 ($env->at('alg')->text ne 'RSA-SHA256'));
 
-    # Message is me-json as a datastructure
-    elsif (ref $_[0] && (ref $_[0] eq 'HASH')) {
-	my $env = shift;
+    # Check encoding
+    return if ($env->at('encoding') &&
+		 ($env->at('encoding')->text ne 'base64url'));
 
-	foreach my $v (@val_array) {
-	    $self->{$v} = delete $env->{$v} if exists $env->{$v};
-	};
+    # Retrieve signature
+    $env->find('sig')->each(
+      sub {
+	my %sig = ( value => b64url_decode( $_->text ) );
 
-	if ($self->{sigs}->[0]) {
-	    $self->{signed} = 1;
-	};
+	$sig{key_id} = $_->attrs->{key_id}
+	  if exists $_->attrs->{key_id};
 
-	# Unknown parameters
-	warn 'Unknown parameters: '.join(',', %$env)
-	    if keys %$env;
-    }
+	push( @{ $self->{sigs} }, \%sig );
 
-    # Message is me-json as a string
-    elsif ($_[0] =~ /^[\s\n]*\{/) {
-	my $json = Mojo::JSON->new;
-	my $env = $json->decode( shift );
+	$self->{signed} = 1;
+      });
+  }
 
-	foreach my $v (@val_array) {
-	    $self->{$v} = $env->{$v};
-	};
+  # Message is me-json as a datastructure
+  elsif (ref $_[0] && (ref $_[0] eq 'HASH')) {
+    my $env = shift;
 
-	if ($self->{sigs}->[0]) {
-	    $self->{signed} = 1;
-	};
-
-	warn 'Unknown parameters: ' . join(',', %$env)
-	    if keys %$env;
-    }
-
-    # Message is me as a compact string
-    elsif ($_[0] =~ /\.YmFzZTY0dXJs\./) {
-
-	my @val;
-	foreach (@val = split(/\./, shift ) ) {
-	    $_ = b64url_decode( $_ ) if $_;
-	};
-
-	for ($self->{sigs}->[0]) {
-	    $_->{key_id}    = $val[0] if defined $val[0];
-	    $_->{value}     = $val[1];
-	    $self->{signed} = 1;
-	};
-
-	$self->data($val[2])      if $val[2];
-	$self->data_type($val[3]) if $val[3];
-	$self->encoding($val[4])  if $val[4];
-	$self->alg($val[5])       if $val[5];
-    }
-
-    # The format is not supported
-    else {
-	return;
+    foreach my $v (@val_array) {
+      $self->{$v} = delete $env->{$v} if exists $env->{$v};
     };
 
-    # bless me instance
-    return $self;
+    if ($self->{sigs}->[0]) {
+      $self->{signed} = 1;
+    };
+
+    # Unknown parameters
+    warn 'Unknown parameters: '.join(',', %$env)
+      if keys %$env;
+  }
+
+  # Message is me-json as a string
+  elsif ($_[0] =~ /^[\s\n]*\{/) {
+    my $json = Mojo::JSON->new;
+    my $env = $json->decode( shift );
+
+    foreach my $v (@val_array) {
+      $self->{$v} = $env->{$v};
+    };
+
+    if ($self->{sigs}->[0]) {
+      $self->{signed} = 1;
+    };
+
+    warn 'Unknown parameters: ' . join(',', %$env)
+      if keys %$env;
+  }
+
+  # Message is me as a compact string
+  elsif ($_[0] =~ /\.YmFzZTY0dXJs\./) {
+
+    my @val;
+    foreach (@val = split(/\./, shift ) ) {
+      $_ = b64url_decode( $_ ) if $_;
+    };
+
+    for ($self->{sigs}->[0]) {
+      $_->{key_id}    = $val[0] if defined $val[0];
+      $_->{value}     = $val[1];
+      $self->{signed} = 1;
+    };
+
+    $self->data($val[2])      if $val[2];
+    $self->data_type($val[3]) if $val[3];
+    $self->encoding($val[4])  if $val[4];
+    $self->alg($val[5])       if $val[5];
+  }
+
+  # The format is not supported
+  else {
+    return;
+  };
+
+#  $self->{encoding} ||= 'base64url';
+#  $self->{alg}      ||= 'RSA-SHA256';
+
+  # bless me instance
+  return $self;
 };
 
 # sign magic envelope instance
 sub sign {
-    my $self   = shift;
-    my $key_id = shift;
-    my $val    = shift;
+  my $self   = shift;
+  my $key_id = shift;
+  my $val    = shift;
 
-    # Regarding key id:
-    # "If the signer does not maintain individual key_ids,
-    #  it SHOULD output the base64url encoded representation
-    #  of the SHA-256 hash of public key's application/magic-key
-    #  representation."
+  # Regarding key id:
+  # "If the signer does not maintain individual key_ids,
+  #  it SHOULD output the base64url encoded representation
+  #  of the SHA-256 hash of public key's application/magic-key
+  #  representation."
 
-    # A valid key is given
-    if ($val) {
+  # A valid key is given
+  if ($val) {
 
-	# Set key based on parameters
-	my @param = (
-	    ref $val ?
-	    ( ref $val eq 'HASH' ? %{ $val } : $val )
-	    : $val);
-	
-	my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new( @param );
+    # Set key based on parameters
+    my @param = (
+      ref $val ?
+	( ref $val eq 'HASH' ? %{ $val } : $val )
+	  : $val);
 
-	return undef unless ($mkey && $mkey->d);
+    my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new( @param );
 
-	# Get signature base string
-	$self->{sig_base} = _sig_base( $self->{data},
-				       $self->{data_type} );
-	
-	# Compute signature for base string
-	my $msig = $mkey->sign( $self->{sig_base} );
-	
-	return undef unless $msig;
-	
-	# Sign envelope
-	my %msig = ( value => $msig );
-	
-	$msig{key_id} = $key_id if defined $key_id;
-	
-	# Push signature
-	push(@{$self->{sigs}}, \%msig );
-	
-	# Declare envelope as signed
-	$self->{signed} = 1;
-	
-	# Return envelope
-	return $self;
+    return undef unless ($mkey && $mkey->d);
+
+    # Compute signature for base string
+    my $msig = $mkey->sign( $self->sig_base );
+    return undef unless $msig;
+
+    # Sign envelope
+    my %msig = ( value => $msig );
+
+    $msig{key_id} = $key_id if defined $key_id && $key_id ne 'undef';
+
+    # Push signature
+    push(@{$self->{sigs}}, \%msig );
+
+    # Declare envelope as signed
+    $self->{signed} = 1;
+
+    # Return envelope
+    return $self;
+  };
+
+  # Get signature:
+  my @sigs = @{ $self->{sigs} };
+
+  # No key_id given
+  if (!$key_id) {
+
+    foreach (@sigs) {
+      if (!exists $_->{key_id}) {
+	return $_->{value};
+      };
     };
 
+    return $sigs[0]->{value};
+  }
 
-    # Get signature:
-    my @sigs = @{ $self->{sigs} };
-
-    # No key_id given
-    if (!$key_id) {
-
-	foreach (@sigs) {
-	    if (!exists $_->{key_id}) {
-		return $_->{value};
-	    };
+  # Key is given
+  else {
+    my $default;
+    foreach (@sigs) {
+      if (defined $_->{key_id}) {
+	if ($_->{key_id} eq $key_id) {
+	  return $_->{value};
 	};
-
-	return $sigs[0]->{value};
-    }
-
-    # Key is given
-    else {
-	my $default;
-	foreach (@sigs) {
-	    if (defined $_->{key_id}) {
-		if ($_->{key_id} eq $key_id) {
-		    return $_->{value};
-		};
-	    } else {
-		$default = $_->{value};
-	    };
-	};
-	return $default;
+      } else {
+	$default = $_->{value};
+      };
     };
+    return $default;
+  };
 
-    return undef;
+  return undef;
 };
+
+
 
 
 # Is the me signed?
 sub signed {
 
-    # There is no specific key_id requested
-    return $_[0]->{signed} unless defined $_[1];
+  # There is no specific key_id requested
+  return $_[0]->{signed} unless defined $_[1];
 
-    # Check for specific key_id
-    foreach my $sig (@{ $_[0]->{sigs} }) {
-	return 1 if $sig->{key_id} eq $_[1];
+  # Check for specific key_id
+  foreach my $sig (@{ $_[0]->{sigs} }) {
+    return 1 if $sig->{key_id} eq $_[1];
+  };
+
+  # Envelope is not signed
+  return 0;
+};
+
+sub verify {
+  my $self      = shift;
+  my $key_bunch = shift; # public keys of the author
+
+  # Regarding key id:
+  # "If the signer does not maintain individual key_ids,
+  #  it SHOULD output the base64url encoded representation
+  #  of the SHA-256 hash of public key's application/magic-key
+  #  representation."
+
+  # Get signature base string
+  my $sig_base = $self->sig_base;
+
+  return unless $sig_base;
+
+  my $verified = 0;
+  # Only one key in bunch
+  if (@$key_bunch == 1) {
+    my $sig = $self->sign;
+    if ($sig) {
+      # Found key/sig pair
+      my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(
+	$key_bunch->[0]->[0]);
+      $verified = $mkey->verify($sig_base => $sig) if $mkey;
     };
+  }
 
-    # Envelope is not signed
-    return 0;
+  # Multiple keys in bunch
+  else {
+    foreach my $key (@$key_bunch) {
+      # key_id given
+      my $sig;
+      if ($key->[1]) {
+	$sig = $self->sign($key->[1]);
+      } else {
+	$sig = $self->sign;
+      };
+
+      if ($sig) {
+	# Found key/sig pair
+	my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(
+	  $key->[0]);
+	$verified = $mkey->verify($sig_base => $sig);
+	last if $verified;
+      };
+    };
+  };
+
+  return $verified;
 };
 
 # return the data as a MojoDOM if it is xml
 sub dom {
-    my $self = shift;
+  my $self = shift;
 
-    # There is already a DOM instantiation
-    return $self->{dom} if exists $self->{dom};
+  # There is already a DOM instantiation
+  return $self->{dom} if exists $self->{dom};
 
-    # Create new DOM instantiation
-    my $dom = Mojo::DOM->new;
-    if ($self->{data_type} =~ /xml/) {
-	$dom->parse( $self->{data} );
-    };
+  # Create new DOM instantiation
+  my $dom = Mojo::DOM->new;
+  if ($self->{data_type} =~ /xml/) {
+    $dom->parse( $self->{data} );
+  };
 
-    # Return DOM instantiation (Maybe empty)
-    return ($self->{dom} = $dom);
+  # Return DOM instantiation (Maybe empty)
+  return ($self->{dom} = $dom);
 };
 
 # Return em-xml string
 sub to_xml {
-    my $self = shift;
+  my $self = shift;
 
-    # The me has to be signed
-    return unless $self->{signed};
+  # The me has to be signed
+  # return unless $self->{signed};
 
-    # Todo - better: renderer-> get_data_template?
-    my $template = Mojo::Command->new->get_data(
-	'magicenvelope.xml.ep',
-	__PACKAGE__);
+  # Todo - better: renderer-> get_data_template?
+  my $template = Mojo::Command->new->get_data(
+    'magicenvelope.xml.ep',
+    __PACKAGE__);
 
 # Todo:
 #    $self->log->error(qq{Template not found: $me_templ!})
 #	and return unless $template;
-    
-    return Mojo::Template->new->render($template, $self);
+
+  return Mojo::Template->new->render($template, $self);
 };
 
 # Return em-compact string
 sub to_compact {
-    my $self = shift;
+  my $self = shift;
 
-    # The me has to be signed
-    return unless $self->signed;
+  # The me has to be signed
+  return unless $self->signed;
 
-    # Use last signature for serialization
-    my $sig = $self->{sigs}->[ $#{ $self->{sigs} } ];
+  # Use last signature for serialization
+  my $sig = $self->{sigs}->[ $#{ $self->{sigs} } ];
 
-    $self->{sig_base} = _sig_base(
-	$self->{data},
-	$self->{data_type}
-	) unless exists $self->{sig_base};
-
-    return join( '.',
-		 b64url_encode( $sig->{key_id} ),
-		 b64url_encode( $sig->{value} ),
-		 $self->{sig_base} );
+  return join( '.',
+	       b64url_encode( $sig->{key_id} ),
+	       b64url_encode( $sig->{value} ),
+	       $self->sig_base );
 };
 
 # Return em-json string
 sub to_json {
-    my $self = shift;
+  my $self = shift;
 
-    return '{}' unless defined $self->data;
+  return '{}' unless defined $self->data;
 
-    # Create new datastructure
-    my %new_em = (
-	alg       => $self->alg,
-	encoding  => $self->encoding,
-	data_type => $self->data_type,
-	data      => b64url_encode( $self->data ),
-	sigs      => []
-	);
+  # Create new datastructure
+  my %new_em = (
+    alg       => $self->alg,
+    encoding  => $self->encoding,
+    data_type => $self->data_type,
+    data      => b64url_encode( $self->data ),
+    sigs      => []
+  );
 
-    # loop through signatures
-    foreach my $sig ( @{ $self->{sigs} } ) {
-	my %msig = ( value => b64url_encode( $sig->{value} ) );
-	$msig{key_id} = $sig->{key_id} if defined $sig->{key_id};
-	push( @{ $new_em{sigs} }, \%msig );
-    };
+  # loop through signatures
+  foreach my $sig ( @{ $self->{sigs} } ) {
+    my %msig = ( value => b64url_encode( $sig->{value} ) );
+    $msig{key_id} = $sig->{key_id} if defined $sig->{key_id};
+    push( @{ $new_em{sigs} }, \%msig );
+  };
 
-    # Return json-string
-    return Mojo::JSON->new->encode( \%new_em );
+  # Return json-string
+  return Mojo::JSON->new->encode( \%new_em );
 };
 
 # encode urlsafe
 sub _b64_enc {
-    return b64url_encode( $_[1] );
+  return b64url_encode( $_[1] );
 };
 
 # encode urlsafe and indented
-sub _b64_enc_ind {
-    my $val =  b64url_encode( $_[1] );
-    return '    ' . join( "\n    ", ( unpack '(A60)*', $val ) );
-};
+#sub _b64_enc_ind {
+#  my $val =  b64url_encode( $_[1] );
+#  $val =~ s/\=+$//;
+#  return '    ' . join( "\n    ", ( unpack '(A60)*', $val ) );
+#};
 
-# create signature base string
-sub _sig_base {
-    my $data      = b64url_encode( shift );
+sub sig_base {
+  my $self = shift;
 
-    # data_type - default "text/plain"
-    my $data_type = $_[0] ? b64url_encode( shift ) : 'dGV4dC9wbGFpbg';
+  return $self->{sig_base} if $self->{sig_base};
 
-    # encoding  - default "base64url"
-    my $encoding  = $_[0] ? b64url_encode( shift ) : 'YmFzZTY0dXJs';
+  my $data      = b64url_encode( $self->data, 0 );
 
-    # alg       - default "RSA-SHA256"
-    my $alg       = $_[0] ? b64url_encode( shift ) : 'UlNBLVNIQTI1Ng';
+  # data_type - default "text/plain"
+  my $data_type = b64url_encode( $self->data_type );
 
-    my $sig_base = join('.',
-			$data,
-			$data_type,
-			$encoding,
-			$alg);
+  # encoding  - default "base64url"
+  my $encoding  = b64url_encode( $self->encoding );
 
-    # delete all equal signs
-    # maybe that's wrong and it should say s/=+$//sg; ?
-    $sig_base =~ s/=+$//sg;
+  # alg       - default "RSA-SHA256"
+  my $alg       = b64url_encode( $self->alg );
 
-    return $sig_base;
+  my $sig_base = join('.',
+		      $data,
+		      $data_type,
+		      $encoding,
+		      $alg);
+
+  # delete all equal signs
+
+  $self->{sig_base} = $sig_base;
+
+  unless ($sig_base) {
+    warn 'Unable to construct sig_base';
+  };
+
+  return $sig_base;
 };
 
 1;
@@ -348,6 +402,7 @@ sub _sig_base {
 __DATA__
 
 @@ magicenvelope.xml.ep
+% use Mojolicious::Plugin::Util::Base64url;
 % my $me = shift;
 % my $start_tag = 'env';
 % if ($me->{embed}) {
@@ -357,20 +412,17 @@ __DATA__
 % }
 <me:<%= $start_tag %> xmlns:me="http://salmon-protocol.org/ns/magic-env">
   <me:data<% if (exists $me->{'data_type'}) { =%>
-<%= ' ' %>type="<%== $me->{'data_type'} %>"
-<% } =%>
+<%= ' ' %>type="<%== $me->{'data_type'} %>"<% } =%>
 >
-<%= $me->_b64_enc_ind( $me->{'data'} ) %>
+    <%= b64url_encode( $me->data , 0) %>
   </me:data>
-  <me:encoding><%= $me->{'encoding'} %></me:encoding>
-  <me:alg><%= $me->{'alg'} %></me:alg>
+  <me:encoding><%= $me->encoding %></me:encoding>
+  <me:alg><%= $me->alg %></me:alg>
 % foreach my $sig (@{$me->{'sigs'}}) {
-  <me:sig
-<% if (exists $sig->{'key_id'}) { =%>
-<%= ' ' %>key_id="<%== $sig->{'key_id'} %>"
-<% } =%>
+  <me:sig<% if ($sig->{'key_id'}) { =%>
+<%= ' ' %>key_id="<%== $sig->{'key_id'} %>"<% } =%>
 >
-<%= $me->_b64_enc_ind($sig->{'value'}) %>
+    <%= b64url_encode($sig->{'value'}) %>
   </me:sig>
 % }
 </me:env>
@@ -450,6 +502,12 @@ if the magic envelope contains XML.
   $me->encoding;
 
 The encoding of the MagicEnvelope. Defaults to 'base64url'.
+
+=head2 C<sig_base>
+
+  $me->sig_base;
+
+The signature base of the MagicEnvelope.
 
 =head2 C<signed>
 
@@ -567,6 +625,20 @@ If a signature with the given key id is found, the signature
 value is returned. If it is not found, the default signature
 is returned. If no key id is given, the default signature value
 is returned. If no matching signature can be found, undef is returned.
+
+B<This method is experimental and can change without warning!>
+
+=head2 C<verify>
+
+  $me->verify(['RSA...'],['RSA...','#1'])
+
+Verifies a signed envelope against a bunch of given public MagicKeys.
+Returns true on success. In other case false.
+The structure of the bunch of keys is
+
+  [ [ MagicKey, key_id? ]* ]
+
+If one key succeeds, the envelope is verified.
 
 B<This method is experimental and can change without warning!>
 

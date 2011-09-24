@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-use Test::More tests => 27;
+use Test::More tests => 33;
 use Math::BigInt try => 'GMP,Pari';
 use strict;
 use warnings;
@@ -124,7 +124,7 @@ is(b64url_decode($b64_n), $n, 'b64url for big numbers');
 
 # https://salmon-protocol.googlecode.com/
 #   svn/trunk/lib/python/magicsig_hjfreyer/magicsig_example.py
-my $test_key = 
+my $test_key =
     'RSA.'.
     'mVgY8RN6URBTstndvmUUPb4UZTdwvw'.
     'mddSKE5z_jvKUEK6yk1u3rrC9yN8k6'.
@@ -134,7 +134,7 @@ my $test_key =
     'yihYetQ8jy-jZXdsZXd8V5ub3kuBHH'.
     'k4M39i3TduIkcrjcsiWQb77D8Q==';
 
-my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new($test_key); 
+my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new($test_key);
 
 ok($mkey, 'Magic-Key parsed');                     # 8
 ok($mkey->n eq '80312837890751965650228915'.
@@ -157,16 +157,141 @@ ok($mkey->emLen == 64,  'M-Key length correct');   # 12
 my $test_public_key = $test_key;
 $test_public_key =~ s{\.[^\.]+$}{};
 
-is($mkey->to_string, $test_public_key, 'M-Key string correct');
+is($mkey->to_string, $test_public_key, 'M-Key string correct'); # 13
+
+my $num = '3799324609234979';
+my $b64 = *{"${module}::_hex_to_b64url"}->($num);
+is($b64, 'DX93MbhIIw==', '_hex_to_b64url');
+
+my $num2 = *{"${module}::_b64url_to_hex"}->($b64);
+is($num, $num2, '_b64url_to_hex');
+
+my $b642 = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'.
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'.
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'.
+  'AAAAAAAAAAAAAAH_____________ADAxMA0GCWC'.
+  'GSAFlAwQCAQUABCDVV5xG38x_GCBwE-ZbROTLTi'.
+  'wimPSsRXuo-CdD8x6TCw==';
+$num2 = *{"${module}::_b64url_to_hex"}->($b642);
+my $b643 = *{"${module}::_hex_to_b64url"}->($num2);
+my $num3 = *{"${module}::_b64url_to_hex"}->($b643);
+
+is($num2, $num3, '_hex_to_b64url');
+
+$test_msg =    'test string';
 
 my $emsa = *{"${module}::_emsa_encode"}->($test_msg,
 					  $mkey->emLen,
 					  'sha-256');
 
-my $test_emsa = 'Af____________8AMDEwDQYJY'.
-                'IZIAWUDBAIBBQAEINVXnEbfzH'.
-                '8YIHAT5ltE5MtOLCKY9KxFe6j'.
-                '4J0PzHpML';
+is (b64url_encode($emsa),
+    'AAH_____________AD'.
+    'AxMA0GCWCGSAFlAwQC'.
+    'AQUABCDVV5xG38x_GC'.
+    'BwE-ZbROTLTiwimPSs'.
+    'RXuo-CdD8x6TCw==',
+    'EMSA encode');
+
+my $EM = *{"${module}::_os2ip"}->($emsa);
+
+is($EM, '40917382598701'.
+     '77337516485429975'.
+     '66029938148046617'.
+     '39298138975140811'.
+     '97400100914340291'.
+     '73326755103708333'.
+     '01650201932192494'.
+     '82769682303342846'.
+     '01470436616606475',
+   'EMSA encode os2ip');
+
+my $s  = *{"${module}::_rsasp1"}->($mkey, $EM);
+
+is ($s, '80055379592861'.
+      '9970997680410400'.
+      '5668460713624089'.
+      '8187708914240169'.
+      '4631449865271349'.
+      '1469283703805848'.
+      '8599193791587766'.
+      '9585376226384018'.
+      '9524960279363800'.
+      '402058130813', 'rsasp1 sign');
+
+my $S = b64url_encode(*{"${module}::_i2osp"}->($s, length($mkey->n)));
+
+is ($S, 'AAAAAAAAAAAAAAAAAAAAAAAAA'.
+        'AAAAAAAAAAAAAAAAAAAAAAAAA'.
+	'AAAAAAAAAAAAAAAAAAAAAAAAA'.
+	'AAAAAAAAAAAAAAAAAAAAAAAAA'.
+	'AAAAAAAAAAAAAAAAAAAA'.
+	'mNpBIpTUOESnuQMlS8aWZ4hwd'.
+	'SwWnMstrn0F3L9GHDXa238fN3'.
+	'Bx3Rl0yvVESM_eZuocLsp9ubU'.
+	'rYDu83821fQ==',
+    'SIG i2osp b64url_encode');
+
+my $sig = $mkey->sign($test_msg);
+
+# From https://github.com/sivy/Salmon/blob/master/t/30-magic-algorithms.t
+my $test_sig = 'mNpBIpTUOESnuQMlS8aWZ4hwdS'.
+               'wWnMstrn0F3L9GHDXa238fN3Bx'.
+               '3Rl0yvVESM_eZuocLsp9ubUrYD'.
+               'u83821fQ==';
+
+is($sig, $test_sig,  'Signature');       # 14
+
+ok($mkey->verify($test_msg, $sig), 'Verification');
+
+
+__END__
+
+
+my $exp_msg_base =<<'EXPMB';
+    PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0nVVRGLTgnPz4KPGVu
+    dHJ5IHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDA1L0F0b20nPgog
+    IDxpZD50YWc6ZXhhbXBsZS5jb20sMjAwOTpjbXQtMC40NDc3NTcxODwv
+    aWQ-CiAgPGF1dGhvcj48bmFtZT50ZXN0QGV4YW1wbGUuY29tPC9uYW1l
+    Pjx1cmk-YWNjdDp0ZXN0QGV4YW1wbGUuY29tPC91cmk-CiAgPC9hdXRo
+    b3I-CiAgPGNvbnRlbnQ-U2FsbW9uIHN3aW0gdXBzdHJlYW0hPC9jb250
+    ZW50PgogIDx0aXRsZT5TYWxtb24gc3dpbSB1cHN0cmVhbSE8L3RpdGxl
+    PgogIDx1cGRhdGVkPjIwMDktMTItMThUMjA6MDQ6MDNaPC91cGRhdGVk
+    Pgo8L2VudHJ5Pgo=.
+    YXBwbGljYXRpb24vYXRvbSt4bWw=.
+    YmFzZTY0dXJs.
+    UlNBLVNIQTI1Ng
+EXPMB
+
+$exp_msg_base =~ tr{\t-\x0d }{}d;
+
+is($test_msg_base, $exp_msg_base, 'Correct signature base');
+
+my $test_sig = 'RL3pTqRn7RAHoEKwtZCVDNgwHrNB0WJxFt8fq6l0HAGcIN4BLYzUC5hp'.
+    'GySsnow2ibw3bgUVeiZMU0dPfrKBFA==';
+
+my $real_sig = $mkey->sign($test_msg_base);
+
+is($real_sig, $test_sig, 'Correct signature');
+
+
+
+
+
+
+__END__
+
+
+if ($mkey->verify($test_msg, $sig)) {
+  warn 'fine.';
+} else {
+  warn 'not fine.';
+};
+
+
+
+
+
+__END__
 
 # https://salmon-protocol.googlecode.com/svn/
 #   trunk/lib/python/magicsig_hjfreyer/magicsig_test.py
@@ -202,33 +327,6 @@ use Mojolicious::Plugin::MagicSignatures::Envelope;
 my $test_msg_base =
     Mojolicious::Plugin::MagicSignatures::Envelope::_sig_base($test_msg,
     $test_data_type);
-
-my $exp_msg_base =<<'EXPMB';
-    PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0nVVRGLTgnPz4KPGVu
-    dHJ5IHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDA1L0F0b20nPgog
-    IDxpZD50YWc6ZXhhbXBsZS5jb20sMjAwOTpjbXQtMC40NDc3NTcxODwv
-    aWQ-CiAgPGF1dGhvcj48bmFtZT50ZXN0QGV4YW1wbGUuY29tPC9uYW1l
-    Pjx1cmk-YWNjdDp0ZXN0QGV4YW1wbGUuY29tPC91cmk-CiAgPC9hdXRo
-    b3I-CiAgPGNvbnRlbnQ-U2FsbW9uIHN3aW0gdXBzdHJlYW0hPC9jb250
-    ZW50PgogIDx0aXRsZT5TYWxtb24gc3dpbSB1cHN0cmVhbSE8L3RpdGxl
-    PgogIDx1cGRhdGVkPjIwMDktMTItMThUMjA6MDQ6MDNaPC91cGRhdGVk
-    Pgo8L2VudHJ5Pgo=.
-    YXBwbGljYXRpb24vYXRvbSt4bWw=.
-    YmFzZTY0dXJs.
-    UlNBLVNIQTI1Ng
-EXPMB
-
-$exp_msg_base =~ tr{\t-\x0d }{}d;
-
-is($test_msg_base, $exp_msg_base, 'Correct signature base');
-
-my $test_sig = 'RL3pTqRn7RAHoEKwtZCVDNgwHrNB0WJxFt8fq6l0HAGcIN4BLYzUC5hp'.
-    'GySsnow2ibw3bgUVeiZMU0dPfrKBFA==';
-
-my $real_sig = $mkey->sign($test_msg_base);
-
-is($real_sig, $test_sig, 'Correct signature');
-
 
 
 
@@ -269,22 +367,10 @@ $test_msg = "<?xml version='1.0' encoding='UTF-8'?>
 
 
 
-$test_msg =    'test string';
 
 
 
 
-
-
-# From https://github.com/sivy/Salmon/blob/master/t/30-magic-algorithms.t
-my $test_sig = 'mNpBIpTUOESnuQMlS8aWZ4hwdS'.
-               'wWnMstrn0F3L9GHDXa238fN3Bx'.
-               '3Rl0yvVESM_eZuocLsp9ubUrYD'.
-               'u83821fQ==';
-
-
-my $sig = $mkey->sign($test_msg);
-ok($sig eq $test_sig,  'Signature correct');       # 15
 
 # https://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html
 
