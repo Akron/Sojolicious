@@ -3,7 +3,7 @@ use Mojo::Base -base;
 use bytes;
 
 use Mojolicious::Plugin::Util::Base64url;
-use Digest::SHA qw(sha256);
+use Digest::SHA 'sha256';
 
 # Implement with GMP or PARI if existent
 use Math::BigInt try => 'GMP,Pari';
@@ -55,8 +55,7 @@ sub new {
 
     # The key is incorrect
     if ($type ne 'RSA') {
-      warn 'MagicKey is incorrectly formatted!';
-      return;
+      warn 'MagicKey is incorrectly formatted!' and return;
     };
 
     # RSA.modulus(n).exponent(e).private_exponent(he)?
@@ -80,8 +79,7 @@ sub new {
     $self = $class->SUPER::new(@_);
 
     unless ($self->n && $self->d) {
-      warn 'Key is not well defined.';
-      return;
+      warn 'Key is not well defined.' and return;
     };
 
   };
@@ -92,13 +90,13 @@ sub new {
   return $self;
 };
 
+
 # Sign a message
 sub sign {
   my ($self, $message) = @_;
 
   unless ($self->d) {
-    warn 'You can only sign with a private key';
-    return;
+    warn 'You can only sign with a private key' and return;
   };
 
   my $encoded_message = _sign_emsa_pkcs1_v1_5($self, $message);
@@ -111,6 +109,7 @@ sub sign {
   return _hex_to_b64url($encoded_message);
 };
 
+
 # Verify a signature for a message (sig base)
 sub verify {
   my ($self,
@@ -118,8 +117,7 @@ sub verify {
       $encoded_message) =  @_;
 
   unless ($encoded_message && $message) {
-    warn 'No signature or message given.';
-    return;
+    warn 'No signature or message given.' and return;
   };
 
   return _verify_emsa_pkcs1_v1_5(
@@ -128,6 +126,7 @@ sub verify {
     _b64url_to_hex( $encoded_message )
   );
 };
+
 
 # Return MagicKey-String (public only)
 sub to_string {
@@ -145,6 +144,7 @@ sub to_string {
 
   return $mkey;
 };
+
 
 # Sign with emsa padding
 sub _sign_emsa_pkcs1_v1_5 ($$) {
@@ -167,6 +167,7 @@ sub _sign_emsa_pkcs1_v1_5 ($$) {
   return $s; # $S
 };
 
+
 # Verify with emsa padding
 sub _verify_emsa_pkcs1_v1_5 {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 8.2.2]
@@ -174,19 +175,18 @@ sub _verify_emsa_pkcs1_v1_5 {
   # key, message, signature
   my ($K, $M, $S) = @_;
 
-  # my $k = length( $K->n );
+#  my $k = length( $K->n );
   my $k = $K->emLen;
 
   # The length of the signature is not
   # equivalent to the length of the RSA modulus
 #  if (length($S) != $k) {
   if (_octet_len($S) != $k) {
-    warn "invalid signature";
     warn(_octet_len($S).':'.$k.':'._octet_len($K->n));
-    return;
+    warn 'Invalid signature.' and return;
   };
 
-  # my $s = $S;
+#  my $s = $S;
   my $s = _os2ip($S);
   my $m = _rsavp1($K, $s);
 
@@ -202,6 +202,7 @@ sub _verify_emsa_pkcs1_v1_5 {
   return;
 };
 
+
 # RSA signing
 sub _rsasp1 {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.1]
@@ -210,8 +211,7 @@ sub _rsasp1 {
   my ($K, $m) = @_;
 
   if ($m >= $K->n) {
-    warn "message representative out of range.";
-    return;
+    warn "message representative out of range." and return;
   };
 
   if ($K->n) {
@@ -227,6 +227,7 @@ sub _rsasp1 {
   return;
 };
 
+
 # RSA verification
 sub _rsavp1 {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.2]
@@ -236,9 +237,8 @@ sub _rsavp1 {
 
   if ($s < (Math::BigInt->new($K->n)->bsub(1))) {
 #  if (length($s) > (Math::BigInt->new($K->n)->bsub(1))) {
-    warn "signature representative out of range";
 #    warn $s.' : ' . $K->n . ':' . length($s) . ':'.length($K->n);
-    return;
+    warn 'Signature representative out of range.' and return;
   };
 
   if ($K->n) {
@@ -248,6 +248,7 @@ sub _rsavp1 {
 
   return;
 };
+
 
 # Create code with emsa padding (only sha-256 support)
 sub _emsa_encode {
@@ -270,8 +271,7 @@ sub _emsa_encode {
 
   # Hash-value is unknown
   else {
-    warn 'Unsupported hash-value.';
-    return;
+    warn 'Hash value currently not supported.' and return;
   };
 
   # TODO:
@@ -285,13 +285,14 @@ sub _emsa_encode {
   # instead of
   # pad_string = chr(0xFF) * (msg_size_bits / 8 - len(encoded) - 3)
   #  $emLen = ($emLen + 8 - ($emLen % 8) / 8);
-  #  my $PS = "\xFF" x ($emLen / 8 - $tLen - 3); # -3 
+  #  my $PS = "\xFF" x ($emLen / 8 - $tLen - 3); # -3
 
-  my $PS = "\xFF" x ($emLen - $tLen - 3); # -3 
+  my $PS = "\xFF" x ($emLen - $tLen - 3);
   my $EM = "\x00\x01".$PS."\x00".$T;
 
   return $EM;
 };
+
 
 # Convert from octet string to bigint
 sub _os2ip ($) {
@@ -312,6 +313,7 @@ sub _os2ip ($) {
   return $neg ? ($result + 1) * -1 : $result;
 }
 
+
 # Convert from bigint to octet string
 sub _i2osp {
   # Based on
@@ -323,8 +325,7 @@ sub _i2osp {
   my $result = '';
 
   if ($l && $num > ( 256 ** $l )) {
-    warn "i2osp error.";
-    return;
+    warn 'i2osp error.' and return;
   };
 
   do {
@@ -342,6 +343,7 @@ sub _i2osp {
   return $result;
 };
 
+
 # Returns the octet length of a given integer
 sub _octet_len {
   # Based on
@@ -358,12 +360,14 @@ sub _octet_len {
   return $val->bfloor;
 };
 
+
 # Returns the bitlength of the integer
 sub _bitsize ($) {
   my $int = Math::BigInt->new( shift );
   return 0 unless $int;
   return ( length( $int->as_bin ) - 2 );
 };
+
 
 # base64url to hex number
 sub _b64url_to_hex {
@@ -374,6 +378,7 @@ sub _b64url_to_hex {
   $num = "0x" . unpack( "H*", $num );
   return Math::BigInt->from_hex( $num )->bstr;
 };
+
 
 # hex number to base64url
 sub _hex_to_b64url {
@@ -441,7 +446,7 @@ The octet-length of C<n>.
 =head2 C<new>
 
 The Constructor accepts MagicKeys in compact notation as
-described in [...].
+described in L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
 
 =head2 C<sign>
 
@@ -476,10 +481,9 @@ L<Mojolicious>,
 L<Mojolicious::Plugin::Util::Base64url>.
 Either L<Math::BigInt::GMP> or L<Math::BigInt::Pari> are recommended.
 
-
 =head1 KNOWN BUGS AND LIMITATIONS
 
-The signing and verifification is currently not working correctly!
+The signing and verifification is currently not working!
 
 =head1 COPYRIGHT AND LICENSE
 

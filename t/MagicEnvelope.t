@@ -36,7 +36,7 @@ is($me->sig_base,
 
 ok(!$me->signed, 'Envelope not signed');
 
-$me->sign(undef, $mkey_string);
+$me->sign($mkey_string);
 
 ok($me->signed, 'Envelope signed');
 
@@ -48,7 +48,7 @@ my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(<<'MKEY');
   AQAB
 MKEY
 
-ok($me->verify([[$mkey]]), 'MagicEnvelope Verification');
+ok($me->verify( [ [ $mkey ] ] ), 'MagicEnvelope Verification');
 
 my $xml = $me->to_xml;
 $xml =~ s/\s//gm;
@@ -98,12 +98,12 @@ $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'ME');
 </me:env>
 ME
 
-ok($me->verify([[$mkey]]), 'MiniMe Verification');
+ok($me->verify( [ [ $mkey ] ] ), 'MiniMe Verification');
 
 $me->{sigs} = [];
-$me->sign(undef => $mkey);
+$me->sign($mkey);
 
-is ($me->sign, $sig, 'MiniMe Signature');
+is ($me->signature->{value}, $sig, 'MiniMe Signature');
 
 $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(<<'IDENTICAKEY');
 RSA.oSdSbJ99WDC0zRUpk41bpI42FarMo-o6JxJKEeKCPSU1SW9kdXdAUPhWu0JVwdF5rDXWijXaOcdZ3utGwk0pmKxsX6MEQg54L4rfIzWZiHz9OUGgDx9R4tXpm38CXOGfpu4Sx2lmeYVxIii32P32EPJHyZN5Zi9Sr_8zSbXYnM8=.AQAB
@@ -122,7 +122,7 @@ $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'IDENTICA');
 IDENTICA
 
 #warn $me->sig_base;
-ok($me->verify([[$mkey]]), 'Identica Verification');
+ok($me->verify( [ [ $mkey ] ] ), 'Identica Verification');
 
 #############################
 # From MagicSignatures Spec #
@@ -157,7 +157,7 @@ $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'MESPEC');
 </me:env>
 MESPEC
 
-ok($me->verify([[$mkey]]), 'MagicSignatures Spec Verification');
+ok($me->verify( [ [ $mkey ] ] ), 'MagicSignatures Spec Verification');
 
 ########################
 # From Cliqset Example #
@@ -181,11 +181,11 @@ $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'CLIQSET');
 </env>
 CLIQSET
 
-ok($me->verify([[$mkey]]), 'Cliqset Verification');
+ok($me->verify( [ [ $mkey ] ] ), 'Cliqset Verification');
 
 $me->{sigs} = [];
-$me->sign(undef => $mkey);
+$me->sign($mkey);
 
-is ($me->sign, $sig, 'Cliqset Signature');
+is ($me->signature->{value}, $sig, 'Cliqset Signature');
 
 __END__

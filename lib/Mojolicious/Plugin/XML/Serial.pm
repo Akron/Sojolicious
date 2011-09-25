@@ -5,25 +5,25 @@ use Mojo::Base 'Mojo::DOM';
 use Mojo::ByteStream 'b';
 
 use constant {
-    I         => '  ',
-    SERIAL_NS => 'http://sojolicio.us/ns/xml-serial',
-    PI        => '<?xml version="1.0" encoding="UTF-8" '.
-                 'standalone="yes"?>'
+  I         => '  ',
+  SERIAL_NS => 'http://sojolicio.us/ns/xml-serial',
+  PI        => '<?xml version="1.0" encoding="UTF-8" '.
+               'standalone="yes"?>'
 };
 
 sub new {
-    my $class = shift;
+  my $class = shift;
 
-    if (ref($class)     ||
-	!$_[0]          ||
-	index($_[0],'<') >= 0 ||
-	((@_ % 2) == 0 &&
-	 ref( $_[1] ) ne 'HASH')) {
-	return $class->SUPER::new(@_);
-    }
+  if ( ref($class)             ||
+       !$_[0]                  ||
+       (index($_[0],'<') >= 0) ||
+       ( (@_ % 2) == 0 && ref( $_[1] ) ne 'HASH' ) ) {
 
-    # SELF->new
-    else {
+    return $class->SUPER::new(@_);
+  }
+
+  # SELF->new
+  else {
 	my $name = shift;
 	my $att  = shift if (ref( $_[0] ) eq 'HASH');
 	my $text = shift;
@@ -376,58 +376,48 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::XML::Serial
+Mojolicious::Plugin::XML::Serial - Simple XML constructor
 
 =head1 SYNOPSIS
 
   use Mojolicious::Plugin::XML::Serial;
 
-  my $dom = Mojolicious::Plugin::XML::Serial->new();
+  my $xml = Mojolicious::Plugin::XML::Serial->new;
+  $xml->add('link' => { rel => 'foo'}, 'bar');
 
   # Mojolicious
-  $self->plugin('XML-Serial');
+  $self->plugin('XML::Serial');
 
   # Mojolicious::Lite
-  plugin 'XML-Serial';
+  plugin 'XML::Serial';
 
 =head1 METHODS
 
-L<Mojolicious::Plugin::XML::Simple> inherits all methods from
-L<Mojo::Base> and implements the following new ones.
+L<Mojolicious::Plugin::XML::Serial> inherits all methods from
+L<Mojo::DOM> and implements the following new ones.
 
 =head2 C<new>
 
-  my $xml = Mojolicious::Plugin::XML::Simple->new(<<'EOF');
-
+  my $xml = Mojolicious::Plugin::XML::Serial->new(<<'EOF');
 
 =head2 C<add>
 
-  my $xrd_node = $xrd->add('Link', { rel => 'lrdd' });
+  my $node = $xml->add('Link', { rel => 'lrdd' });
 
-Appends a new Element to the XRDs root and returns a
-C<Mojolicious::Plugin::XRD::Node> object.
+Appends a new Element to the document root and returns a
+C<Mojolicious::Plugin::XML::Serial> object.
 
-The C<Mojolicious::Plugin::XRD::Node> object has following methods.
+=head2 C<comment>
 
-=head3 C<comments>
-
-  $xrd_node = $xrd_node->comment('Resource Descriptor');
+  $node = $node->comment('Resource Descriptor');
 
 Prepends a comment to the XRD node.
 
-=head2 C<dom>
+=head2 C<to_pretty_xml>
 
-  print $xrd->dom->at('Link[rel=lrrd]')->text;
+  print $xml->to_pretty_xml;
 
-Returns the L<Mojo::DOM> representation of the object,
-allowing for fine grained CSS3 selections.
-
-=head2 C<to_xml>
-
-  print $xrd->to_xml;
-
-Returns a stringified XML document. This is not identical
-to L<Mojo::DOM>s C<to_xml> as it applies for pretty printing.
+Returns a stringified, pretty printed XML document.
 
 =head1 DEPENDENCIES
 
