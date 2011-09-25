@@ -51,7 +51,7 @@ sub new {
     # Retrieve signature
     $env->find('sig')->each(
       sub {
-	my %sig = ( value => b64url_decode( $_->text ) );
+	my %sig = ( value => $_->text ); # b64url_decode( $_->text ) );
 
 	$sig{key_id} = $_->attrs->{key_id}
 	  if exists $_->attrs->{key_id};
@@ -279,7 +279,7 @@ sub dom {
   my $self = shift;
 
   # There is already a DOM instantiation
-  return $self->{dom} if exists $self->{dom};
+  return $self->{dom} if $self->{dom};
 
   # Create new DOM instantiation
   my $dom = Mojo::DOM->new;
@@ -352,17 +352,7 @@ sub to_json {
   return Mojo::JSON->new->encode( \%new_em );
 };
 
-# encode urlsafe
-sub _b64_enc {
-  return b64url_encode( $_[1] );
-};
-
-# encode urlsafe and indented
-#sub _b64_enc_ind {
-#  my $val =  b64url_encode( $_[1] );
-#  $val =~ s/\=+$//;
 #  return '    ' . join( "\n    ", ( unpack '(A60)*', $val ) );
-#};
 
 sub sig_base {
   my $self = shift;

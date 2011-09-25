@@ -1,5 +1,6 @@
 package Mojolicious::Plugin::MagicSignatures::Key;
 use Mojo::Base -base;
+use bytes;
 
 use Mojolicious::Plugin::Util::Base64url;
 use Digest::SHA qw(sha256);
@@ -33,59 +34,59 @@ sub new {
   my $class = shift;
   my $self;
 
-  # Is a magic-key:
+  # MagicKey object
   if (ref $_[0] && ref $_[0] eq __PACKAGE__) {
     return $_[0];
   }
 
-  # Is a Magic Key in string notation
+  # MagicKey in string notation
   elsif (@_ == 1) {
     my $string = shift;
+    return unless $string;
 
+    # New object from parent class
     $self = $class->SUPER::new;
 
     # Delete whitespace
-    $string =~ s/\s+//mg;
+    $string =~ tr{\t-\x0d }{}d;
 
     # Split MagicKey
-    my ( $type, $mod, $exp, $private_exp )
-      = split(/\./, $string);
+    my ($type, $mod, $exp, $private_exp) = split(/\./, $string);
 
     # The key is incorrect
     if ($type ne 'RSA') {
-      warn 'Magic Key is incorrect formatted! ';
+      warn 'MagicKey is incorrectly formatted!';
       return;
-    }
-
-    # The key is correct
-    else {
-      # RSA.modulus(n).exponent(e).private_exponent(he)?
-      for ($mod, $exp, $private_exp) {
-	next unless $_;
-	$_ = _b64url_to_hex($_);
-      };
-
-      $self->n( $mod );
-      $self->e( $exp );
-
-      # Private Key
-      if ($private_exp) {
-	$self->d( $private_exp );
-      };
     };
+
+    # RSA.modulus(n).exponent(e).private_exponent(he)?
+    for ($mod, $exp, $private_exp) {
+      next unless $_;
+      $_ = _b64url_to_hex($_);
+    };
+
+    # Set modulus
+    $self->n( $mod );
+
+    # Set exponent
+    $self->e( $exp );
+
+    # Set private key
+    $self->d( $private_exp ) if $private_exp;
   }
 
   # Key defined by parameters
   else {
     $self = $class->SUPER::new(@_);
 
-    if (!$self->n && !$self->d) {
+    unless ($self->n && $self->d) {
       warn 'Key is not well defined.';
       return;
     };
 
   };
 
+  # Set emLen (octet length of modulus)
   $self->emLen( _octet_len( $self->n ) );
 
   return $self;
@@ -95,37 +96,37 @@ sub new {
 sub sign {
   my ($self, $message) = @_;
 
-  warn 'You can only sign with a private key'
-    and return unless $self->d;
+  unless ($self->d) {
+    warn 'You can only sign with a private key';
+    return;
+  };
 
   my $encoded_message = _sign_emsa_pkcs1_v1_5($self, $message);
 
-#  warn(b64url_encode($encoded_message));
-
   # Append padding - although that's not defined
-#    while ((length($encoded_message) % 4) != 0) {
-#        $encoded_message .= '=';
-#    };
+  #    while ((length($encoded_message) % 4) != 0) {
+  #        $encoded_message .= '=';
+  #    };
 
   return _hex_to_b64url($encoded_message);
 };
 
-# Verify a signature for a message
+# Verify a signature for a message (sig base)
 sub verify {
-  my $self             = shift;
-  my $message          = shift; # basestring!
-  my $encoded_message =  shift;
+  my ($self,
+      $message,
+      $encoded_message) =  @_;
 
   unless ($encoded_message && $message) {
     warn 'No signature or message given.';
     return;
   };
 
-  return _verify_emsa_pkcs1_v1_5($self,
-				 $message,
-				 _b64url_to_hex(
-				   $encoded_message
-				 ));
+  return _verify_emsa_pkcs1_v1_5(
+    $self,
+    $message,
+    _b64url_to_hex( $encoded_message )
+  );
 };
 
 # Return MagicKey-String (public only)
@@ -135,153 +136,134 @@ sub to_string {
   my $n = $self->n;
   my $e = $self->e;
 
-  # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
-  #         MagicSignatures/SignatureAlgRsaSha256.pm
-  foreach ($n, $e) {
-    my $hex = Math::BigInt->new($_)->as_hex;
-    $hex =~ s/^0x//;
-    $hex = ( ( length( $hex ) % 2 ) > 0 ) ? "0$hex" : $hex;
-    $_ = pack "H*", $hex;
-  };
+  # Convert modulus and exponent
+  $_ = _hex_to_b64url($_) for ($n, $e);
 
-  my $mkey = join('.',
-		  'RSA',
-		  b64url_encode( $n ),
-		  b64url_encode( $e ) );
-  #    $mkey =~ s/=+//g;
+  my $mkey = join('.', ( 'RSA', $n, $e ) );
+
+  # $mkey =~ s/=+//g;
+
   return $mkey;
 };
 
+# Sign with emsa padding
 sub _sign_emsa_pkcs1_v1_5 ($$) {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 8.1.1]
+
+  # key, message
   my ($K, $M) = @_;
 
-  my $k = length($K->n); # $K->emLen;
+  # my $k = length($K->n);
+  my $k = $K->emLen;
 
-  my $EM = _emsa_encode($M, $K->emLen, 'sha-256');
+  my $EM = _emsa_encode($M, $k, 'sha-256');
 
-  return 0 unless $EM;
-
-#      If the encoding operation outputs "message too long," output
-#      "message too long" and stop.  If the encoding operation outputs
-#      "intended encoded message length too short," output "RSA modulus
-#      too short" and stop.
-
-# warn $EM;
+  return unless $EM;
 
   my $m  = _os2ip($EM);
   my $s  = _rsasp1($K, $m);
 #  my $S  = _i2osp($s, $k);
 
-#  my $ES = Math::BigInt->new($S);
-#  return $ES;
-##  return $S;
-  return $s;
+  return $s; # $S
 };
 
+# Verify with emsa padding
 sub _verify_emsa_pkcs1_v1_5 {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 8.2.2]
-  my ($K, $M, $S) = @_;
+
   # key, message, signature
+  my ($K, $M, $S) = @_;
 
-  my $k = length($K->n);
+  # my $k = length( $K->n );
+  my $k = $K->emLen;
 
-  if (length($S) != $k) {
+  # The length of the signature is not
+  # equivalent to the length of the RSA modulus
+#  if (length($S) != $k) {
+  if (_octet_len($S) != $k) {
     warn "invalid signature";
-    warn(length($S).':'.$k.':'.length($K->n));
+    warn(_octet_len($S).':'.$k.':'._octet_len($K->n));
     return;
   };
 
-  my $s = $S; # _os2ip($S);
+  # my $s = $S;
+  my $s = _os2ip($S);
   my $m = _rsavp1($K, $s);
-
-#  warn('$S: ' . $S);
-#  warn('$s: ' . $s);
-#  warn('$m: ' . $m);
 
   return unless $m;
 
-  # If RSAVP1 outputs "signature representative out of range,"
-  # output "invalid signature" and stop.
-
   my $EM_1 = _i2osp($m, $k);
-#  warn('$EM_1: ' . $EM_1 . '<<');
-
-  # If I2OSP outputs "integer too large," output "invalid
-  # signature" and stop.
-
   my $EM_2 = _emsa_encode($M, $k, 'sha-256');
-#  warn('$EM_2: ' . $EM_2 . '<<');
 
-  # If the encoding operation outputs "message too long," output
-  # "message too long" and stop.  If the encoding operation outputs
-  # "intended encoded message length too short," output "RSA modulus
-  # too short" and stop.
+  # Compare codes with success
+  return 1 if _b64url_to_hex($EM_1) eq _b64url_to_hex($EM_2);
 
-  return 1 if (_b64url_to_hex($EM_1) eq _b64url_to_hex($EM_2));
+  # No success
   return;
-
-  # Note.  Another way to implement the signature verification operation
-  # is to apply a "decoding" operation (not specified in this document)
-  # to the encoded message to recover the underlying hash value, and then
-  # to compare it to a newly computed hash value.  This has the advantage
-  # that it requires less intermediate storage (two hash values rather
-  # than two encoded messages), but the disadvantage that it requires
-  # additional code.
 };
 
+# RSA signing
 sub _rsasp1 {
-  # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.1] 
+  # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.1]
+
+  # Key, message
   my ($K, $m) = @_;
 
-  if ($m > $K->n) {
+  if ($m >= $K->n) {
     warn "message representative out of range.";
     return;
   };
 
   if ($K->n) {
-    return Math::BigInt->new($m)
-      ->bmodpow($K->d, $K->n);
+    return
+      Math::BigInt->new($m)->bmodpow($K->d, $K->n);
   };
 
-  # Not implemented yet
-  # Eventually not needed
-#    elsif ($K->p && $K->q) {
-#	return;
-#    };
+  # Not implemented yet - eventually not needed
+  #    elsif ($K->p && $K->q) {
+  #	return;
+  #    };
 
   return;
 };
 
+# RSA verification
 sub _rsavp1 {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 5.2.2]
+
+  # Key, signature
   my ($K, $s) = @_;
 
-  if ($s > (Math::BigInt->new($K->n)->bsub(1))) {
+  if ($s < (Math::BigInt->new($K->n)->bsub(1))) {
+#  if (length($s) > (Math::BigInt->new($K->n)->bsub(1))) {
     warn "signature representative out of range";
-    warn $s.' : ' . $K->n . ':' . length($s) . ':'.length($K->n);
+#    warn $s.' : ' . $K->n . ':' . length($s) . ':'.length($K->n);
     return;
   };
 
-  return Math::BigInt->new($s)
-    ->bmodpow($K->e, $K->n);
+  if ($K->n) {
+    return
+      Math::BigInt->new($s)->bmodpow($K->e, $K->n);
+  };
+
+  return;
 };
 
+# Create code with emsa padding (only sha-256 support)
 sub _emsa_encode {
   # http://www.ietf.org/rfc/rfc3447.txt [Ch. 9.2]
+
   my ($M, $emLen, $hash_digest) = @_;
 
+  # No message given
   return unless $M;
 
   $hash_digest ||= 'sha-256';
 
-#    warn('M: --->',$M,"<---\n\n");
-
+  # Create Hash with der padding
   my ($H, $T, $tLen);
-
   if ($hash_digest eq 'sha-256') {
     $H = sha256($M);  # hex?
-    # $H = Digest::SHA->new('sha-256')->add($M)->digest;  # hex?
     $T = DER_SHA256 . $H;
     $tLen = length( $T );
   }
@@ -292,41 +274,28 @@ sub _emsa_encode {
     return;
   };
 
-#    warn('H: '.b64url_encode($H)."<---\n\n");
-#    warn('T: '.b64url_encode($T)."<---\n\n");
+  # TODO:
+  # if ($emlen < length($T) + 10) {
+  #   warn "Intended encoded message length too short."
+  #   return;
+  # };
 
-    # TODO:
-    # $self->error( "Intended encoded message length 
-    #                too short.", \$M )
-    #    if $emlen < length($T) + 10;
-
-
-# pad_string = chr(0xFF) * (msg_size_bits - len(encoded) - 3)
-# instead of
-# pad_string = chr(0xFF) * (msg_size_bits / 8 - len(encoded) - 3) 
-
-    # temp!
-#  $emLen = ($emLen + 8 - ($emLen % 8) / 8);
-
-#  my $PS = "\xFF" x ($emLen / 8 - $tLen - 3); # -3 
-#  my $PS = "\xFF" x ($emLen - $tLen - 3); # -3 
+  # temp!
+  # pad_string = chr(0xFF) * (msg_size_bits - len(encoded) - 3)
+  # instead of
+  # pad_string = chr(0xFF) * (msg_size_bits / 8 - len(encoded) - 3)
+  #  $emLen = ($emLen + 8 - ($emLen % 8) / 8);
+  #  my $PS = "\xFF" x ($emLen / 8 - $tLen - 3); # -3 
 
   my $PS = "\xFF" x ($emLen - $tLen - 3); # -3 
-
-#    warn('PS: '.b64url_encode($PS)."<---\n\n");
-
-    # \x00
-  # temp!
   my $EM = "\x00\x01".$PS."\x00".$T;
 
-#    warn('EMSA: '.b64url_encode($EM)."<---\n\n");
-
-    # Encoded Message:
   return $EM;
 };
 
 # Convert from octet string to bigint
 sub _os2ip ($) {
+  # Based on
   # http://cpansearch.perl.org/src/GBARR/Convert-ASN1-0.22/lib/Convert/ASN1.pm
   # http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
 
@@ -338,21 +307,23 @@ sub _os2ip ($) {
 
   for (unpack("C*",$os)) {
     $result = ($result * 256) + $_;
-  }
+  };
 
   return $neg ? ($result + 1) * -1 : $result;
 }
 
 # Convert from bigint to octet string
 sub _i2osp {
+  # Based on
   # http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/lib/Crypt/RSA/DataFormat.pm
+
   my $num = Math::BigInt->new( shift );
   my $l = shift || 0;
 
   my $result = '';
 
   if ($l && $num > ( 256 ** $l )) {
-    warn('Error.');
+    warn "i2osp error.";
     return;
   };
 
@@ -373,8 +344,9 @@ sub _i2osp {
 
 # Returns the octet length of a given integer
 sub _octet_len {
+  # Based on
   # https://github.com/mozilla/django-salmon/
-  #  blob/master/django_salmon/magicsigs.py
+  #         blob/master/django_salmon/magicsigs.py
   # Round up to next byte
   # modulus_size = keypair.size()
   # msg_size_bits = modulus_size + 8 - (modulus_size % 8)
@@ -393,19 +365,21 @@ sub _bitsize ($) {
   return ( length( $int->as_bin ) - 2 );
 };
 
-# b64url_to_hex_number
+# base64url to hex number
 sub _b64url_to_hex {
-  # From: https://github.com/sivy/Salmon/
-  my $num = shift;
-  $num = b64url_decode( $num );
+  # Based on
+  # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
+  #         MagicSignatures/SignatureAlgRsaSha256.pm
+  my $num = b64url_decode( shift );
   $num = "0x" . unpack( "H*", $num );
-  $num = Math::BigInt->from_hex( $num )->bstr;
-  return $num;
+  return Math::BigInt->from_hex( $num )->bstr;
 };
 
-# hex_number_to_b64url
+# hex number to base64url
 sub _hex_to_b64url {
-  # From: https://github.com/sivy/Salmon/
+  # https://github.com/sivy/Salmon/blob/master/lib/Salmon/
+  #         MagicSignatures/SignatureAlgRsaSha256.pm
+
   my $num = Math::BigInt->new( shift )->as_hex;
   $num =~ s/^0x//;
   $num = ( ( ( length $num ) % 2 ) > 0 ) ? "0$num" : $num;
@@ -428,21 +402,21 @@ Mojolicious::Plugin::MagicSignatures::Key - MagicKey Plugin for Mojolicious
   use Mojolicious::Plugin::MagicSignatures::Key;
 
   my $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(<<'MKEY');
-  RSA.
-  mVgY8RN6URBTstndvmUUPb4UZTdwvw
-  mddSKE5z_jvKUEK6yk1u3rrC9yN8k6
-  FilGj9K0eeUPe2hf4Pj-5CmHww==.
-  AQAB.
-  Lgy_yL3hsLBngkFdDw1Jy9TmSRMiH6
-  yihYetQ8jy-jZXdsZXd8V5ub3kuBHH
-  k4M39i3TduIkcrjcsiWQb77D8Q==
+    RSA.
+    mVgY8RN6URBTstndvmUUPb4UZTdwvw
+    mddSKE5z_jvKUEK6yk1u3rrC9yN8k6
+    FilGj9K0eeUPe2hf4Pj-5CmHww==.
+    AQAB.
+    Lgy_yL3hsLBngkFdDw1Jy9TmSRMiH6
+    yihYetQ8jy-jZXdsZXd8V5ub3kuBHH
+    k4M39i3TduIkcrjcsiWQb77D8Q==
   MKEY
 
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::MagicSignatures::Key> is a plugin for
 L<Mojolicious> to represent MagicKeys as described in
-L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>
+L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
 
 =head1 ATTRIBUTES
 
@@ -485,16 +459,15 @@ L<http://www.ietf.org/rfc/rfc3447.txt|Specification>.
     print "The signature is wrong!";
   };
 
+Verifies a signature of a message based on the public
+component of the key. Returns true on success, and false otherwise.
+
 =head2 C<to_string>
 
   print $mkey->to_string;
 
-Returns the string in compact notation as described in [...].
-
-=head1 FUNCTIONS
-
-L<Mojolicious::Plugin::MagicKey> implements the following functions,
-that can be imported.
+Returns the string in compact notation as described in
+L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
 
 =head1 DEPENDENCIES
 
@@ -505,8 +478,7 @@ Either L<Math::BigInt::GMP> or L<Math::BigInt::Pari> are recommended.
 
 =head1 KNOWN BUGS AND LIMITATIONS
 
-The signing and verifification is currently not working
-correctly!
+The signing and verifification is currently not working correctly!
 
 =head1 COPYRIGHT AND LICENSE
 
