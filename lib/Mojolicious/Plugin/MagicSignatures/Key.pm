@@ -78,7 +78,7 @@ sub new {
   else {
     $self = $class->SUPER::new(@_);
 
-    unless ($self->n && $self->d) {
+    unless ($self->n || $self->d) {
       warn 'Key is not well defined.' and return;
     };
 
@@ -153,10 +153,11 @@ sub _sign_emsa_pkcs1_v1_5 ($$) {
   # key, message
   my ($K, $M) = @_;
 
-  # my $k = length($K->n);
-  my $k = $K->emLen;
+  my $k = length($K->n);
+#  my $k = $K->emLen;
 
-  my $EM = _emsa_encode($M, $k, 'sha-256');
+#  my $EM = _emsa_encode($M, $k, 'sha-256');
+  my $EM = _emsa_encode($M, $K->emLen, 'sha-256');
 
   return unless $EM;
 
@@ -175,19 +176,23 @@ sub _verify_emsa_pkcs1_v1_5 {
   # key, message, signature
   my ($K, $M, $S) = @_;
 
-#  my $k = length( $K->n );
-  my $k = $K->emLen;
+  my $k = length( $K->n );
+#  my $k = $K->emLen;
 
   # The length of the signature is not
   # equivalent to the length of the RSA modulus
-#  if (length($S) != $k) {
-  if (_octet_len($S) != $k) {
-    warn(_octet_len($S).':'.$k.':'._octet_len($K->n));
+  if (length($S) != $k) {
+#  if (_octet_len($S) != $k) {
+    warn('Length: '.join('-',
+			 length($S),
+			 $k,
+			 _octet_len($S),
+			 _octet_len($K->n)));
     warn 'Invalid signature.' and return;
   };
 
-#  my $s = $S;
-  my $s = _os2ip($S);
+  my $s = $S;
+#  my $s = _os2ip($S);
   my $m = _rsavp1($K, $s);
 
   return unless $m;
@@ -235,7 +240,8 @@ sub _rsavp1 {
   # Key, signature
   my ($K, $s) = @_;
 
-  if ($s < (Math::BigInt->new($K->n)->bsub(1))) {
+  if ($s > (Math::BigInt->new($K->n)->bsub(1))) {
+#  if ($s < (Math::BigInt->new($K->n)->bsub(1))) {
 #  if (length($s) > (Math::BigInt->new($K->n)->bsub(1))) {
 #    warn $s.' : ' . $K->n . ':' . length($s) . ':'.length($K->n);
     warn 'Signature representative out of range.' and return;
