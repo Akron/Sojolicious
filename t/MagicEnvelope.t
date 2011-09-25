@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use Test::More tests => 7;
+use Test::More tests => 13;
 use Test::Mojo;
 use strict;
 use warnings;
