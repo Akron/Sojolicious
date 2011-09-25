@@ -466,7 +466,8 @@ component of the key. Returns true on success, and false otherwise.
 
   print $mkey->to_string;
 
-Returns the string in compact notation as described in
+Returns the public key as a string in compact notation as
+described in
 L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
 
 =head1 DEPENDENCIES
