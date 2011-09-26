@@ -1,6 +1,4 @@
 package Mojolicious::Plugin::XML::Serial;
-use strict;
-use warnings;
 use Mojo::Base 'Mojo::DOM';
 use Mojo::ByteStream 'b';
 
@@ -11,9 +9,12 @@ use constant {
                'standalone="yes"?>'
 };
 
+
+# Construct new serial object
 sub new {
   my $class = shift;
 
+  # Create from parent class
   if ( ref($class)             ||
        !$_[0]                  ||
        (index($_[0],'<') >= 0) ||
@@ -22,254 +23,257 @@ sub new {
     return $class->SUPER::new(@_);
   }
 
-  # SELF->new
+  # Create as node
   else {
-	my $name = shift;
-	my $att  = shift if (ref( $_[0] ) eq 'HASH');
-	my $text = shift;
+    my $name = shift;
+    my $att  = shift if (ref( $_[0] ) eq 'HASH');
+    my $text = shift;
 
-	my $element = qq(<$name xmlns:serial=").SERIAL_NS.'"';
-	if ($text) {
-	    $element .= ">$text</$name>";
-	} else {
-	    $element .= ' />';
-	};
-
-	my $root = $class->SUPER::new(PI . $element, xml => 1);
-
-	# Transform special attributes
-	foreach my $special (grep(/^-/, keys %$att)) {
-	    $att->{'serial:' . substr($special,1) } =
-		delete $att->{$special}
-	};
-
-	# Add attributes to node
-	$root->at('*')->attrs($att);
-
-	return $root;
+    # Node content
+    my $element = qq(<$name xmlns:serial=").SERIAL_NS.'"';
+    if ($text) {
+      $element .= ">$text</$name>";
+    } else {
+      $element .= ' />';
     };
+
+    # Create root element by parent class
+    my $root = $class->SUPER::new( PI . $element, xml => 1 );
+
+    # Transform special attributes
+    foreach my $special ( grep( index($_, '-') == 0, keys %$att ) ) {
+      $att->{'serial:' . substr($special,1) } =
+	delete $att->{$special};
+    };
+
+    # Add attributes to node
+    $root->at('*')->attrs($att);
+
+    return $root;
+  };
 };
 
-# Appends a new child node to the XML Node
+
+# Append a new child node to the XML Node
 sub add {
-    my $self = shift;
-    
-#    use Data::Dumper;
-#    warn('-<= '.Dumper($self->tree));
+  my $self = shift;
 
-    if (!$self->parent &&
-	$self->tree->[1]->[0] eq 'pi'){
-	$self = $self->at('*');
+  # If root use first element
+  if (!$self->parent && $self->tree->[1]->[0] eq 'pi') {
+    $self = $self->at('*');
+  };
+
+  my ($node, $comment);
+
+  # Node is a node object
+  if (ref( $_[0] )) {
+    $node    = $self->SUPER::new( shift->to_xml );
+    $comment = shift;
+
+    # Push namespaces to new root
+    my $root_attr = $node->root->at('*')->attrs;
+    foreach ( grep( index($_,'xmlns:') == 0, keys %{ $root_attr } ) ) {
+      $_ = substr($_,6);
+      $self->add_ns( $_ => delete $root_attr->{'xmlns:'.$_} );
     };
 
-    my ($node, $comment);
-
-    # Node is an object
-    if (ref( $_[0] )) {
-	$node    = $self->SUPER::new(shift->to_xml);
-	$comment = shift;
-
-	# Push namespaces to new root
-	my $root_attr = $node->root->at('*')->attrs;
-	foreach (grep(index($_,'xmlns:') == 0, keys %{ $root_attr })) {
-	    $_ = substr($_,6);
-	    $self->add_ns($_ => delete $root_attr->{'xmlns:'.$_} );
-	};
-
-	# Push extensions to new root
-	my $root = $self->at(':root');
-	if (exists $root_attr->{'serial:ext'}) {
-	    my $ext = $root->attrs('serial:ext') || ();
-	    $root->attrs('serial:ext' =>
-		join(';', $ext, split(';', $root_attr->{'serial:ext'}))
-		);
-	};
-
-	# Delete pi from node
-	if (ref($node->tree->[1]) eq 'ARRAY' &&
-	    $node->tree->[1]->[0] eq 'pi') {
-	    splice( @{ $node->tree }, 1,1 );
-	};
-
-	# Append new node
-	$self->append_content($node);
-	$node    = $self->children->[-1];
-    }
-
-    # Node is a string
-    else {
-	my $name = shift;
-	my $att  = shift if (ref( $_[0] ) eq 'HASH');
-	my $text = shift;
-	$comment = shift;
-
-	my $string = "<$name />";
-	$string = "<$name>$text</$name>" if defined $text;
-
-	# Append new node
-	$self->append_content($string);
-	$node = $self->children->[-1];
-
-	# Transform special attributes
-	foreach my $special (grep(/^-/, keys %$att)) {
-	    $att->{'serial:' . substr($special,1) } =
-		delete $att->{$special}
-	};
-
-	# Add attributes to node
-	$node->attrs($att);
+    # Push extensions to new root
+    my $root = $self->at(':root');
+    if (exists $root_attr->{'serial:ext'}) {
+      my $ext = $root->attrs('serial:ext') || ();
+      $root->attrs(
+	'serial:ext' =>
+	  join(';', $ext, split(';', $root_attr->{'serial:ext'}))
+	);
     };
 
-    # Add comment
-    $node->comment($comment) if $comment;
+    # Delete pi from node
+    if (ref($node->tree->[1]) eq 'ARRAY' &&
+	  $node->tree->[1]->[0] eq 'pi') {
+      splice( @{ $node->tree }, 1,1 );
+    };
 
-    return $node;
+    # Append new node
+    $self->append_content($node);
+    $node = $self->children->[-1];
+  }
+
+  # Node is a string
+  else {
+    my $name = shift;
+    my $att  = shift if (ref( $_[0] ) eq 'HASH');
+    my $text = shift;
+    $comment = shift;
+
+    my $string = "<$name />";
+    $string    = "<$name>$text</$name>" if defined $text;
+
+    # Append new node
+    $self->append_content($string);
+    $node = $self->children->[-1];
+
+    # Transform special attributes
+    foreach my $special ( grep( index($_, '-') == 0, keys %$att ) ) {
+      $att->{'serial:' . substr($special,1) } =
+	delete $att->{$special};
+    };
+
+    # Add attributes to node
+    $node->attrs($att);
+  };
+
+  # Add comment
+  $node->comment($comment) if $comment;
+
+  return $node;
 };
+
 
 # Add namespace to root
 sub add_ns {
-    my $self = shift;
-    my $prefix = $_[1] ? ':'.shift : '';
-    $self->root->at('*')->attrs('xmlns'.$prefix => shift);
-    return $prefix;
+  my $self   = shift;
+  my $prefix = $_[1] ? ':'.shift : '';
+  $self->root->at('*')->attrs( 'xmlns'.$prefix => shift );
+  return $prefix;
 };
 
-# Deprecated!
-sub dom {
-    warn('This is deprecated! '.caller);
-    return $_[0];
-};
 
-# Prepends a Comment to the XML node
+# Prepend a comment to the XML node
 sub comment {
-    my $self = shift;
-    my $comment = shift;
-
-    $self->prepend('<!--'.b($comment)->xml_escape.'-->');
-
-    return $self;
+  my $self    = shift;
+  $self->prepend('<!--' . b( shift )->xml_escape . '-->');
+  return $self;
 };
 
-# render as pretty xml
+
+# Render as pretty xml
 sub to_pretty_xml {
-    my $self = shift;
-    return _render_pretty(0, $self->tree);
+  my $self = shift;
+  return _render_pretty(0, $self->tree);
 };
 
-# render subtrees with pretty printing
+
+# Render subtrees with pretty printing
 sub _render_pretty {
-    my $i = shift;
-    my $tree = shift;
+  my $i    = shift; # Indentation
+  my $tree = shift;
 
-    my $e = $tree->[0];
+  my $e = $tree->[0];
 
-    unless ($e) {
-	warn '!!!';
-	return;
+  # No element
+  warn 'No element' and return unless $e;
+
+  # Element is tag
+  if ($e eq 'tag') {
+    my $subtree =
+      [
+	@{ $tree }[ 0 .. 2 ],
+	[
+	  @{ $tree }[ 4 .. $#$tree ]
+	]
+      ];
+
+    return _element($i, $subtree);
+  }
+
+  # Element is text
+  elsif ($e eq 'text') {
+
+    my $escaped = $tree->[1];
+
+    for ($escaped) {
+      next unless $_;
+
+      # Trim whitespace from both ends
+      s/[\s\t\n]+$//;
+      s/^[\s\t\n]+//;
+
+      # Escape
+      $_ = b($_)->xml_escape;
     };
 
-    if ($e eq 'tag') {
-	my $subtree = 
-	    [
-	     @{$tree}[0..2],
-	     [
-	      @{$tree}[4..$#$tree]
-	     ]
-	    ];
+    return $escaped;
+  }
 
-	return _element($i, $subtree);
+  # Element is comment
+  elsif ($e eq 'comment') {
+    my $comment = join("\n". I . I . ( I x $i ), # Todo: Why I.I ?
+		       split('; ', $tree->[1]));
+    return "\n".(I x $i).'<!-- '.$comment." -->\n";
+  }
 
-    } elsif ($e eq 'text') {
+  # Element is processing instruction
+  elsif ($e eq 'pi') {
+    return (I x $i) . '<?' . $tree->[1] . "?>\n";
 
-	my $escaped = $tree->[1];
+  }
 
-	for ($escaped) {
-	    next unless $_;
-	    s/[\s\n]+$//;
-	    s/^[\s\n]+//;
-	    $_ = b($_)->xml_escape;
-	};
-	return $escaped;
-    }
-    
-    elsif ($e eq 'comment') {
-	my $comment = join("\n     ".(I x $i),
-			   split('; ',$tree->[1]));
-	return "\n".(I x $i).'<!-- '.$comment." -->\n";
-    }
-    
-    elsif ($e eq 'pi') {
-	return (I x $i).'<?' . $tree->[1] . "?>\n";
+  # Element is root
+  elsif ($e eq 'root') {
 
-    } elsif ($e eq 'root') {
+    my $content;
 
-	my $content;
-	
-	foreach my $child_e_i (1 .. $#$tree) {
-	    $content .= _render_pretty(
-		$i,
-		$tree->[$child_e_i]
-		);
-	};
-
-	return $content;
+    # Pretty print the content
+    foreach my $child_e_i (1 .. $#$tree) {
+      $content .=
+	_render_pretty( $i, $tree->[$child_e_i] );
     };
+
+    return $content;
+  };
 };
 
-# render element with pretty printing
+
+# Render element with pretty printing
 sub _element ($$) {
-    my $i = shift;
-    
-    my ($type,
-	$qname,
-	$attr,
-	$child) = @{$_[0]};
+  my $i = shift;
 
-    # Is the qname valid?
-    warn $qname.' is no valid QName'
-	unless $qname =~ /^(?:[a-zA-Z_]+:)?[^\s]+$/;
+  my ($type,
+      $qname,
+      $attr,
+      $child) = @{ $_[0] };
 
-    # Start start tag
-    my $content = (I x $i).'<'.$qname;
+  # Is the qname valid?
+  warn $qname.' is no valid QName'
+    unless $qname =~ /^(?:[a-zA-Z_]+:)?[^\s]+$/;
 
-    # Add attributes
-    $content .= _attr((I x $i).(' ' x (length($qname) + 2)), $attr);
+  # Start start tag
+  my $content = (I x $i) . '<' . $qname;
 
-    # Has the element a child?
-    if ($child->[0]) {
+  # Add attributes
+  $content .= _attr((I x $i).(' ' x ( length($qname) + 2)), $attr);
 
-	# Close start tag
-	$content .= '>';
+  # Has the element a child?
+  if ($child->[0]) {
 
-	# There is only a textual child - no indentation
-	if (!$child->[1] &&
-	    ($child->[0] && $child->[0]->[0] eq 'text')
-	    ) {
+    # Close start tag
+    $content .= '>';
 
-	    # Special content treatment
-	    if (exists $attr->{'serial:type'}) {
+    # There is only a textual child - no indentation
+    if (!$child->[1] &&
+	  ($child->[0] && $child->[0]->[0] eq 'text')
+	) {
 
-		# With base64 indentation
-		if ($attr->{'serial:type'} eq 'base64') {
-		    my $b64_string = $child->[0]->[1];
-		    $b64_string =~ s/\s//g;
-		    
-		    $content .= "\n";
-# temp
-#		    my @lines = grep($_, split(/(.{64})/, $b64_string));
-#		    foreach (@lines) {
-#			$content .= (I x ($i + 1)).$_."\n"
-#		    };
+      # Special content treatment
+      if (exists $attr->{'serial:type'}) {
 
-		    $content .= I x ($i + 1);
-		    $content .= join( "\n" . ( I x ($i + 1) ),
-				      ( unpack '(A60)*', $b64_string ) );
-		    $content .= "\n" . (I x $i);
-		}
+	# With base64 indentation
+	if ($attr->{'serial:type'} eq 'base64') {
+	  my $b64_string = $child->[0]->[1];
+	  $b64_string =~ s/\s//g;
 
-		elsif ($attr->{'serial:type'} eq 'escape') {
-		    $content .= b($child->[0]->[1])->xml_escape;
-		}
+	  $content .= "\n";
+
+	  $content .= I x ($i + 1);
+	  $content .= join( "\n" . ( I x ($i + 1) ),
+			    ( unpack '(A60)*', $b64_string ) );
+	  $content .= "\n" . (I x $i);
+	}
+
+	# Escape
+	elsif ($attr->{'serial:type'} eq 'escape') {
+	  $content .= b($child->[0]->[1])->xml_escape;
+	}
 
 		# No special content treatment indentation
 		else {
@@ -398,14 +402,41 @@ L<Mojo::DOM> and implements the following new ones.
 
 =head2 C<new>
 
-  my $xml = Mojolicious::Plugin::XML::Serial->new(<<'EOF');
+  my $serial = Mojolicious::Plugin::XML::Serial->new(<<'EOF');
+
+  my $serial = $serial->new('Document', {id => 'new'}, 'My Doc');
 
 =head2 C<add>
 
-  my $node = $xml->add('Link', { rel => 'lrdd' });
+  my $serial = $serial->add('Data', { -type => 'base64' }, 'PdGzjvj..');
+
+  my $serial = $serial->add('a', { href => 'http://...' });
+  my $node = $serial->new('strong', 'My Doc');
+  $serial->add($node);
 
 Appends a new Element to the document root and returns a
 C<Mojolicious::Plugin::XML::Serial> object.
+
+Allows for special content types with C<-type> attributes:
+
+=hover2
+
+=item C<base64> Indents the content and automatically linebreaks after
+                60 characters.
+
+=item C<escape> XML escapes the content of the node.
+
+=back
+
+=head2 C<add_ns>
+
+  $serial->add_ns('fun' => 'http://sojolicio.us/fun');
+  $serial->add_ns('http://sojolicio.us/fun');
+
+Add namespace to the node's root.
+The first parameter gives the prefix, the second one
+the namespace. The prefix parameter is optional.
+
 
 =head2 C<comment>
 
