@@ -8,7 +8,7 @@ our @EXPORT = qw(b64url_encode
                  b64url_decode);
 
 # Returns the b64 urlsafe encoding of a string
-sub b64url_encode {
+sub b64url_encode ($;$) {
   my $v = shift;
   my $p = defined $_[0] ? shift : 1;
 
@@ -24,7 +24,7 @@ sub b64url_encode {
 };
 
 # Returns the b64 urlsafe decoded string
-sub b64url_decode {
+sub b64url_decode ($) {
   my $v = shift;
   return '' unless $v;
 

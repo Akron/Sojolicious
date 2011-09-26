@@ -74,3 +74,19 @@ $xml->add($new_para_2);
 
 is($xml->at('strong')->namespace, $my_ns, 'Namespace');
 is($xml->at('*')->attrs('xmlns:my'), $my_ns, 'Namespace-Declaration');
+
+
+# Example from documentation
+$xml = Mojolicious::Plugin::XML::Serial->new('entry');
+$xml->add_ns('fun' => 'http://sojolicio.us/ns/fun');
+my $env = $xml->add('fun:env' => { foo => 'bar' });
+my $data = $env->add('data' => { type => 'base64',
+				 -type => 'armour:30'
+			       } => <<'B64');
+  VGhpcyBpcyBqdXN0IGEgdGVzdCBzdHJpbmcgZm
+  9yIHRoZSBhcm1vdXIgdHlwZS4gSXQncyBwcmV0
+  dHkgbG9uZyBmb3IgZXhhbXBsZSBpc3N1ZXMu
+B64
+$data->comment('This is base64 data!');
+
+# diag $xml->to_pretty_xml;

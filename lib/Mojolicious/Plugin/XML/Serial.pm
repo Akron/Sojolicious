@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::XML::Serial;
 use Mojo::Base 'Mojo::DOM';
 use Mojo::ByteStream 'b';
+use Mojo::Loader;
 
 use constant {
   I         => '  ',
@@ -30,10 +31,15 @@ sub new {
     my $text = shift;
 
     # Node content
-    my $element = qq(<$name xmlns:serial=").SERIAL_NS.'"';
+    my $element = qq(<$name xmlns:serial=") . SERIAL_NS . '"';
+
+    # Text is given
     if ($text) {
       $element .= ">$text</$name>";
-    } else {
+    }
+
+    # Empty element
+    else {
       $element .= ' />';
     };
 
@@ -47,7 +53,17 @@ sub new {
     };
 
     # Add attributes to node
-    $root->at('*')->attrs($att);
+    $element = $root->at('*');
+    $element->attrs($att);
+
+    # The class is derived
+    if ($class ne __PACKAGE__) {
+      # Set namespace if given
+      no strict 'refs';
+      if (defined ${ $class.'::NS' }) {
+	$element->attrs(xmlns => ${ $class.'::NS' });
+      };
+    };
 
     return $root;
   };
@@ -129,18 +145,94 @@ sub add {
 };
 
 
+# Append a new child node to the XML Node
+# Prepend prefix if necessary.
+sub add_pref {
+  my $self   = shift;
+  my $element = $self->add(@_);
+  return $element if $element->tree->[0] ne 'tag';
+
+  my $caller = caller;
+  my $class  = ref($self);
+
+  my $name = $element->tree->[1];
+
+  if ($name &&
+	($caller && $class) &&
+	  ($caller ne $class)) {
+    {
+      no strict 'refs';
+      if ((my $prefix = ${ $caller.'::PREFIX' }) &&
+	  ${ $caller.'::NS' }) {
+	$element->tree->[1] = $prefix.':'.$name if $prefix;
+      };
+    };
+  };
+
+  return $element;
+
+};
+
+# Add extension to document
+sub add_extension {
+  my $self      = shift;
+
+  # New Loader
+  my $loader = Mojo::Loader->new;
+
+  # Use root element
+  $self = $self->root->at('*');
+
+  # Get ext string
+  my @ext = split( /\s*;\s*/, $self->attrs('serial:ext') || '');
+
+  # Try all given extension names
+  foreach my $ext (@_) {
+
+    # Unable to load extension
+    if (my $e = $loader->load($ext)) {
+      Carp::croak( "Exception: $e" ) if ref $e;
+      Carp::croak(qq{Unable to load extension "$ext"});
+      next;
+    };
+
+    # Add extension to extensions list
+    push(@ext, $ext);
+
+    # Add namespace for extension
+    {
+      no strict 'refs';
+      if (defined ${ $ext . '::NS' } &&
+	  defined ${ $ext . '::PREFIX' }) {
+	$self->add_ns(${ $ext . '::PREFIX' } =>
+			${ $ext . '::NS' });
+      };
+    };
+  };
+
+  # Save extension list as attribute
+  $self->attrs('serial:ext' => join(';', @ext));
+
+  return;
+};
+
+
 # Add namespace to root
 sub add_ns {
   my $self   = shift;
-  my $prefix = $_[1] ? ':'.shift : '';
-  $self->root->at('*')->attrs( 'xmlns'.$prefix => shift );
+
+  # prefix namespace if existent
+  my $prefix = $_[1] ? ':' . shift : '';
+
+  # Save namespace as attribute
+  $self->root->at('*')->attrs( 'xmlns' . $prefix => shift );
   return $prefix;
 };
 
 
 # Prepend a comment to the XML node
 sub comment {
-  my $self    = shift;
+  my $self = shift;
   $self->prepend('<!--' . b( shift )->xml_escape . '-->');
   return $self;
 };
@@ -148,8 +240,7 @@ sub comment {
 
 # Render as pretty xml
 sub to_pretty_xml {
-  my $self = shift;
-  return _render_pretty(0, $self->tree);
+  return _render_pretty(0, shift->tree);
 };
 
 
@@ -161,7 +252,7 @@ sub _render_pretty {
   my $e = $tree->[0];
 
   # No element
-  warn 'No element' and return unless $e;
+  Carp::croak('No element') and return unless $e;
 
   # Element is tag
   if ($e eq 'tag') {
@@ -234,7 +325,7 @@ sub _element ($$) {
       $child) = @{ $_[0] };
 
   # Is the qname valid?
-  warn $qname.' is no valid QName'
+  Carp::croak($qname.' is no valid QName')
     unless $qname =~ /^(?:[a-zA-Z_]+:)?[^\s]+$/;
 
   # Start start tag
@@ -258,15 +349,20 @@ sub _element ($$) {
       if (exists $attr->{'serial:type'}) {
 
 	# With base64 indentation
-	if ($attr->{'serial:type'} eq 'base64') {
-	  my $b64_string = $child->[0]->[1];
-	  $b64_string =~ s/\s//g;
+	if ($attr->{'serial:type'} =~ /^armour(?::(\d+))?$/) {
+	  my $n = $1 || 60;
+
+	  my $string = $child->[0]->[1];
+
+	  # Delete whitespace
+	  $string =~ tr{\t-\x0d }{}d;
 
 	  $content .= "\n";
 
+	  # Introduce newlines after n characters
 	  $content .= I x ($i + 1);
 	  $content .= join( "\n" . ( I x ($i + 1) ),
-			    ( unpack '(A60)*', $b64_string ) );
+			    ( unpack '(A'.$n.')*', $string ) );
 	  $content .= "\n" . (I x $i);
 	}
 
@@ -275,104 +371,116 @@ sub _element ($$) {
 	  $content .= b($child->[0]->[1])->xml_escape;
 	}
 
-		# No special content treatment indentation
-		else {
-		    $content .= $child->[0]->[1];
-		};
-	    }
-
-	    # No special content treatment indentation
-	    else {
-		$content .= $child->[0]->[1];
-	    };
-	}
-
-	# Treat children special
-	elsif (exists $attr->{'serial:type'} &&
-	       $attr->{'serial:type'} eq 'raw') {
-	    foreach my $e_child (@$child) {
-		$content .= __PACKAGE__->SUPER::new(tree => $e_child)->to_xml;
-	    };
-	}
-
-	# There are some childs
+	# No special content treatment indentation
 	else {
-	    $content .= "\n";
-
-	    # Loop through all child elements
-	    foreach my $child_e (@$child) {
-
-		# Render next element
-		$content .= _render_pretty($i+1, $child_e);
-	    };
-
-	    # Correct Indent
-	    $content .= (I x $i);
-
+	  $content .= $child->[0]->[1];
 	};
+      }
 
-	# End Tag
-	$content .= '</' . $qname . ">\n";
+      # No special content treatment indentation
+      else {
+	$content .= $child->[0]->[1];
+      };
     }
 
-    # No child - close start element as empty tag
+    # Treat children special
+    elsif (exists $attr->{'serial:type'} &&
+	     $attr->{'serial:type'} eq 'raw') {
+      foreach my $e_child (@$child) {
+	$content .= __PACKAGE__->SUPER::new( tree => $e_child )->to_xml;
+      };
+    }
+
+    # There are some childs
     else {
-	$content .= " />\n";
+      $content .= "\n";
+
+      # Loop through all child elements
+      foreach my $child_e (@$child) {
+
+	# Render next element
+	$content .= _render_pretty( $i + 1, $child_e );
+      };
+
+      # Correct Indent
+      $content .= (I x $i);
     };
 
-    # return content
-    return $content;
-}
+    # End Tag
+    $content .= '</' . $qname . ">\n";
+  }
 
-# render attributes with pretty printing
+  # No child - close start element as empty tag
+  else {
+    $content .= " />\n";
+  };
+
+  # Return content
+  return $content;
+};
+
+
+# Render attributes with pretty printing
 sub _attr ($$) {
     my $indent_space = shift;
-    my %attr = %{$_[0]};
+    my %attr         = %{$_[0]};
 
-    delete $attr{$_} foreach grep(/^(?:xmlns:)?serial:?/, keys %attr);
+    # Delete special attributes
+    delete $attr{$_} foreach grep($_ eq 'xmlns:serial' ||
+				    index($_,'serial:') == 0, keys %attr);
 
-    # prepare attribute values
+    # Prepare attribute values
     foreach (values %attr) {
 	$_ = b($_)->xml_escape->quote;
     };
 
-    # return indented attribute string
-    return 
-	' '. 
+    # Return indented attribute string
+    if (keys %attr) {
+      return ' ' .
 	join("\n".$indent_space,
-	     map($_.'='.$attr{$_},
-		 keys(%attr))) if keys %attr;
+	     map($_ . '=' . $attr{$_}, keys %attr ) );
+    };
 
-    # return nothing
+    # Return nothing
     return '';
 };
 
+
+# Autoload for extensions
 sub AUTOLOAD {
-    my $self = shift;
-    my @param = @_;
+  my $self = shift;
+  my @param = @_;
 
-    my ($package, $method) = our $AUTOLOAD =~ /^([\w\:]+)\:\:(\w+)$/;
+  # Split parameter
+  my ($package, $method) = our $AUTOLOAD =~ /^([\w\:]+)\:\:(\w+)$/;
 
-    {
-	no strict 'refs';
+  # Choose root element
+  my $root = $self->root->at('*');
 
-	my $root = $self->at(':root');
+  # Get ext string
+  my $ext_string;
+  if ($ext_string = $root->attrs('serial:ext')) {
+    no strict 'refs';
 
-	if (my $ext_string = $root->attrs('serial:ext')) {
-	    foreach my $ext ( split(';', $ext_string ) ) {
-		if (defined *{ $ext.'::'.$method }) {
-		    return *{ $ext.'::'.$method }->($self, @param);
-		};
-	    };
-	};
+    foreach my $ext ( split(';', $ext_string ) ) {
+      # Method does not exist in extension
+      next unless  defined *{ $ext.'::'.$method };
+
+      # Release method
+      return *{ $ext.'::'.$method }->($self, @param);
     };
+  };
 
-    Carp::croak(qq/Can't locate object method "$method" via package "$package"/);
-    return;
+  my $errstr = qq{Can't locate object method "$method" via package "$package"};
+  $errstr .= qq{ with extensions "$ext_string"} if $ext_string;
 
+  Carp::croak($errstr);
+  return;
 };
 
+
 1;
+
 
 __END__
 
@@ -386,14 +494,38 @@ Mojolicious::Plugin::XML::Serial - Simple XML constructor
 
   use Mojolicious::Plugin::XML::Serial;
 
-  my $xml = Mojolicious::Plugin::XML::Serial->new;
-  $xml->add('link' => { rel => 'foo'}, 'bar');
+  my $xml = Mojolicious::Plugin::XML::Serial->new('entry');
 
-  # Mojolicious
-  $self->plugin('XML::Serial');
+  my $env = $xml->add('fun:env' => { foo => 'bar' });
 
-  # Mojolicious::Lite
-  plugin 'XML::Serial';
+  $xml->add_ns('fun' => 'http://sojolicio.us/ns/fun');
+
+  my $data = $env->add('data' => { type  => 'text/plain',
+                                   -type => 'armour:30'
+			         } => <<'B64');
+    VGhpcyBpcyBqdXN0IGEgdGVzdCBzdHJpbmcgZm
+    9yIHRoZSBhcm1vdXIgdHlwZS4gSXQncyBwcmV0
+    dHkgbG9uZyBmb3IgZXhhbXBsZSBpc3N1ZXMu
+  B64
+
+  $data->comment('This is base64 data!');
+
+  print $xml->to_pretty_xml;
+
+  # <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  # <entry xmlns:fun="http://sojolicio.us/ns/fun">
+  #   <fun:env foo="bar">
+  #
+  #     <!-- This is base64 data! -->
+  #     <data type="text/plain">
+  #       VGhpcyBpcyBqdXN0IGEgdGVzdCBzdH
+  #       JpbmcgZm9yIHRoZSBhcm1vdXIgdHlw
+  #       ZS4gSXQncyBwcmV0dHkgbG9uZyBmb3
+  #       IgZXhhbXBsZSBpc3N1ZXMu
+  #     </data>
+  #   </fun:env>
+  # </entry>
+
 
 =head1 METHODS
 
@@ -421,22 +553,23 @@ Allows for special content types with C<-type> attributes:
 
 =hover2
 
-=item C<base64> Indents the content and automatically linebreaks after
-                60 characters.
+=item C<armour(:n)?> Indent the content and automatically
+                     introduce linebreaks after every
+                     C<n> characters.
+                     Intended for base64 encoded data.
+                     Defaults to 60 characters
 
-=item C<escape> XML escapes the content of the node.
+=item C<escape> XML escape the content of the node.
+
+=item C<raw> Treat children as raw data (no pretty printing.
 
 =back
 
-=head2 C<add_ns>
+=head2 C<add_pref>
 
-  $serial->add_ns('fun' => 'http://sojolicio.us/fun');
-  $serial->add_ns('http://sojolicio.us/fun');
-
-Add namespace to the node's root.
-The first parameter gives the prefix, the second one
-the namespace. The prefix parameter is optional.
-
+C<add_pref> is similar to C<add> and needs the same parameters.
+However, if used in an extension context, it will prefix the element
+name for the namespace. In base context, no prefix is introduced.
 
 =head2 C<comment>
 
@@ -444,11 +577,129 @@ the namespace. The prefix parameter is optional.
 
 Prepends a comment to the XRD node.
 
+=head2 C<add_ns>
+
+  $serial->add_ns('fun' => 'http://sojolicio.us/fun');
+  $serial->add_ns('http://sojolicio.us/fun');
+  $serial->add('fun:test' => { foo => 'bar' }, 'Works!');
+
+Add namespace to the node's root.
+The first parameter gives the prefix, the second one
+the namespace. The prefix parameter is optional.
+
+=head2 C<add_extension>
+
+  $serial->add_extension('Fun','Atom');
+
+Add an array of packages as extensions to the root
+of the document.
+
 =head2 C<to_pretty_xml>
 
   print $xml->to_pretty_xml;
 
 Returns a stringified, pretty printed XML document.
+
+=head1 EXTENSIONS
+
+L<Mojolicious::Plugin::XML::Serial> allows for inheritance
+and thus provides two ways of extending the functionality:
+By using a derived class as a base class or by extending a
+base class with the C<add_extension> method.
+
+  package Fun;
+  use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+
+  our $NS     = 'http://sojolicio.us/ns/fun';
+  our $PREFIX = 'fun';
+
+  sub add_happy {
+    my $self = shift;
+    my $word = shift;
+
+    my $cool = $self->add('Cool');
+
+    my $cry = uc($word) . '!!! \o/ ';
+
+    $cool->add_pref('Happy', {foo => 'bar'}, $cry);
+  };
+
+Then use this object in your app:
+
+  package main;
+  use Fun;
+  my $obj = Fun->new('Fun');
+  $obj->add_happy('Yeah!');
+  print $obj->to_pretty_xml;
+
+  # <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  # <Fun xmlns="http://sojolicio.us/ns/fun">
+  #   <Cool>
+  #     <Happy foo="bar">YEAH!!!! \o/ </Happy>
+  #   </Cool>
+  # </Fun>
+
+The defined namespace C<$NS> is introduced as the documents
+namespaces. The prefix C<$PREFIX> is not used.
+The behaviour of the C<add_pref> method in this example is exactly
+the same as the C<add> method.
+
+This package can be used as an extension as well:
+
+  package main;
+  use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+  my $obj = Mojolicious::Plugin::XML::Serial->new('object');
+  $obj->add_extension('Fun');
+  $obj->add_happy('Yeah!');
+  print $obj->to_pretty_xml;
+
+  # <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  # <object xmlns:fun="http://sojolicio.us/ns/fun">
+  #   <Cool>
+  #     <fun:Happy foo="bar">YEAH!!!! \o/ </fun:Happy>
+  #   </Cool>
+  # </object>
+
+The defined namespace C<$NS> is introduced with the prefix C<$PREFIX>.
+The prefix is prepend to all elements added by C<add_pref>.
+All elements added by C<add> have no prefixes prepended.
+
+New extensions can always be introduced to a base class,
+whether derived or not.
+
+  package Atom;
+  use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+
+  our $PREFIX = 'atom';
+  our $NS = 'http://www.w3.org/2005/Atom';
+
+  # Add id
+  sub add_id {
+    my $self = shift;
+    my $id   = shift;
+    return unless $id;
+    $self->at('*')->attrs('xml:id' => $id);
+    $self->add_pref('id', $id);
+  };
+
+  package main;
+  use Fun;
+  my $obj = Fun->new('Fun');
+  $obj->add_extension('Atom');
+  $obj->add_happy('Yeah!');
+  $obj->add_id('1138');
+  print $obj->to_pretty_xml;
+
+  # <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  # <Fun xmlns="http://sojolicio.us/ns/fun"
+  #      xmlns:atom="http://www.w3.org/2005/Atom"
+  #      xml:id="1138">
+  #   <Cool>
+  #     <Happy foo="bar">YEAH!!!! \o/ </Happy>
+  #   </Cool>
+  #   <atom:id>1138</atom:id>
+  # </Fun>
+
 
 =head1 DEPENDENCIES
 

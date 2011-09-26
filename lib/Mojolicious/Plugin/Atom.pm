@@ -5,64 +5,64 @@ use constant ATOM_NS =>  'http://www.w3.org/2005/Atom';
 
 # Register Plugin
 sub register {
-    my ($plugin, $mojo) = @_;
+  my ($plugin, $mojo) = @_;
 
-    # Apply Atom mime-Type
-    $mojo->types->type('atom' => 'application/atom+xml');
+  # Apply Atom mime-Type
+  $mojo->types->type('atom' => 'application/atom+xml');
 
-    # Add 'new_atom' helper
-    $mojo->helper(
-	'new_atom' => sub {
-	    shift; # Either Controller or App
-	    return $plugin->new( shift || 'feed' );
-	});
+  # Add 'new_atom' helper
+  $mojo->helper(
+    'new_atom' => sub {
+      shift; # Either Controller or App
+      return $plugin->new( shift || 'feed' );
+    });
 
-    # Add 'render_atom' helper
-    $mojo->helper(
-	'render_atom' => sub {
-	    my $c = shift;
-	    my $atom = shift;
-            return $c->render(
-		'inline' => $atom->to_pretty_xml,
-		'format' => 'atom'
-		);
-	});
+  # Add 'render_atom' helper
+  $mojo->helper(
+    'render_atom' => sub {
+      my $c = shift;
+      my $atom = shift;
+      return $c->render(
+	'inline' => $atom->to_pretty_xml,
+	'format' => 'atom'
+      );
+    });
 };
 
 # Constructor
 sub new {
-    my $class = shift;
+  my $class = shift;
 
-    # Return for register_plugin
-    if (!defined $_[0]) {
-	return $class if ref($class);
-	return bless( {}, $class );
-    }
+  # Return for register_plugin
+  if (!defined $_[0]) {
+    return $class if ref($class);
+    return bless( {}, $class );
+  }
 
-    # Start Atom feed or entry
-    elsif (@_ == 1 && index($_[0], '<') == -1) {
-	my $type  = shift;
-	
-	return Mojolicious::Plugin::Atom::Document->new(
-	    $type,
-	    { 'xmlns' => ATOM_NS });
-    } elsif (@_ == 3 && $_[1] eq 'extension') {
-	return Mojolicious::Plugin::Atom::Document->new(
-	    $_[0],
-	    { 'xmlns'      => ATOM_NS,
-	      'serial:ext' => join(';', @{ $_[2] })
-	    })
-    };
-  
-    # Start document
-    return Mojolicious::Plugin::Atom::Document->new(@_);
+  # Start Atom feed or entry
+  elsif (@_ == 1 && index($_[0], '<') == -1) {
+    my $type  = shift;
+
+    return Mojolicious::Plugin::Atom::Document->new(
+      $type,
+      { 'xmlns' => ATOM_NS });
+  } elsif (@_ == 3 && $_[1] eq 'extension') {
+    return Mojolicious::Plugin::Atom::Document->new(
+      $_[0],
+      { 'xmlns'      => ATOM_NS,
+	'serial:ext' => join(';', @{ $_[2] })
+      })
+  };
+
+  # Start document
+  return Mojolicious::Plugin::Atom::Document->new(@_);
 };
 
 # Document class
 package Mojolicious::Plugin::Atom::Document;
 use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
-use Mojo::ByteStream 'b';
 use Mojolicious::Plugin::Date::RFC3339;
+use Mojo::ByteStream 'b';
 
 # Namespace declaration
 use constant XHTML_NS => 'http://www.w3.org/1999/xhtml';
@@ -71,320 +71,317 @@ use constant XHTML_NS => 'http://www.w3.org/1999/xhtml';
 
 # New feed
 sub new_feed {
-    return Mojolicious::Plugin::Atom->new('feed');
+  return Mojolicious::Plugin::Atom->new('feed');
 };
 
 # New entry
 sub new_entry {
-    return Mojolicious::Plugin::Atom->new('entry');
+  return Mojolicious::Plugin::Atom->new('entry');
 };
 
 # New person construct
 sub new_person {
-    my $self = shift;
-    my $person = ref($self)->SUPER::new('person');
-    my %hash = @_;
-    foreach (keys %hash) {
-	$person->add($_, $hash{$_})
-    };
-    return $person;
+  my $self = shift;
+  my $person = ref($self)->SUPER::new('person');
+  my %hash = @_;
+  foreach (keys %hash) {
+    $person->add($_, $hash{$_})
+  };
+  return $person;
 };
 
 # Add person information
 sub _add_person {
-    my $self = shift;
-    my $type = shift;
+  my $self = shift;
+  my $type = shift;
 
-    # Person is a defined node
-    if (ref($_[0])) {
-	my $person = shift;
-	$person->root->at('*')->tree->[1] = $type;
-	return $self->add($person);
-    }
+  # Person is a defined node
+  if (ref($_[0])) {
+    my $person = shift;
+    $person->root->at('*')->tree->[1] = $type;
+    return $self->add($person);
+  }
 
-    # Person is a hash
-    else {
-	my $person = $self->add($type);
-	my %data = @_;
-	
-	foreach (keys %data) {
-	    $person->add($_ => $data{$_} ) if $data{$_};
-	};
-	return $person;
+  # Person is a hash
+  else {
+    my $person = $self->add($type);
+    my %data = @_;
+
+    foreach (keys %data) {
+      $person->add($_ => $data{$_} ) if $data{$_};
     };
+    return $person;
+  };
 };
 
 # New date construct
 sub new_date {
-    my $self = shift;
+  my $self = shift;
 
-    # now
-    my $time = shift || time;
+  # now
+  my $time = shift || time;
 
-    return Mojolicious::Plugin::Date::RFC3339->new($time);
+  return Mojolicious::Plugin::Date::RFC3339->new($time);
 };
 
 # Add date construct
 sub _add_date {
-    my ($self, $type, $date) = @_;
-    
-    unless (ref($date)) {
-	$date = $self->new_date($date);
-    };
+  my ($self, $type, $date) = @_;
 
-    return $self->add($type, $date->to_string);
+  unless (ref($date)) {
+    $date = $self->new_date($date);
+  };
+
+  return $self->add($type, $date->to_string);
 };
 
 # New text construct
 sub new_text {
-    my $self = shift;
+  my $self = shift;
 
-    return unless $_[0];
+  return unless $_[0];
 
-    my $class = ref($self);
+  my $class = ref($self);
 
-    unless (defined $_[1]) {
-	return $class->SUPER::new('text',
-				     { type => 'text',
-				       -type => 'escape' },
-				     b( shift )->xml_escape );
+  unless (defined $_[1]) {
+    return $class->SUPER::new('text',
+			      { type => 'text',
+				-type => 'escape' },
+			      b( shift )->xml_escape );
+  };
+
+  my ($type, $content, %hash);
+
+  if (!defined $_[2]) {
+    $type = shift;
+    $content = shift;
+  }
+
+  else {
+    %hash = @_;
+
+    $type = delete $hash{type} || 'text';
+
+    if (exists $hash{src}) {
+      return $class->SUPER::new('text',
+				{ type => $type, %hash });
     };
 
-    my ($type, $content, %hash);
+    $content = delete $hash{content} or return;
+  };
 
-    if (!defined $_[2]) {
-	$type = shift;
-	$content = shift;
-    }
+  my $c_node;
 
-    else {
-    	%hash = @_;
+  # xhtml
+  if ($type eq 'xhtml') {
 
-	$type = delete $hash{type} || 'text';
+    $c_node = $class->SUPER::new('text', { type => $type,
+					   %hash });
 
-	if (exists $hash{src}) {
-	    return $class->SUPER::new('text',
-				      { type => $type, %hash });
-	};
+    $c_node->add('div',
+		 { xmlns => XHTML_NS,
+		   -type => 'raw' },
+		 $content);
+  }
 
-	$content = delete $hash{content} or return;
-    };
+  # html or text
+  elsif ($type eq 'html' || $type =~ /^text/i) {
 
-    my $c_node;
+    $c_node = $class->SUPER::new('text',
+				 { type => $type,
+				   -type => 'escape',
+				   'xml:space' => 'preserve',
+				   %hash },
+				 b($content)->xml_escape
+			       );
+  }
 
-    # xhtml
-    if ($type eq 'xhtml') {
+  # xml media type
+  elsif ($type =~ /[\/\+]xml$/i) {
+    $c_node = $class->SUPER::new('text',
+				 { type => $type,
+				   -type => 'raw',
+				   %hash },
+				 $content);
+  }
 
-	$c_node = $class->SUPER::new('text', { type => $type,
-					       %hash });
+  # all other media types
+  else {
+    $c_node = $class->SUPER::new('text',
+				 { type => $type,
+				   -type => 'armour',
+				   %hash },
+				 $content);
+  };
 
-	$c_node->add('div',
-		     { xmlns => XHTML_NS,
-		       -type => 'raw' },
-		     $content);
-	
-    }
-
-    # html or text
-    elsif ($type eq 'html' || $type =~ /^text/i) {
-
-	$c_node = $class->SUPER::new('text',
-				     { type => $type,
-				       -type => 'escape',
-				       'xml:space' => 'preserve',
-				       %hash },
-				     b($content)->xml_escape
-	    );
-	
-    }
-    
-    # xml media type
-    elsif ($type =~ /[\/\+]xml$/i) {
- 	$c_node = $class->SUPER::new('text',
-				     { type => $type,
-				       -type => 'raw',
-				       %hash },
-				     $content);
-
-    }
-
-    # all other media types
-    else {
- 	$c_node = $class->SUPER::new('text',
-				     { type => $type,
-				       -type => 'base64',
-				       %hash },
-				     $content);
-    };
-
-    return $c_node;
+  return $c_node;
 };
 
 # Add text information
 sub _add_text {
-    my $self = shift;
-    my $type = shift;
+  my $self = shift;
+  my $type = shift;
 
-    # Text is a defined node
-    if (ref($_[0])) {
+  # Text is a defined node
+  if (ref($_[0])) {
 
-	my $text = shift;
-	my $root_elem = $text->root->at('*');
-	$root_elem->tree->[1] = $type;
-	my $root_att = $root_elem->attrs;
-	if (exists $root_att->{type} && $root_att->{type} eq 'text') {
-	    delete $root_elem->attrs->{'type'};
-	};
-	$text->root->at('*')->tree->[1] = $type;
-	return $self->add($text);
+    my $text = shift;
+    my $root_elem = $text->root->at('*');
+    $root_elem->tree->[1] = $type;
+    my $root_att = $root_elem->attrs;
+    if (exists $root_att->{type} && $root_att->{type} eq 'text') {
+      delete $root_elem->attrs->{'type'};
     };
+    $text->root->at('*')->tree->[1] = $type;
+    return $self->add($text);
+  };
 
-    my $text;
-    # Text is no hash
-    unless (defined $_[1]) {
-	$text = $self->new_text(type => 'text',
-				content => shift );
-    }
+  my $text;
+  # Text is no hash
+  unless (defined $_[1]) {
+    $text = $self->new_text(type => 'text',
+			    content => shift );
+  }
 
-    # Text is a hash
-    else {
-	$text = $self->new_text(@_);
-    };
+  # Text is a hash
+  else {
+    $text = $self->new_text(@_);
+  };
 
-    return $self->_add_text($type,$text) if ref($text);
+  return $self->_add_text($type,$text) if ref($text);
 
-    return;
+  return;
 };
 
 # Add entry
 sub add_entry {
-    my $self = shift;
+  my $self = shift;
 
-    if (ref($_[0])) {
-	return $self->add(@_);
-    };
+  if (ref($_[0])) {
+    return $self->add(@_);
+  };
 
-    my %hash = @_;
-    my $entry;
+  my %hash = @_;
+  my $entry;
 
-    # Set id additionally as xml:id
-    if (exists $hash{id}) {
-	$entry = $self->add('entry',
-			    {'xml:id' => $hash{id}});
-    }
+  # Set id additionally as xml:id
+  if (exists $hash{id}) {
+    $entry = $self->add('entry',
+			{'xml:id' => $hash{id}});
+  }
 
-    # No id given
-    else {
-	$entry = $self->add('entry');
-    };
+  # No id given
+  else {
+    $entry = $self->add('entry');
+  };
 
-    # Add information
-    foreach (keys %hash) {
-	$entry->add($_, $hash{$_});
-    };
+  # Add information
+  foreach (keys %hash) {
+    $entry->add($_, $hash{$_});
+  };
 
-    return $entry;
+  return $entry;
 };
 
 # Add content information
 sub add_content {
-    return shift->_add_text('content', @_);
+  shift->_add_text('content', @_);
 };
 
 # Add author information
 sub add_author {
-    shift->_add_person('author', @_);
+  shift->_add_person('author', @_);
 };
 
 # Add category information
 sub add_category {
-    my $self = shift;
+  my $self = shift;
 
-    return unless $_[0];
+  return unless $_[0];
 
-    if (!defined $_[1]) {
-	return $self->SUPER::add('category', { term => shift });
-    };
+  if (!defined $_[1]) {
+    return $self->SUPER::add('category', { term => shift });
+  };
 
-    return $self->SUPER::add('category', { @_ } );
+  return $self->SUPER::add('category', { @_ } );
 };
 
 # Add contributor information
 sub add_contributor {
-    shift->_add_person('contributor', @_);
+  shift->_add_person('contributor', @_);
 };
 
 # Add generator information
 sub add_generator {
-    shift->add('generator', @_);
+  shift->add('generator', @_);
 };
 
 # Add icon
 sub add_icon { # only one
-    shift->add('icon', shift);
+  shift->add('icon', shift);
 };
 
 # Add id
 sub add_id { # must one
-    my $self = shift;
-    my $id = shift;
-    return unless $id;
-    $self->attrs('xml:id' => $id);
-    $self->add('id', $id);
+  my $self = shift;
+  my $id = shift;
+  return unless $id;
+  $self->attrs('xml:id' => $id);
+  $self->add('id', $id);
 };
 
 # Add link information
 sub add_link {
-    my $self = shift;
-    unless (defined $_[1]) {
-	return $self->add('link', { rel => 'related',
-				    href => shift });
-    };
+  my $self = shift;
+  unless (defined $_[1]) {
+    return $self->add('link', { rel => 'related',
+				href => shift });
+  };
 
-    my %values = @_;
-    # href, rel, type, hreflang, title, length
-    my $rel = delete $values{rel} || 'related';
-    return $self->add('link' => { rel => $rel, %values });
+  my %values = @_;
+  # href, rel, type, hreflang, title, length
+  my $rel = delete $values{rel} || 'related';
+  return $self->add('link' => { rel => $rel, %values });
 };
 
 # Add logo
 sub add_logo { # only one
-    shift->add('logo', shift);
+  shift->add('logo', shift);
 };
 
 # Add publish time information
 sub add_published {
-    return shift->_add_date('published', @_);
+  shift->_add_date('published', @_);
 };
 
 # Add rights information
 sub add_rights {
-    shift->_add_text('rights', @_);
+  shift->_add_text('rights', @_);
 };
 
 # Add source information
 sub add_source {
-    shift->add('source', { @_ });
+  shift->add('source', { @_ });
 };
 
 # Add subtitle
 sub add_subtitle {
-    shift->_add_text('subtitle', @_);
+  shift->_add_text('subtitle', @_);
 };
 
 # Add summary
 sub add_summary {
-    shift->_add_text('summary', @_);
+  shift->_add_text('summary', @_);
 };
 
 # Add title
 sub add_title {
-    return shift->_add_text('title', @_);
+  shift->_add_text('title', @_);
 };
 
 # Add update time information
 sub add_updated {
-    return shift->_add_date('updated', @_);
+  shift->_add_date('updated', @_);
 };
 
 1;
@@ -687,7 +684,6 @@ parameter accepted by L<new_date>.
 L<Mojolicious::Plugin::Atom> establishes the following mime-types:
 
   'atom': 'application/atom+xml'
-
 
 =head1 DEPENDENCIES
 
