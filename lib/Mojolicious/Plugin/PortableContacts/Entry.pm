@@ -1,6 +1,6 @@
 package Mojolicious::Plugin::PortableContacts::Entry;
 use Mojo::Base -base;
-use Mojolicious::Plugin::XML::Serial;
+use Mojolicious::Plugin::SerialXML;
 
 # todo - allow further valid labels
 
@@ -36,7 +36,7 @@ sub to_xml {
 sub _xml {
     my $self = shift;
 
-    my $entry = Mojolicious::Plugin::XML::Serial->new('entry');
+    my $entry = Mojolicious::Plugin::SerialXML->new('entry');
 
     foreach my $key (keys %$self) {
 
@@ -154,7 +154,7 @@ The entry will contain only valid keys.
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::XML::Serial>.
+L<Mojolicious::Plugin::SerialXML>.
 
 =head1 COPYRIGHT AND LICENSE
 

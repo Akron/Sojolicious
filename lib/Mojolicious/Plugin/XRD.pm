@@ -39,7 +39,7 @@ sub register {
 
 # Document class
 package Mojolicious::Plugin::XRD::Document;
-use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+use Mojo::Base 'Mojolicious::Plugin::SerialXML';
 use Mojolicious::Plugin::Date::RFC3339;
 
 # Namespace declaration
@@ -60,7 +60,7 @@ sub new {
 		'xmlns:xsi' => XSI_NS
 	    });
     };
-    
+
     # Use constructor from parent class
     $class->SUPER::new(@_);
 };
@@ -224,7 +224,7 @@ Mojolicious::Plugin::XRD
 
 =head1 DESCRIPTION
 
-L<Mojolicious::Plugin::XRD> is a plugin to support 
+L<Mojolicious::Plugin::XRD> is a plugin to support
 Extensible Resource Descriptor (XRD) documents
 (see L<Specification|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>).
 
@@ -256,7 +256,7 @@ in C<xml> or in C<json> notation, depending on the request.
 =head1 METHODS
 
 L<Mojolicious::Plugin::XRD::Document> inherits all methods
-from L<Mojolicious::Plugin::XML::Serial> and implements the
+from L<Mojolicious::Plugin::SerialXML> and implements the
 following new ones.
 
 =head2 C<add_property>
@@ -264,7 +264,7 @@ following new ones.
   my $type = $xrd->add_property('descrybedby' => { href => '/me.foaf' } );
 
 Adds a property to the xrd document.
-Returns a L<Mojolicious::Plugin::XML::Serial> object.
+Returns a L<Mojolicious::Plugin::SerialXML> object.
 
 =head2 C<get_property>
 
@@ -278,7 +278,7 @@ elemet of the given type.
   my $type = $xrd->add_link('hcard' => { href => '/me.hcard' } );
 
 Adds a link to the xrd document.
-Returns a L<Mojolicious::Plugin::XML::Serial> object.
+Returns a L<Mojolicious::Plugin::SerialXML> object.
 
 =head2 C<get_link>
 
@@ -310,7 +310,7 @@ L<Mojolicious::Plugin::XRD> establishes the following mime-types:
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::XML::Serial>.
+L<Mojolicious::Plugin::SerialXML>.
 
 =head1 COPYRIGHT AND LICENSE
 

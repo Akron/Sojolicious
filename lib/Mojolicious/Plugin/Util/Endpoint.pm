@@ -8,157 +8,156 @@ our %endpoints;
 
 # Register Plugin
 sub register {
-    my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo, $param) = @_;
 
-    # Add 'endpoint' shortcut
-    $mojo->routes->add_shortcut(
-	'endpoint' => sub {
-	    my ($route, $name, $param) = @_;
+  # Add 'endpoint' shortcut
+  $mojo->routes->add_shortcut(
+    'endpoint' => sub {
+      my ($route, $name, $param) = @_;
 
-	    # Endpoint already defined
-	    if (exists $endpoints{$name}) {
-		$mojo->log->debug(qq{Route endpoint "$name" already defined.});
-		return $route;		
-	    };
+      # Endpoint already defined
+      if (exists $endpoints{$name}) {
+	$mojo->log->debug(qq{Route endpoint "$name" already defined.});
+	return $route;
+      };
 
-	    # Route defined
-	    $route->name($name);
+      # Route defined
+      $route->name($name);
 
-	    # Search for placeholders
-	    my %placeholders;
-	    my $r = $route;
-	    $r->pattern->match('/');
-	    while ($r) {
-		foreach (@{$r->pattern->symbols}) {
-		    $placeholders{$_} = '{' . $_ . '}';
-		};
-		$r = $r->parent;
-	    };
+      # Search for placeholders
+      my %placeholders;
+      my $r = $route;
+      $r->pattern->match('/');
+      while ($r) {
+	foreach (@{$r->pattern->symbols}) {
+	  $placeholders{$_} = '{' . $_ . '}';
+	};
+	$r = $r->parent;
+      };
 
-	    # Set Endpoint url
-	    my $endpoint_url = $mojo->url_for($name => 
-					      %placeholders)->to_abs->clone;
+      # Set Endpoint url
+      my $endpoint_url = $mojo->url_for($name => 
+					  %placeholders)->to_abs->clone;
 
-	    for ($endpoint_url) {
-		
-		# Host
-		$_->host($param->{host}) if exists $param->{host};
+      for ($endpoint_url) {
 
-		# Port
-		$_->port( $param->{port} ) if exists $param->{port};
+	# Host
+	$_->host($param->{host}) if exists $param->{host};
 
-		# Scheme
-		if (exists $param->{scheme}) {
-		    $_->scheme( $param->{scheme} );
-		}		
+	# Port
+	$_->port( $param->{port} ) if exists $param->{port};
 
-		# Secure flag
-		# This is DEPRECATED!
-		elsif (exists $param->{secure}) {
-		    $mojo->log->warn('secure is deprecated!');
-		    $_->scheme( $param->{secure} ? 'https' : 'http' );
-		}
+	# Scheme
+	if (exists $param->{scheme}) {
+	  $_->scheme( $param->{scheme} );
+	}
 
-		# Defaults to http
-		else {
-		    $_->scheme( 'http' );
-		};
+	# Secure flag
+	# This is DEPRECATED!
+	elsif (exists $param->{secure}) {
+	  $mojo->log->warn('secure is deprecated!');
+	  $_->scheme( $param->{secure} ? 'https' : 'http' );
+	}
 
-		# Set query parameter
-		if (exists $param->{query}) {
-		    $_->query( $param->{query} );
-		};
-	    };
+	# Defaults to http
+	else {
+	  $_->scheme( 'http' );
+	};
 
-	    my $endpoint = $endpoint_url->to_string;
+	# Set query parameter
+	if (exists $param->{query}) {
+	  $_->query( $param->{query} );
+	};
+      };
 
-	    # Unescape template variables
-	    $endpoint =~
-		s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
+      my $endpoint = $endpoint_url->to_string;
 
-	    # Set to stash
-	    $endpoints{$name} = $endpoint;
+      # Unescape template variables
+      $endpoint =~
+	s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
 
-	    return $route;
-	});
-    
+      # Set to stash
+      $endpoints{$name} = $endpoint;
 
-    # Add 'endpoint' helper
-    $mojo->helper(
-	'endpoint' => sub {
-	    my $c           = shift;
-	    my $name        = shift;
-	    my $given_param = shift || {};
-	    
-	    # Endpoint undefined
-	    unless (defined $endpoints{$name}) {
-		$c->app->log->debug(qq{Endpoint "$name" not defined.});
-		return '';
-	    };
+      return $route;
+    });
 
-	    # Get url for route
-	    my $endpoint = $endpoints{$name};
+  # Add 'endpoint' helper
+  $mojo->helper(
+    'endpoint' => sub {
+      my $c           = shift;
+      my $name        = shift;
+      my $given_param = shift || {};
 
-	    # Get stash or defaults hash
-	    my $stash_param = ref($c) eq 'Mojolicious::Controller' ?
-		$c->stash : ref($c) eq 'Mojolicious' ? $c->defaults : {};
-	    	       
-	    # Interpolate template
-	    pos($endpoint) = 0;
-	    while ($endpoint =~ /\{([^\}\?}\?]+)\??\}/g) {
-		# Save search position
-		# Todo: Not exact!
-		my $val = $1;
-		my $p = pos($endpoint) - length($val) - 1;
+      # Endpoint undefined
+      unless (defined $endpoints{$name}) {
+	$c->app->log->debug(qq{Endpoint "$name" not defined.});
+	return '';
+      };
 
-		my $fill = undef;
-		# Look in given param
-		if (exists $given_param->{$val}) {
-		    $fill = $given_param->{$val};
-		}
+      # Get url for route
+      my $endpoint = $endpoints{$name};
 
-		# Look in stash
-		elsif (exists $stash_param->{$val}) {
-		    $fill = $stash_param->{$val};
-		};
+      # Get stash or defaults hash
+      my $stash_param = ref($c) eq 'Mojolicious::Controller' ?
+	$c->stash : ref($c) eq 'Mojolicious' ? $c->defaults : {};
 
-		if (defined $fill) {
-		    $fill = b($fill)->url_escape;
-		    $endpoint =~ s/\{$val\??\}/$fill/;
-		};
+      # Interpolate template
+      pos($endpoint) = 0;
+      while ($endpoint =~ /\{([^\}\?}\?]+)\??\}/g) {
+	# Save search position
+	# Todo: Not exact!
+	my $val = $1;
+	my $p = pos($endpoint) - length($val) - 1;
 
-		# Reset search position
-		# (not exact if it was optional)
-		pos($endpoint) = $p + length($fill);
-	    };
-	    
-	    # Ignore optional placeholders
-	    if (exists $given_param->{'?'} &&
-		!defined $given_param->{'?'}) {
-		for ($endpoint) {
-		    s/(?<=[\&\?])[^=]+?=\{[^\?\}]+?\?\}//g;
-		    s/([\?\&])\&*/$1/g;
-		    s/\&$//g;
-		};
-	    };
+	my $fill = undef;
+	# Look in given param
+	if (exists $given_param->{$val}) {
+	  $fill = $given_param->{$val};
+	}
 
-	    return $endpoint;
-	});
+	# Look in stash
+	elsif (exists $stash_param->{$val}) {
+	  $fill = $stash_param->{$val};
+	};
 
-    # Add 'endpoints' helper
-    $mojo->helper(
-	'get_endpoints' => sub {
-	    my $c = shift;
-	    
-	    # Get all endpoints
-	    my %endpoint_hash;
-	    foreach (keys %endpoints) {
-		$endpoint_hash{$_} = $c->endpoint($_);
-	    };
+	if (defined $fill) {
+	  $fill = b($fill)->url_escape;
+	  $endpoint =~ s/\{$val\??\}/$fill/;
+	};
 
-	    # Return endpoint hash
-	    return \%endpoint_hash;
-	});
+	# Reset search position
+	# (not exact if it was optional)
+	pos($endpoint) = $p + length($fill);
+      };
+
+      # Ignore optional placeholders
+      if (exists $given_param->{'?'} &&
+	    !defined $given_param->{'?'}) {
+	for ($endpoint) {
+	  s/(?<=[\&\?])[^=]+?=\{[^\?\}]+?\?\}//g;
+	  s/([\?\&])\&*/$1/g;
+	  s/\&$//g;
+	};
+      };
+
+      return $endpoint;
+    });
+
+  # Add 'endpoints' helper
+  $mojo->helper(
+    'get_endpoints' => sub {
+      my $c = shift;
+
+      # Get all endpoints
+      my %endpoint_hash;
+      foreach (keys %endpoints) {
+	$endpoint_hash{$_} = $c->endpoint($_);
+      };
+
+      # Return endpoint hash
+      return \%endpoint_hash;
+    });
 };
 
 1;

@@ -60,7 +60,7 @@ sub new {
 
 # Document class
 package Mojolicious::Plugin::Atom::Document;
-use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+use Mojo::Base 'Mojolicious::Plugin::SerialXML';
 use Mojolicious::Plugin::Date::RFC3339;
 use Mojo::ByteStream 'b';
 
@@ -457,7 +457,7 @@ L<http://tools.ietf.org/html/rfc4287|RFC4287>.
 
 The helper C<new_atom> returns an Atom object.
 It accepts the arguments C<feed> or C<entry> or all
-parameters accepted by L<Mojolicious::Plugin::XML::Serial::new>.
+parameters accepted by L<Mojolicious::Plugin::SerialXML::new>.
 
 =head2 C<render_atom>
 
@@ -469,7 +469,7 @@ The helper C<render_atom> renders an Atom object in C<xml>.
 =head1 METHODS
 
 L<Mojolicious::Plugin::Atom::Document> inherits all methods
-from L<Mojolicious::Plugin::XML::Serial> and implements the
+from L<Mojolicious::Plugin::SerialXML> and implements the
 following new ones.
 
 =head2 C<new_feed>
@@ -688,7 +688,7 @@ L<Mojolicious::Plugin::Atom> establishes the following mime-types:
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::XML::Serial>,
+L<Mojolicious::Plugin::SerialXML>,
 L<Mojolicious::Plugin::Date::RFC3339>.
 
 =head1 COPYRIGHT AND LICENSE
