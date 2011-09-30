@@ -1,36 +1,34 @@
 package Mojolicious::Plugin::OStatus;
 use Mojo::Base 'Mojolicious::Plugin';
 
-use constant OSTATUS_NS => 'http://ostatus.org/schema/1.0/';
-
 # Register plugin
 sub register {
-    my ($plugin, $mojo, $param) = @_;
-    
-    my %default = (
-	'host' => $param->{'host'}     || 'localhost:3000',
-	'secure' => $param->{'secure'} || 0
-	);
+  my ($plugin, $mojo, $param) = @_;
 
-    my $helpers = $mojo->renderer->helpers;
+  my %default = (
+    'host' => $param->{'host'}     || 'localhost',
+    'secure' => $param->{'secure'} || 0
+  );
 
-    foreach (qw/HostMeta
-                Webfinger
-                MagicSignatures
-                Salmon
-                PubSubHubbub
-                PortableContacts/) {
+  my $helpers = $mojo->renderer->helpers;
 
-	$param->{ $_ } = +{} unless exists $param->{ $_ };
-	$mojo->plugin($_ => { %default, %{ $param->{ $_ } } } );
-    };
+  foreach (qw/HostMeta
+	      Webfinger
+	      MagicSignatures
+	      Salmon
+	      PubSubHubbub
+	      PortableContacts/) {
 
-    $mojo->plugin(
-	'ActivityStreams' => {
-	    %default,
-	    extensions => ['Atom-Threading', 'OStatus'],
-	    helper     => 'new_ostatus_as'
-	});
+    $param->{ $_ } = +{} unless exists $param->{ $_ };
+    $mojo->plugin($_ => { %default, %{ $param->{ $_ } } } );
+  };
+
+  $mojo->plugin('XML' => {
+    new_ostatus_as => ['Atom',
+		       'ActivityStreams',
+		       'Atom-Threading',
+		       'OStatus'] # PortableContacts
+  });
 };
 
 1;
@@ -88,30 +86,5 @@ sub unsubscribe {
     };
 };
 
-package Mojolicious::Plugin::OStatus::Document;
-
-sub register_as_extension {
-    return qw/add_attention add_conversation/;
-};
-sub add_attention {
-    my $self = shift;
-    my $entry = shift;
-
-    $entry->add_ns('ostatus' => OSTATUS_NS);
-
-    $entry->add_link(
-	rel => 'ostatus:attention',
-	href => shift
-	);
-};
-
-sub add_conversation {
-    my $self = shift;
-    $entry->add_ns('ostatus' => OSTATUS_NS);
-    $entry->add_link(
-	rel => 'ostatus:attention',
-	href => shift
-	);
-};
 
 1;

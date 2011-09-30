@@ -10,84 +10,79 @@ use constant WK_PATH => '/.well-known/host-meta';
 
 # Register plugin
 sub register {
-    my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo, $param) = @_;
 
-    # Load Util-Endpoint if not already loaded
-    unless (exists $mojo->renderer->helpers->{'endpoint'}) {
-	$mojo->plugin('Util::Endpoint');
-    };
+  # Load Util-Endpoint if not already loaded
+  unless (exists $mojo->renderer->helpers->{'endpoint'}) {
+    $mojo->plugin('Util::Endpoint');
+  };
 
-    # Load XRD if not already loaded
-    unless (exists $mojo->renderer->helpers->{'new_xrd'}) {
-	$mojo->plugin('XRD');
-    };
+  # Load XML if not already loaded
+  unless (exists $mojo->renderer->helpers->{'render_xrd'}) {
+    $mojo->plugin('XRD');
+  };
 
-    my $hostmeta = $mojo->new_xrd;
-    
-    # Discover relations
-    # $mojo->helper( 'discover_rel' => \&discover_rel );
+  unless (exists $mojo->renderer->helpers->{'new_hostmeta'}) {
+    $mojo->plugin('XML' => {
+      new_hostmeta => ['XRD', 'HostMeta']
+    });
+  };
 
-    # If domain parameter is given
-    if ($param->{host}) {
-	$plugin->host($param->{host});
+  my $hostmeta = $mojo->new_hostmeta;
 
-	# Add host-information to host-meta
-	$hostmeta->add(
-	    'hm:Host',
-	    {
-		'hm:xmlns' =>
-		    'http://host-meta.net/xrd/1.0'
-	    },
-	    $plugin->host
-	    );
-    };
+  # If domain parameter is given
+  if ($param->{host}) {
+    $plugin->host($param->{host});
 
-    # use https or http
-    $plugin->secure( $param->{secure} );
+    # Add host-information to host-meta
+    $hostmeta->add_host($plugin->host);
+  };
 
-    # Establish 'hostmeta' helper
-    $mojo->helper(
-	'hostmeta' => sub {
-	    my $c = shift;
-	    
-	    if (!$_[0]) {
-		return $hostmeta;
-	    } 
-	    
-	    elsif ($_[0] eq 'host') {
-		return $plugin->host unless $_[1];
-		return $plugin->host($_[1]);
-	    };
-	    
-	    return $plugin->_get_hostmeta($c, @_);
-	});
-    
-    
-    # Establish /.well-known/host-meta route
-    my $route = $mojo->routes->route( WK_PATH );
+  # use https or http
+  $plugin->secure( $param->{secure} );
 
-    # Define endpoint
-    $route->endpoint(
-	'hostmeta' => {
-	    scheme => $plugin->secure ? 'https' : 'http',
-	    host   => $plugin->host,
-	});
+  # Establish 'hostmeta' helper
+  $mojo->helper(
+    'hostmeta' => sub {
+      my $c = shift;
 
-    # Set route callback
-    $route->to(
-	cb => sub {
-	    my $c = shift;
+      if (!$_[0]) {
+	return $hostmeta;
+      }
 
-	    # Maybe testing, if the hook will release anything
-	    my $hostmeta_clone = dclone($hostmeta);
+      elsif ($_[0] eq 'host') {
+	return $plugin->host unless $_[1];
+	return $plugin->host($_[1]);
+      };
 
-	    $c->app->plugins->run_hook(
-		'before_serving_hostmeta',
-		$c,
-		$hostmeta_clone);
+      return $plugin->_get_hostmeta($c, @_);
+    });
 
-	    return $c->render_xrd($hostmeta_clone);
-	});
+  # Establish /.well-known/host-meta route
+  my $route = $mojo->routes->route( WK_PATH );
+
+  # Define endpoint
+  $route->endpoint(
+    'hostmeta' => {
+      scheme => $plugin->secure ? 'https' : 'http',
+      host   => $plugin->host,
+    });
+
+  # Set route callback
+  $route->to(
+    cb => sub {
+      my $c = shift;
+
+      # Maybe testing, if the hook will release anything
+      my $hostmeta_clone = dclone($hostmeta);
+
+      $c->app->plugins->run_hook(
+	'before_serving_hostmeta',
+	$c,
+	$hostmeta_clone);
+
+      return $c->render_xrd($hostmeta_clone);
+    });
 
 
 #    $mojo->routes->route('/')->bridge(
@@ -107,71 +102,71 @@ sub register {
 
 # Get HostMeta document
 sub _get_hostmeta {
-    my $plugin = shift;
-    my $c = shift;
+  my $plugin = shift;
+  my $c = shift;
 
-    my $host = lc(shift(@_));
+  my $host = lc(shift(@_));
 
-    # Hook for caching
-    my $hostmeta_xrd;
-    $c->app->plugins->run_hook(
-	'before_fetching_hostmeta',
-	$c,
-	$host,
-	\$hostmeta_xrd
-	);
+  # Hook for caching
+  my $hostmeta_xrd;
+  $c->app->plugins->run_hook(
+    'before_fetching_hostmeta',
+    $c,
+    $host,
+    \$hostmeta_xrd
+  );
 
-    return $hostmeta_xrd if $hostmeta_xrd;
+  return $hostmeta_xrd if $hostmeta_xrd;
 
-    # 1. Check https:, then http:
-    my $host_hm_path = $host . WK_PATH;
+  # 1. Check https:, then http:
+  my $host_hm_path = $host . WK_PATH;
 
-    # Get user agent
-    my $ua = $c->ua->max_redirects(3);
-    $ua->name('Sojolicious on Mojolicious (Perl)');
+  # Get user agent
+  my $ua = $c->ua->max_redirects(3);
+  $ua->name('Sojolicious on Mojolicious (Perl)');
 
-    # Fetch Host-Meta XRD
-    # First try ssl
-    my $secure = 'https://';
-    my $host_hm = $ua->get($secure . $host_hm_path);
+  # Fetch Host-Meta XRD
+  # First try ssl
+  my $secure = 'https://';
+  my $host_hm = $ua->get($secure . $host_hm_path);
+
+  if (!$host_hm ||
+	!$host_hm->res->is_status_class(200)
+      ) {
+
+    # Then try insecure
+    $secure = 'http://';
+    $host_hm = $ua->get($secure.$host_hm_path);
 
     if (!$host_hm ||
-	!$host_hm->res->is_status_class(200)
+	  !$host_hm->res->is_status_class(200)
 	) {
-	
-	# Then try insecure
-	$secure = 'http://';
-	$host_hm = $ua->get($secure.$host_hm_path);
 
-	if (!$host_hm ||
-	    !$host_hm->res->is_status_class(200)
-	    ) {
+      # Reset max_redirects
+      $ua->max_redirects(0);
 
-	    # Reset max_redirects
-	    $ua->max_redirects(0);
-	
-	    # No result
-	    return undef;
-	};
+      # No result
+      return undef;
     };
+  };
 
-    # Parse XRD
-    $hostmeta_xrd =
-	$c->new_xrd($host_hm->res->body);
+  # Parse XRD
+  $hostmeta_xrd =
+    $c->new_hostmeta($host_hm->res->body);
 
-    # Host validation is now deprecated
+  # Host validation is now deprecated
 
-    # Hook for caching
-    $c->app->plugins->run_hook(
-	'after_fetching_hostmeta',
-	$c,
-	$host,
-	\$hostmeta_xrd,
-	$host_hm->res
-	);
+  # Hook for caching
+  $c->app->plugins->run_hook(
+    'after_fetching_hostmeta',
+    $c,
+    $host,
+    \$hostmeta_xrd,
+    $host_hm->res
+  );
 
-    # Return XRD DOM
-    return $hostmeta_xrd;
+  # Return XRD DOM
+  return $hostmeta_xrd;
 };
 
 1;
@@ -182,7 +177,7 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::HostMeta
+Mojolicious::Plugin::HostMeta - HostMeta Plugin for Mojolicious
 
 =head1 SYNOPSIS
 
@@ -229,10 +224,19 @@ Use C<http> or C<https>.
   my $xrd = $self->hostmeta('gmail.com');
 
 The helper C<hostmeta> returns the own hostmeta document
-as an L<Mojolicious::Plugin::Hostmeta::Document> object,
-if no hostname is given. If a hostname is given, the
-corresponding hostmeta document is retrieved and returned
-as an XRD object.
+as an L<Mojolicious::Plugin::XML::XRD> object with
+L<Mojolicious::Plugin::XML::HostMeta> extension,
+if no hostname is given.
+If a hostname is given, the corresponding hostmeta document
+is retrieved and returned as an XRD object.
+
+=head2 C<new_hostmeta>
+
+  # In Controller:
+  my $xrd = $self->new_hostmeta;
+
+The helper C<new_hostmeta> returns a new L<Mojolicious::Plugin::XML::XRD>
+object with C<Mojolicious::Plugin::XML::HostMeta> extension.
 
 =head1 ROUTES
 
@@ -283,6 +287,10 @@ This can be used for caching.
 
 L<Mojolicious> (best with SSL support),
 L<Mojolicious::Plugin::XRD>.
+
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
 
 =head1 COPYRIGHT AND LICENSE
 

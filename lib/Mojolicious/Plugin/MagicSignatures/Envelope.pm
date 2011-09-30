@@ -715,6 +715,10 @@ L<Mojolicious::Plugin::MagicSignatures::Key>.
 
 The signature is currently not working correctly!
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2011, Nils Diewald.

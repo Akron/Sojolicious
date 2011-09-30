@@ -1,83 +1,17 @@
-package Mojolicious::Plugin::Atom;
-use Mojo::Base 'Mojolicious::Plugin';
-
-use constant ATOM_NS =>  'http://www.w3.org/2005/Atom';
-
-# Register Plugin
-sub register {
-  my ($plugin, $mojo) = @_;
-
-  # Apply Atom mime-Type
-  $mojo->types->type('atom' => 'application/atom+xml');
-
-  # Add 'new_atom' helper
-  $mojo->helper(
-    'new_atom' => sub {
-      shift; # Either Controller or App
-      return $plugin->new( shift || 'feed' );
-    });
-
-  # Add 'render_atom' helper
-  $mojo->helper(
-    'render_atom' => sub {
-      my $c = shift;
-      my $atom = shift;
-      return $c->render(
-	'inline' => $atom->to_pretty_xml,
-	'format' => 'atom'
-      );
-    });
-};
-
-# Constructor
-sub new {
-  my $class = shift;
-
-  # Return for register_plugin
-  if (!defined $_[0]) {
-    return $class if ref($class);
-    return bless( {}, $class );
-  }
-
-  # Start Atom feed or entry
-  elsif (@_ == 1 && index($_[0], '<') == -1) {
-    my $type  = shift;
-
-    return Mojolicious::Plugin::Atom::Document->new(
-      $type,
-      { 'xmlns' => ATOM_NS });
-  } elsif (@_ == 3 && $_[1] eq 'extension') {
-    return Mojolicious::Plugin::Atom::Document->new(
-      $_[0],
-      { 'xmlns'      => ATOM_NS,
-	'serial:ext' => join(';', @{ $_[2] })
-      })
-  };
-
-  # Start document
-  return Mojolicious::Plugin::Atom::Document->new(@_);
-};
-
-# Document class
-package Mojolicious::Plugin::Atom::Document;
-use Mojo::Base 'Mojolicious::Plugin::SerialXML';
+package Mojolicious::Plugin::XML::Atom;
+use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 use Mojolicious::Plugin::Date::RFC3339;
 use Mojo::ByteStream 'b';
 
 # Namespace declaration
 use constant XHTML_NS => 'http://www.w3.org/1999/xhtml';
 
+our $MIME      = 'application/atom+xml';
+our $PREFIX    = 'atom';
+our $NAMESPACE = 'http://www.w3.org/2005/Atom';
+
 # see http://search.cpan.org/~aristotle/XML-Atom-SimpleFeed-0.86/lib/XML/Atom/SimpleFeed.pm
 
-# New feed
-sub new_feed {
-  return Mojolicious::Plugin::Atom->new('feed');
-};
-
-# New entry
-sub new_entry {
-  return Mojolicious::Plugin::Atom->new('entry');
-};
 
 # New person construct
 sub new_person {
@@ -89,6 +23,7 @@ sub new_person {
   };
   return $person;
 };
+
 
 # Add person information
 sub _add_person {
@@ -114,15 +49,14 @@ sub _add_person {
   };
 };
 
+
 # New date construct
 sub new_date {
   my $self = shift;
-
-  # now
-  my $time = shift || time;
-
+  my $time = shift || time;  # now
   return Mojolicious::Plugin::Date::RFC3339->new($time);
 };
+
 
 # Add date construct
 sub _add_date {
@@ -134,6 +68,7 @@ sub _add_date {
 
   return $self->add($type, $date->to_string);
 };
+
 
 # New text construct
 sub new_text {
@@ -147,7 +82,8 @@ sub new_text {
     return $class->SUPER::new('text',
 			      { type => 'text',
 				-type => 'escape' },
-			      b( shift )->xml_escape );
+			      shift);
+    #''.b( shift )->xml_escape);
   };
 
   my ($type, $content, %hash);
@@ -178,7 +114,7 @@ sub new_text {
     $c_node = $class->SUPER::new('text', { type => $type,
 					   %hash });
 
-    $c_node->add('div',
+    $c_node->add('-div',
 		 { xmlns => XHTML_NS,
 		   -type => 'raw' },
 		 $content);
@@ -187,35 +123,36 @@ sub new_text {
   # html or text
   elsif ($type eq 'html' || $type =~ /^text/i) {
 
-    $c_node = $class->SUPER::new('text',
-				 { type => $type,
-				   -type => 'escape',
-				   'xml:space' => 'preserve',
-				   %hash },
-				 b($content)->xml_escape
-			       );
+    $c_node = $class->new('text',
+			  { type => $type,
+			    '-type' => 'escape',
+			    'xml:space' => 'preserve',
+			    %hash },
+			  b($content)->xml_escape.''
+			);
   }
 
   # xml media type
   elsif ($type =~ /[\/\+]xml$/i) {
-    $c_node = $class->SUPER::new('text',
-				 { type => $type,
-				   -type => 'raw',
-				   %hash },
-				 $content);
+    $c_node = $class->new('text',
+			  { type => $type,
+			    -type => 'raw',
+			    %hash },
+			  $content);
   }
 
   # all other media types
   else {
-    $c_node = $class->SUPER::new('text',
-				 { type => $type,
-				   -type => 'armour',
-				   %hash },
-				 $content);
+    $c_node = $class->new('text',
+			  { type => $type,
+			    -type => 'armour',
+			    %hash },
+			  $content);
   };
 
   return $c_node;
 };
+
 
 # Add text information
 sub _add_text {
@@ -253,6 +190,7 @@ sub _add_text {
   return;
 };
 
+
 # Add entry
 sub add_entry {
   my $self = shift;
@@ -283,15 +221,18 @@ sub add_entry {
   return $entry;
 };
 
+
 # Add content information
 sub add_content {
   shift->_add_text('content', @_);
 };
 
+
 # Add author information
 sub add_author {
   shift->_add_person('author', @_);
 };
+
 
 # Add category information
 sub add_category {
@@ -306,29 +247,35 @@ sub add_category {
   return $self->SUPER::add('category', { @_ } );
 };
 
+
 # Add contributor information
 sub add_contributor {
   shift->_add_person('contributor', @_);
 };
+
 
 # Add generator information
 sub add_generator {
   shift->add('generator', @_);
 };
 
+
 # Add icon
 sub add_icon { # only one
   shift->add('icon', shift);
 };
+
 
 # Add id
 sub add_id { # must one
   my $self = shift;
   my $id = shift;
   return unless $id;
-  $self->attrs('xml:id' => $id);
-  $self->add('id', $id);
+  my $element = $self->add('id', $id);
+  $element->parent->attrs('xml:id' => $id);
+  return $self;
 };
+
 
 # Add link information
 sub add_link {
@@ -344,45 +291,54 @@ sub add_link {
   return $self->add('link' => { rel => $rel, %values });
 };
 
+
 # Add logo
-sub add_logo { # only one
+sub add_logo {
   shift->add('logo', shift);
 };
+
 
 # Add publish time information
 sub add_published {
   shift->_add_date('published', @_);
 };
 
+
 # Add rights information
 sub add_rights {
   shift->_add_text('rights', @_);
 };
+
 
 # Add source information
 sub add_source {
   shift->add('source', { @_ });
 };
 
+
 # Add subtitle
 sub add_subtitle {
   shift->_add_text('subtitle', @_);
 };
+
 
 # Add summary
 sub add_summary {
   shift->_add_text('summary', @_);
 };
 
+
 # Add title
 sub add_title {
   shift->_add_text('title', @_);
 };
 
+
 # Add update time information
 sub add_updated {
   shift->_add_date('updated', @_);
 };
+
 
 1;
 
@@ -392,20 +348,22 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::Atom - Atom Syndication Format Plugin
+Mojolicious::Plugin::XML::Atom - Atom Syndication Format Plugin
 
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('Atom');
+  $app->plugin('XML' => {
+    'new_atom' => ['Atom']
+  });
 
   # Mojolicious::Lite
-  plugin 'Atom';
+  plugin 'XML' => { new_atom => ['Atom'] };
 
   # In Controllers
-  my $feed = $self->new_atom('feed');
+  my $feed = $self->new_atom( 'feed' );
 
-  my $author = $feed->new_person(name => 'Fry');
+  my $author = $feed->new_person( name => 'Fry' );
   $feed->add_author($author);
   $feed->add_title('This is a test feed.');
   my $entry = $self->new_atom('entry');
@@ -414,75 +372,29 @@ Mojolicious::Plugin::Atom - Atom Syndication Format Plugin
     $_->add_title('First Test entry');
     $_->add_subtitle('This is a subtitle');
     my $content = $_->add_content(
-	type => 'xhtml',
-	content => '<p id="para">'.
-	'This is a Test!'.
-	'</p>');
+	type    => 'xhtml',
+	content => '<p id="para">' .
+	           'This is a Test!' .
+	           '</p>');
     $content->at('#para')
 	->replace_content('This is a <strong>Test</strong>!');
   };
 
   $feed->add_entry($entry);
-  $self->render_atom($feed);
+  $self->render_xml($feed);
 
 =head1 DESCRIPTION
 
-L<Mojolicious::Plugin::Atom> provides several functions
+L<Mojolicious::Plugin::XML::Atom> is a base class or extension
+for L<Mojolicious::Plugin::XML> and provides several functions
 for the work with the Atom Syndication Format as described in
 L<http://tools.ietf.org/html/rfc4287|RFC4287>.
 
-=head1 HELPERS
-
-=head2 C<new_atom>
-
-  my $atom = $self->new_atom('entry');
-
-  my $atom = $self->new_atom(<<'ATOM');
-  <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-  <entry xmlns="http://www.w3.org/2005/Atom">
-    <author>
-      <name>Fry</name>
-    </author>
-    <id>http://sojolicio.us/#12345</id>
-    <title>Works</title>
-    <updated>2003-12-13T18:30:02Z</updated>
-    <summary>Short note about working status.</summary>
-    <content type="xhtml">
-      <div xmlns="http://www.w3.org/1999/xhtml">
-        <p>This <strong>WORKS</strong>!</p>
-      </div>
-    </content>
-  </entry>
-  ATOM
-
-The helper C<new_atom> returns an Atom object.
-It accepts the arguments C<feed> or C<entry> or all
-parameters accepted by L<Mojolicious::Plugin::SerialXML::new>.
-
-=head2 C<render_atom>
-
-  # In Controllers
-  $self->render_atom( $feed );
-
-The helper C<render_atom> renders an Atom object in C<xml>.
-
 =head1 METHODS
 
-L<Mojolicious::Plugin::Atom::Document> inherits all methods
-from L<Mojolicious::Plugin::SerialXML> and implements the
+L<Mojolicious::Plugin::XML::Atom> inherits all methods
+from L<Mojolicious::Plugin::XML::Base> and implements the
 following new ones.
-
-=head2 C<new_feed>
-
-  my $feed = $atom->new_feed;
-
-Returns a new Atom C<feed> object.
-
-=head2 C<new_entry>
-
-  my $entry = $atom->new_entry;
-
-Returns a new Atom C<entry> object.
 
 =head2 C<new_text>
 
@@ -681,15 +593,20 @@ parameter accepted by L<new_date>.
 
 =head1 MIME-TYPES
 
-L<Mojolicious::Plugin::Atom> establishes the following mime-types:
+When loaded as a base class, L<Mojolicious::Plugin::Atom>
+establishes the following mime-types:
 
   'atom': 'application/atom+xml'
 
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::SerialXML>,
+L<Mojolicious::Plugin::XML>,
 L<Mojolicious::Plugin::Date::RFC3339>.
+
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
 
 =head1 COPYRIGHT AND LICENSE
 

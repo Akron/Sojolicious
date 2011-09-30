@@ -1,4 +1,4 @@
-package Mojolicious::Plugin::SerialXML;
+package Mojolicious::Plugin::XML::Base;
 use Mojo::Base 'Mojo::DOM';
 use Mojo::ByteStream 'b';
 use Mojo::Loader;
@@ -10,17 +10,16 @@ use constant {
                'standalone="yes"?>'
 };
 
-
 # Construct new serial object
 sub new {
   my $class = shift;
 
+  # Todo: Change order for speed (often 'charset' is $_[0])
   # Create from parent class
   if ( ref($class)             ||
        !$_[0]                  ||
        (index($_[0],'<') >= 0) ||
        ( (@_ % 2) == 0 && ref( $_[1] ) ne 'HASH' ) ) {
-
     return $class->SUPER::new(@_);
   }
 
@@ -49,19 +48,22 @@ sub new {
     # Transform special attributes
     foreach my $special ( grep( index($_, '-') == 0, keys %$att ) ) {
       $att->{'serial:' . substr($special,1) } =
-	delete $att->{$special};
+	lc(delete $att->{$special});
     };
 
     # Add attributes to node
-    $element = $root->at('*');
-    $element->attrs($att);
+#     my $root_e = $root->_root_element;
+#     $root_e->[2] = $att;
+    my $root_e = $root->at(':root');
+    $root_e->attrs($att);
 
     # The class is derived
     if ($class ne __PACKAGE__) {
       # Set namespace if given
       no strict 'refs';
-      if (defined ${ $class.'::NS' }) {
-	$element->attrs(xmlns => ${ $class.'::NS' });
+      if (defined ${ $class.'::NAMESPACE' }) {
+	$root_e->attrs(xmlns => ${ $class.'::NAMESPACE' });
+#	$root_e->[2]->{xmlns} = ${ $class.'::NAMESPACE' };
       };
     };
 
@@ -72,6 +74,39 @@ sub new {
 
 # Append a new child node to the XML Node
 sub add {
+  my $self    = shift;
+  my $element = $self->_add_clean(@_);
+
+  # Prepend no prefix
+  if (index($element->tree->[1],'-') == 0) {
+    $element->tree->[1] = substr($element->tree->[1], 1);
+    return $element;
+  };
+
+  return $element if $element->tree->[0] ne 'tag';
+
+  # Prepend prefix if necessary.
+  my $caller = caller;
+  my $class  = ref($self);
+
+  my $name = $element->tree->[1];
+
+  if ($name &&
+	($caller && $class) &&
+	  ($caller ne $class)) {
+    no strict 'refs';
+    if ((my $prefix = ${ $caller.'::PREFIX' }) &&
+	  ${ $caller.'::NAMESPACE' }) {
+      $element->tree->[1] = $prefix.':'.$name if $prefix;
+    };
+  };
+
+  return $element;
+};
+
+
+# Append a new child node to the XML Node
+sub _add_clean {
   my $self = shift;
 
   # If root use first element
@@ -87,20 +122,26 @@ sub add {
     $comment = shift;
 
     # Push namespaces to new root
-    my $root_attr = $node->root->at('*')->attrs;
+    my $root_attr =      $node->_root_element->[2];
     foreach ( grep( index($_,'xmlns:') == 0, keys %{ $root_attr } ) ) {
       $_ = substr($_,6);
-      $self->add_ns( $_ => delete $root_attr->{'xmlns:'.$_} );
+      $self->add_namespace( $_ => delete $root_attr->{'xmlns:'.$_} );
+    };
+
+    # Delete namespace information, if already set
+    if (exists $root_attr->{xmlns}) {
+      my $ns = $self->namespace;
+      if ($ns && $root_attr->{xmlns} eq $ns) {
+	delete $root_attr->{xmlns};
+      };
     };
 
     # Push extensions to new root
-    my $root = $self->at(':root');
+    my $root = $self->_root_element;
     if (exists $root_attr->{'serial:ext'}) {
-      my $ext = $root->attrs('serial:ext') || ();
-      $root->attrs(
-	'serial:ext' =>
-	  join(';', $ext, split(';', $root_attr->{'serial:ext'}))
-	);
+      my $ext = $root->[2]->{'serial:ext'} || '';
+      $root->[2]->{'serial:ext'} =
+	join("; ", $ext, split(/;\s/, $root_attr->{'serial:ext'}))
     };
 
     # Delete pi from node
@@ -145,87 +186,79 @@ sub add {
 };
 
 
-# Append a new child node to the XML Node
-# Prepend prefix if necessary.
-sub add_pref {
-  my $self   = shift;
-  my $element = $self->add(@_);
-  return $element if $element->tree->[0] ne 'tag';
-
-  my $caller = caller;
-  my $class  = ref($self);
-
-  my $name = $element->tree->[1];
-
-  if ($name &&
-	($caller && $class) &&
-	  ($caller ne $class)) {
-    {
-      no strict 'refs';
-      if ((my $prefix = ${ $caller.'::PREFIX' }) &&
-	  ${ $caller.'::NS' }) {
-	$element->tree->[1] = $prefix.':'.$name if $prefix;
-      };
-    };
-  };
-
-  return $element;
-
-};
-
 # Add extension to document
 sub add_extension {
-  my $self      = shift;
+  my $self = shift;
+
+  # Get root element
+  my $root = $self->_root_element or return;
 
   # New Loader
   my $loader = Mojo::Loader->new;
 
-  # Use root element
-  $self = $self->root->at('*');
-
   # Get ext string
-  my @ext = split( /\s*;\s*/, $self->attrs('serial:ext') || '');
+  my @ext = split(/;\s/, $root->[2]->{'serial:ext'} || '');
+
+  my $loaded = 0;
 
   # Try all given extension names
-  foreach my $ext (@_) {
+  while (my $ext = shift( @_ )) {
 
     # Unable to load extension
     if (my $e = $loader->load($ext)) {
-      Carp::croak( "Exception: $e" ) if ref $e;
-      Carp::croak(qq{Unable to load extension "$ext"});
+      warn "Exception: $e"  if ref $e;
+      warn qq{Unable to load extension "$ext"};
       next;
     };
 
-    # Add extension to extensions list
-    push(@ext, $ext);
-
-    # Add namespace for extension
     {
       no strict 'refs';
-      if (defined ${ $ext . '::NS' } &&
-	  defined ${ $ext . '::PREFIX' }) {
-	$self->add_ns(${ $ext . '::PREFIX' } =>
-			${ $ext . '::NS' });
+
+      # Check for extension delegation
+      if (defined ${ $ext . '::DELEGATE' }) {
+	$ext = ${ $ext . '::DELEGATE' };
+
+	# No recursion for security
+	if (my $e = $loader->load($ext)) {
+	  warn "Exception: $e" if ref $e;
+	  warn qq{Unable to load delegated extension "$ext"};
+	  next;
+	};
+      };
+
+      # Add extension to extensions list
+      push(@ext, $ext);
+      $loaded++;
+
+      # Add namespace for extension
+      if (defined ${ $ext . '::NAMESPACE' } &&
+	    defined ${ $ext . '::PREFIX' }) {
+
+	$root->[2]->{ 'xmlns:' . ${ $ext . '::PREFIX' } } =
+	  ${ $ext . '::NAMESPACE' };
       };
     };
   };
 
   # Save extension list as attribute
-  $self->attrs('serial:ext' => join(';', @ext));
+  $root->[2]->{'serial:ext'} = join("; ", @ext);
 
-  return;
+  return $loaded;
 };
 
 
 # Add namespace to root
-sub add_ns {
+sub add_namespace {
   my $self   = shift;
 
   # prefix namespace if existent
   my $prefix = $_[1] ? ':' . shift : '';
 
+  # Get root element
+  my $root = $self->_root_element or return;
+
   # Save namespace as attribute
-  $self->root->at('*')->attrs( 'xmlns' . $prefix => shift );
+  $root->[2]->{ 'xmlns' . $prefix } = shift;
   return $prefix;
 };
 
@@ -289,7 +322,7 @@ sub _render_pretty {
   # Element is comment
   elsif ($e eq 'comment') {
     my $comment = join("\n". I . I . ( I x $i ), # Todo: Why I.I ?
-		       split('; ', $tree->[1]));
+		       split(/;\s/, $tree->[1]));
     return "\n".(I x $i).'<!-- '.$comment." -->\n";
   }
 
@@ -438,11 +471,44 @@ sub _attr ($$) {
     if (keys %attr) {
       return ' ' .
 	join("\n".$indent_space,
-	     map($_ . '=' . $attr{$_}, keys %attr ) );
+	     map($_ . '=' . $attr{$_}, sort keys %attr ) );
     };
 
     # Return nothing
     return '';
+};
+
+
+# Get root element (not as an object)
+sub _root_element {
+  my $self = shift;
+
+  # Todo: Optimize! Often called!
+
+  # Find root (Based on Mojo::DOM::root)
+  my $root = $self->tree;
+  my $tag;
+
+  # Root is root node
+  if ($root->[0] eq 'root') {
+    my $i = 1;
+    while ($root->[$i] &&
+	   $root->[$i]->[0] ne 'tag') {
+      $i++;
+    };
+    $tag = $root->[$i];
+  }
+
+  # Root is a tag
+  else {
+    while ($root->[0] eq 'tag') {
+      $tag = $root;
+      last unless my $parent = $root->[3];
+      $root = $parent;
+    };
+  };
+
+  return $tag;
 };
 
 
@@ -455,14 +521,14 @@ sub AUTOLOAD {
   my ($package, $method) = our $AUTOLOAD =~ /^([\w\:]+)\:\:(\w+)$/;
 
   # Choose root element
-  my $root = $self->root->at('*');
+  my $root = $self->_root_element;
 
   # Get ext string
   my $ext_string;
-  if ($ext_string = $root->attrs('serial:ext')) {
+  if ($ext_string = $root->[2]->{'serial:ext'}) {
     no strict 'refs';
 
-    foreach my $ext ( split(';', $ext_string ) ) {
+    foreach my $ext ( split(/;\s/, $ext_string ) ) {
       # Method does not exist in extension
       next unless  defined *{ $ext.'::'.$method };
 
@@ -474,13 +540,11 @@ sub AUTOLOAD {
   my $errstr = qq{Can't locate object method "$method" via package "$package"};
   $errstr .= qq{ with extensions "$ext_string"} if $ext_string;
 
-  Carp::croak($errstr);
+  warn $errstr;
   return;
 };
 
-
 1;
-
 
 __END__
 
@@ -488,18 +552,13 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::SerialXML - Simple XML constructor
+Mojolicious::Plugin::XML::Base - XML generator base class
 
 =head1 SYNOPSIS
 
-  use Mojolicious::Plugin::SerialXML;
-
-  my $xml = Mojolicious::Plugin::SerialXML->new('entry');
-
+  my $xml = Mojolicious::Plugin::XML::Base->new('entry');
   my $env = $xml->add('fun:env' => { foo => 'bar' });
-
-  $xml->add_ns('fun' => 'http://sojolicio.us/ns/fun');
-
+  $xml->add_namespace('fun' => 'http://sojolicio.us/ns/fun');
   my $data = $env->add('data' => { type  => 'text/plain',
                                    -type => 'armour:30'
 			         } => <<'B64');
@@ -510,7 +569,7 @@ Mojolicious::Plugin::SerialXML - Simple XML constructor
 
   $data->comment('This is base64 data!');
 
-  print $xml->to_pretty_xml;
+  print $xml->to_xml;
 
   # <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   # <entry xmlns:fun="http://sojolicio.us/ns/fun">
@@ -529,27 +588,33 @@ Mojolicious::Plugin::SerialXML - Simple XML constructor
 
 =head1 METHODS
 
-L<Mojolicious::Plugin::SerialXML> inherits all methods from
+L<Mojolicious::Plugin::XML::Base> inherits all methods from
 L<Mojo::DOM> and implements the following new ones.
 
 =head2 C<new>
 
-  my $serial = Mojolicious::Plugin::SerialXML->new(<<'EOF');
+  my $xml = Mojolicious::Plugin::XML::Base->new(<<'EOF');
 
-  my $serial = $serial->new('Document', {id => 'new'}, 'My Doc');
+  my $xml = $xml->new('Document', {id => 'new'}, 'My Doc');
 
 =head2 C<add>
 
-  my $serial = $serial->add('Data', { -type => 'base64' }, 'PdGzjvj..');
+  $xml = $xml->add('Data', { -type => 'base64' }, 'PdGzjvj..');
 
-  my $serial = $serial->add('a', { href => 'http://...' });
-  my $node = $serial->new('strong', 'My Doc');
-  $serial->add($node);
+  $xml = $xml->add('a', { href => 'http://...' });
+  my $node = $xml->new('strong', 'My Doc');
+  $xml->add($node);
 
 Appends a new Element to the document root and returns a
-C<Mojolicious::Plugin::SerialXML> object.
+C<Mojolicious::Plugin::XML::Base> object.
+In Extension context, a prefix is automatically prepended.
+To prevent prefixing in extension context, prepend a C<-> to
+the element name.
 
-Allows for special content types with C<-type> attributes:
+  $self->add('-Link', { foo => 'bar' });
+  # Always <Link foo="bar" />
+
+Allows for special rendering of content types with C<-type> attribute:
 
 =hover2
 
@@ -559,17 +624,11 @@ Allows for special content types with C<-type> attributes:
                      Intended for base64 encoded data.
                      Defaults to 60 characters
 
-=item C<escape> XML escape the content of the node.
+=item C<escape>      XML escape the content of the node.
 
-=item C<raw> Treat children as raw data (no pretty printing.
+=item C<raw>         Treat children as raw data (no pretty printing).
 
 =back
-
-=head2 C<add_pref>
-
-C<add_pref> is similar to C<add> and needs the same parameters.
-However, if used in an extension context, it will prefix the element
-name for the namespace. In base context, no prefix is introduced.
 
 =head2 C<comment>
 
@@ -577,11 +636,11 @@ name for the namespace. In base context, no prefix is introduced.
 
 Prepend a comment to the XRD node.
 
-=head2 C<add_ns>
+=head2 C<add_namespace>
 
-  $serial->add_ns('fun' => 'http://sojolicio.us/fun');
-  $serial->add_ns('http://sojolicio.us/fun');
-  $serial->add('fun:test' => { foo => 'bar' }, 'Works!');
+  $xml->add_namespace('fun' => 'http://sojolicio.us/fun');
+  $xml->add_namespace('http://sojolicio.us/fun');
+  $xml->add('fun:test' => { foo => 'bar' }, 'Works!');
 
 Add namespace to the node's root.
 The first parameter gives the prefix, the second one
@@ -589,7 +648,7 @@ the namespace. The prefix parameter is optional.
 
 =head2 C<add_extension>
 
-  $serial->add_extension('Fun','Atom');
+  $xml->add_extension('Fun','Atom');
 
 Add an array of packages as extensions to the root
 of the document.
@@ -602,29 +661,42 @@ Returns a stringified, pretty printed XML document.
 
 =head1 EXTENSIONS
 
-L<Mojolicious::Plugin::SerialXML> allows for inheritance
+L<Mojolicious::Plugin::XML::Base> allows for inheritance
 and thus provides two ways of extending the functionality:
 By using a derived class as a base class or by extending a
 base class with the C<add_extension> method.
 
-  package Fun;
-  use Mojo::Base 'Mojolicious::Plugin::SerialXML';
+For this purpose three new class variables are used:
 
-  our $NS     = 'http://sojolicio.us/ns/fun';
+=over 2
+
+=item C<$NAMESPACE> Namespace of the extension.
+
+=item C<$PREFIX> Preferred prefix to associate with the namespace.
+
+=item C<$DELEGATE> Delegate extension request to a different module.
+
+=back
+
+These class variables can be defined in a derived XML::Base class.
+
+  package Fun;
+  use Mojo::Base 'Mojolicious::Plugin::XML::Base';
+
+  our $NAMESPACE = 'http://sojolicio.us/ns/fun';
   our $PREFIX = 'fun';
 
   sub add_happy {
     my $self = shift;
     my $word = shift;
 
-    my $cool = $self->add('Cool');
-
-    my $cry = uc($word) . '!!! \o/ ';
-
-    $cool->add_pref('Happy', {foo => 'bar'}, $cry);
+    my $cool = $self->add('-Cool');
+    my $cry  = uc($word) . '!!! \o/ ';
+    $cool->add('Happy', {foo => 'bar'}, $cry);
   };
 
-Then use this object in your app:
+You can use this derived object in your application as you
+would with any other object class.
 
   package main;
   use Fun;
@@ -639,16 +711,17 @@ Then use this object in your app:
   #   </Cool>
   # </Fun>
 
-The defined namespace C<$NS> is introduced as the documents
-namespaces. The prefix C<$PREFIX> is not used.
-The behaviour of the C<add_pref> method in this example is exactly
-the same as the C<add> method.
+The defined namespace C<$NAMESPACE> is introduced as the documents
+namespaces. The prefix C<$PREFIX> is not used for any C<add>
+method.
 
-This package can be used as an extension as well:
+Without any changes to the class, you can use this module as an
+extension as well.
 
   package main;
-  use Mojo::Base 'Mojolicious::Plugin::SerialXML';
-  my $obj = Mojolicious::Plugin::SerialXML->new('object');
+  use Mojo::Base 'Mojolicious::Plugin::XML::Base';
+
+  my $obj = Mojolicious::Plugin::XML::Base->new('object');
   $obj->add_extension('Fun');
   $obj->add_happy('Yeah!');
   print $obj->to_pretty_xml;
@@ -660,18 +733,18 @@ This package can be used as an extension as well:
   #   </Cool>
   # </object>
 
-The defined namespace C<$NS> is introduced with the prefix C<$PREFIX>.
-The prefix is prepend to all elements added by C<add_pref>.
-All elements added by C<add> have no prefixes prepended.
+The defined namespace C<$NAMESPACE> is introduced with the
+prefix C<$PREFIX>. The prefix is prepended to all elements
+added by C<add>, except for element names beginning with a C<->.
 
 New extensions can always be introduced to a base class,
-whether derived or not.
+whether it is derived or not.
 
   package Atom;
-  use Mojo::Base 'Mojolicious::Plugin::SerialXML';
+  use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 
   our $PREFIX = 'atom';
-  our $NS = 'http://www.w3.org/2005/Atom';
+  our $NAMESPACE = 'http://www.w3.org/2005/Atom';
 
   # Add id
   sub add_id {
@@ -679,7 +752,7 @@ whether derived or not.
     my $id   = shift;
     return unless $id;
     $self->at('*')->attrs('xml:id' => $id);
-    $self->add_pref('id', $id);
+    $self->add('id', $id);
   };
 
   package main;
@@ -700,10 +773,44 @@ whether derived or not.
   #   <atom:id>1138</atom:id>
   # </Fun>
 
+With the C<add_extension> method, you define module names as extensions.
+If the extension is part of the module but in a package with a different
+name, you can define the C<$DELEGATE> variable in the module namespace
+to link to the intended package.
+
+Having, for example, a controller class 'Atom' with an appended document
+package ...
+
+  package Atom;
+  use Mojo::Base 'Mojolicious::Controller';
+
+  our $DELEGATE = 'Atom::Document';
+
+  # ... (Controller methods)
+
+  package Atom::Document;
+  use Mojo::Base 'Mojolicious::Plugin::XML::Base';
+
+  our $PREFIX = 'atom';
+  our $NAMESPACE = 'http://www.w3.org/2005/Atom';
+
+  # ... (Document methods)
+
+... you can load the controller class and use the document
+class as the extension in your application.
+
+  package main;
+  use Mojolicious::Plugin::XML::Base;
+  my $xml = Mojolicious::Plugin::XML::Base->new('feed');
+  $xml->add_extension('Atom');
 
 =head1 DEPENDENCIES
 
 L<Mojolicious>.
+
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
 
 =head1 COPYRIGHT AND LICENSE
 

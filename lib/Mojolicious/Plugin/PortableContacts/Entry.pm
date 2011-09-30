@@ -1,6 +1,6 @@
 package Mojolicious::Plugin::PortableContacts::Entry;
 use Mojo::Base -base;
-use Mojolicious::Plugin::SerialXML;
+use Mojolicious::Plugin::XML::Base;
 
 # todo - allow further valid labels
 
@@ -29,82 +29,82 @@ my $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
 
 # Return XML document
 sub to_xml {
-    return shift->_xml->to_pretty_xml;
+  return shift->_xml->to_pretty_xml;
 };
 
 # Return cleaned xml serialized object
 sub _xml {
-    my $self = shift;
+  my $self = shift;
 
-    my $entry = Mojolicious::Plugin::SerialXML->new('entry');
+  my $entry = Mojolicious::Plugin::XML::Base->new('entry');
 
-    foreach my $key (keys %$self) {
+  foreach my $key (keys %$self) {
 
-	# Normal vattributes
-	if (!ref $self->{$key} && $key =~ $SINGULAR_RE) {
+    # Normal vattributes
+    if (!ref $self->{$key} && $key =~ $SINGULAR_RE) {
 
-	    unless ($key eq 'note') {
-		$entry->add($key, $self->{$key});
-	    } else {
-		$entry->add($key => {-type => 'raw'} =>
-			   '<![CDATA['.$self->{$key}.']]>');
-	    };
-	}
+      unless ($key eq 'note') {
+	$entry->add($key, $self->{$key});
+      } else {
+	$entry->add($key => {-type => 'raw'} =>
+		      '<![CDATA['.$self->{$key}.']]>');
+      };
+    }
 
-	# Complex attributes
-	else {
-	    if (ref($self->{$key}) eq 'HASH'  && $key =~ $SINGULAR_RE) {
-		my $node = $entry->add($key);
-		while (my ($sub_key, $sub_value) = each (%{$self->{$key}})) {
-		    $node->add($sub_key, $sub_value);
-		};
-	    }
-
-	    # Plural attributes
-	    elsif ($key =~ $PLURAL_RE) {
-		foreach my $sub_node (@{$self->{$key}}) {
-		    if ((ref $sub_node) eq 'HASH') {
-			my $node = $entry->add($key);
-			while (my ($sub_key, $sub_value) = each (%{$sub_node})) {
-
-			    # Can contain newlines
-			    if ($sub_key =~ $FORMATTED_RE) {
-				$node->add($sub_key => {-type => 'raw'} =>
-					   '<![CDATA['.$sub_value.']]>');
-			    }
-
-			    # Cannot contain newlines
-			    else {
-				$node->add($sub_key, $sub_value);
-			    };
-			};
-		    }
-		    else {
-			$entry->add($key, $sub_node);
-		    };
-		};
-	    };
+    # Complex attributes
+    else {
+      if (ref($self->{$key}) eq 'HASH'  && $key =~ $SINGULAR_RE) {
+	my $node = $entry->add($key);
+	while (my ($sub_key, $sub_value) = each (%{$self->{$key}})) {
+	  $node->add($sub_key, $sub_value);
 	};
-    };
+      }
 
-    return $entry;
+      # Plural attributes
+      elsif ($key =~ $PLURAL_RE) {
+	foreach my $sub_node (@{$self->{$key}}) {
+	  if ((ref $sub_node) eq 'HASH') {
+	    my $node = $entry->add($key);
+	    while (my ($sub_key, $sub_value) = each (%{$sub_node})) {
+
+	      # Can contain newlines
+	      if ($sub_key =~ $FORMATTED_RE) {
+		$node->add($sub_key => {-type => 'raw'} =>
+			     '<![CDATA['.$sub_value.']]>');
+	      }
+
+	      # Cannot contain newlines
+	      else {
+		$node->add($sub_key, $sub_value);
+	      };
+	    };
+	  }
+	  else {
+	    $entry->add($key, $sub_node);
+	  };
+	};
+      };
+    };
+  };
+
+  return $entry;
 };
 
 # Return JSON document
 sub to_json {
-    return Mojo::JSON->new->encode( shift->_json );
+  return Mojo::JSON->new->encode( shift->_json );
 };
 
 # Return cleaned hash
 sub _json {
-    # Only allow fine first values
-    my %hash;
-    foreach my $key (keys %{ $_[0] }) {
-	if ($key =~ $VALID_RE) {
-	    $hash{$key} = $_[0]->{$key};
-	};
+  # Only allow fine first values
+  my %hash;
+  foreach my $key (keys %{ $_[0] }) {
+    if ($key =~ $VALID_RE) {
+      $hash{$key} = $_[0]->{$key};
     };
-    return \%hash;
+  };
+  return \%hash;
 };
 
 1;
@@ -154,7 +154,11 @@ The entry will contain only valid keys.
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::SerialXML>.
+L<Mojolicious::Plugin::XML>.
+
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
 
 =head1 COPYRIGHT AND LICENSE
 

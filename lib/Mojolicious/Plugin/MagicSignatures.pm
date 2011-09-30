@@ -493,6 +493,10 @@ L<Mojolicious::Plugin::MagicSignatures::Envelope>,
 L<Mojolicious::Plugin::MagicSignatures::Key>,
 L<Mojolicious::Plugin::Webfinger>.
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2011, Nils Diewald.

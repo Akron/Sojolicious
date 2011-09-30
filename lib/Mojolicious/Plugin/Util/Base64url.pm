@@ -76,6 +76,10 @@ are wanted. The default is true.
 
 Decodes a 64-based string with URL safe characters.
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2011, Nils Diewald.

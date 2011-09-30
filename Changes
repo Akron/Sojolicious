@@ -1,3 +1,9 @@
+0.10 2011-10-01
+        - Refurbished SerialXMLL and renamed to XML.
+        - Added XML namespace.
+        - Added lots of tests.
+        - Changed everything to support new XML module.
+
 0.09 2011-09-27
         - Refurbished XML::Serial and renamed to SerialXML.
         - Added Atom-Threading.

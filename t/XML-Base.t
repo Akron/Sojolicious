@@ -6,9 +6,9 @@ use lib '../lib';
 
 use Test::More tests => 21;
 
-use_ok('Mojolicious::Plugin::XML::Serial');
+use_ok('Mojolicious::Plugin::XML::Base');
 
-my $xml = Mojolicious::Plugin::XML::Serial->new('test');
+my $xml = Mojolicious::Plugin::XML::Base->new('test');
 my $subnode = $xml->add('Test', { foo => 'bar' });
 
 is($xml->at('Test')->attrs->{foo}, 'bar', 'Attribute request');
@@ -22,7 +22,7 @@ is($xml->at('SubTest[rel="hard"]')->text, 'Huhu', 'Text');
 is($xml->at('SubTest[rel="simple"]')->text, '', 'Text');
 is($xml->at('SubTest[rel="simple"]')->all_text, 'Huhu', 'All Text');
 
-$xml = Mojolicious::Plugin::XML::Serial->new(<<'XML');
+$xml = Mojolicious::Plugin::XML::Base->new(<<'XML');
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xml>
   <Test foo="bar">
@@ -43,7 +43,7 @@ $xml->add('ParaTest', { rel => "para" }, 'Para');
 is($xml->at('ParaTest')->attrs('rel'), 'para', 'Attribute');
 is($xml->at('ParaTest[rel="para"]')->text, 'Para', 'Text');
 
-$xml = Mojolicious::Plugin::XML::Serial->new('html');
+$xml = Mojolicious::Plugin::XML::Base->new('html');
 my $body = $xml->add('body', {color => '#ffffff' })->comment('body');
 $body->add('h1', 'Headline');
 $body->add('p', 'Paragraph');
@@ -53,7 +53,7 @@ is($xml->at('h1')->text, 'Headline', 'Text');
 is($xml->at('p')->text, 'Paragraph', 'Text');
 is($xml->at('body')->all_text, 'Headline Paragraph', 'Text');
 
-my $new_para = Mojolicious::Plugin::XML::Serial->new('p', { foo => 'bar' }, 'Paragraph2');
+my $new_para = Mojolicious::Plugin::XML::Base->new('p', { foo => 'bar' }, 'Paragraph2');
 
 $xml->at('body')->add($new_para);
 is($xml->at('body p:nth-of-type(2)')->text, 'Paragraph2', 'Text');
@@ -62,8 +62,8 @@ is($xml->at('body p:nth-of-type(2)')->text, 'Paragraph2', 'Text');
 # Namespace declarations
 my $my_ns = 'http://example.org/ns/my-1.0';
 
-my $new_para_2 = Mojolicious::Plugin::XML::Serial->new('p', { this => 'test'});
-$new_para_2->add_ns('my' => $my_ns);
+my $new_para_2 = Mojolicious::Plugin::XML::Base->new('p', { this => 'test'});
+$new_para_2->add_namespace('my' => $my_ns);
 
 $new_para_2->add('my:strong', {check => 'this'}, 'Works!' );
 
@@ -77,8 +77,8 @@ is($xml->at('*')->attrs('xmlns:my'), $my_ns, 'Namespace-Declaration');
 
 
 # Example from documentation
-$xml = Mojolicious::Plugin::XML::Serial->new('entry');
-$xml->add_ns('fun' => 'http://sojolicio.us/ns/fun');
+$xml = Mojolicious::Plugin::XML::Base->new('entry');
+$xml->add_namespace('fun' => 'http://sojolicio.us/ns/fun');
 my $env = $xml->add('fun:env' => { foo => 'bar' });
 my $data = $env->add('data' => { type => 'base64',
 				 -type => 'armour:30'

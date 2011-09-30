@@ -8,8 +8,9 @@ lib/Mojolicious/Plugin/XRDS.pm
 lib/Mojolicious/Plugin/INames.pm
 lib/Mojolicious/Plugin/VCard.pm
 lib/Mojolicious/Plugin/PubSubHubbub/Hub.pm
+lib/Mojolicious/Plugin/XML.pm
+lib/Mojolicious/Plugin/XML/Atom/Pub.pm
 t/Atom-Pub.pm
-t/ActivityStreams.t
 script*
 MYMETA*
 Makefile

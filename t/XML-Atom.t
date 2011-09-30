@@ -10,18 +10,16 @@ use Mojo::ByteStream 'b';
 use Test::Mojo;
 use Mojolicious::Lite;
 
-use Test::More tests => 95;
+use Test::More tests => 89;
 
 my $poco_ns  = 'http://www.w3.org/TR/2011/WD-contacts-api-20110616/';
 my $xhtml_ns = 'http://www.w3.org/1999/xhtml';
 
-use_ok('Mojolicious::Plugin::Atom');
+use_ok('Mojolicious::Plugin::XML::Atom');
 
 # new
-my $atom = Mojolicious::Plugin::Atom->new('feed');
-is(ref($atom), 'Mojolicious::Plugin::Atom::Document', 'new 1');
-$atom = $atom->new_feed;
-is(ref($atom), 'Mojolicious::Plugin::Atom::Document', 'new 2');
+my $atom = Mojolicious::Plugin::XML::Atom->new('feed');
+is(ref($atom), 'Mojolicious::Plugin::XML::Atom', 'new 1');
 
 # New Text
 # text
@@ -91,7 +89,8 @@ is($atom->at('entry content')->text,
    'Add content 1');
 
 $entry->add_content('html' => '<p>Test content');
-is($atom->at('entry content[type="html"]')->text,
+
+is($atom->at('entry content[type=html]')->text,
    '<p>Test content',
    'Add content 2');
 
@@ -167,6 +166,7 @@ is($atom->at('icon')->text, 'http://sojolicio.us/favicon.ico',
 # Add id
 $entry = $atom->add_entry;
 $entry->add_id('#Test3');
+
 is($atom->find('entry')->[2]->attrs('xml:id'), '#Test3', 'Add id 1');
 is($atom->find('entry > id')->[2]->text, '#Test3', 'Add id 2');
 
@@ -342,7 +342,7 @@ is($atom->at('entry updated')->text,
 
 
 # Examples
-$atom = Mojolicious::Plugin::Atom->new('entry');
+$atom = Mojolicious::Plugin::XML::Atom->new('entry');
 $entry = $atom->add_entry(id => '#467r57');
 $entry->add_author(name   => 'Bender');
 $entry->add_content(text  => "I am Bender!");
@@ -358,7 +358,7 @@ is($atom->at('content[type="xhtml"] div')->text,  'I am !', 'Text');
 is($atom->at('content[type="xhtml"] div')->all_text,  'I am Bender!', 'Text');
 is($atom->at('content[type="movie"]')->text, 'SSBhbSBCZW5kZXIh', 'Text');
 
-$atom = Mojolicious::Plugin::Atom->new(<<'ATOM');
+$atom = Mojolicious::Plugin::XML::Atom->new(<<'ATOM');
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry>
@@ -376,7 +376,7 @@ $poco_ns = 'http://www.w3.org/TR/2011/WD-contacts-api-20110616/';
 
 # Person constructs
 $person = $atom->new_person('name' => 'Fry');
-$person->add_ns('poco' => $poco_ns);
+$person->add_namespace('poco' => $poco_ns);
 $person->add('uri', 'http://sojolicio.us/fry');
 $person->add('poco:birthday' => '1/1/1970');
 
@@ -390,6 +390,7 @@ $date = $atom->new_date(1313131313);
 $atom->add_updated($date);
 is($atom->at('updated')->text, '2011-08-12T06:41:53Z', 'Updated');
 
+__END__
 
 # Plugin helper
 my $t = Test::Mojo->new;

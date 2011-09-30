@@ -1,7 +1,7 @@
 package Mojolicious::Plugin::PortableContacts::Response;
 use Mojo::Base -base;
 use Mojo::JSON;
-use Mojolicious::Plugin::SerialXML;
+use Mojolicious::Plugin::XML::Base;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
 # Todo! Allow other valid values
@@ -12,108 +12,109 @@ has 'itemsPerPage';
 
 # Constructor
 sub new {
-    my $class = shift;
-    my $self = $class->SUPER::new(@_);
+  my $class = shift;
+  my $self = $class->SUPER::new(@_);
 
-    if (exists $self->{entry}) {
+  if (exists $self->{entry}) {
 
-	# Multiple contacts
-	if (ref($self->{entry}) eq 'ARRAY') {
-	    $self->{entry} = [
-		map(
-		    _new_entry($_),
-		    @{$self->{entry}}
-		)];
-	}
+    # Multiple contacts
+    if (ref($self->{entry}) eq 'ARRAY') {
+      $self->{entry} = [
+	map(
+	  _new_entry($_),
+	  @{$self->{entry}}
+	)];
+    }
 
-	# Single contact
-	elsif (ref($self->{entry}) eq 'HASH') {
-	    $self->{entry} =
-		_new_entry($self->{entry});
-	};
+    # Single contact
+    elsif (ref($self->{entry}) eq 'HASH') {
+      $self->{entry} =
+	_new_entry($self->{entry});
     };
+  };
 
-    return $self;
+  return $self;
 };
 
 # Private function for entry objects
 sub _new_entry {
-    if (ref($_[0]) eq
+  if (ref($_[0]) eq
 	'Mojolicious::Plugin::PortableContacts::Entry') {
-	return $_[0];
-    } else {
-	return Mojolicious::Plugin::PortableContacts::Entry->new(@_);
-    };
+    return $_[0];
+  } else {
+    return Mojolicious::Plugin::PortableContacts::Entry->new(@_);
+  };
 };
 
 
 # Get entry values
 sub entry {
-    my $self = shift;
+  my $self = shift;
 
-    # Always return an array ref
-    return [] unless $self->{totalResults};
-    return $self->{entry} if ref($self->{entry}) eq 'ARRAY';
-    return [$self->{entry}];
+  # Always return an array ref
+  return [] unless $self->{totalResults};
+  return $self->{entry} if ref($self->{entry}) eq 'ARRAY';
+  return [$self->{entry}];
 };
 
 # Return JSON document
 sub to_json {
-    my $self = shift;
-    my %response;
+  my $self = shift;
+  my %response;
 
-    foreach (@RESPONSE) {
-	$response{$_} = $self->{$_} if exists $self->{$_};
+  foreach (@RESPONSE) {
+    $response{$_} = $self->{$_} if exists $self->{$_};
+  };
+
+  if ($self->{entry}) {
+
+    # Multiple entries
+    if (ref($self->{entry}) eq 'ARRAY') {
+      my @entries;
+      foreach ( @{ $self->{entry} } ) {
+	next unless exists $_->{id};
+	push (@entries, $_->_json );
+      };
+      $response{entry} = \@entries;
+    }
+
+    # Single entries
+    elsif (exists $self->{entry}->{id}) {
+      $response{entry} = $self->{entry}->_json
     };
+  };
 
-    if ($self->{entry}) {
-
-	# Multiple entries
-	if (ref($self->{entry}) eq 'ARRAY') {
-	    my @entries;
-	    foreach ( @{ $self->{entry} } ) {
-		next unless exists $_->{id};
-		push (@entries, $_->_json );
-	    };
-	    $response{entry} = \@entries;
-	}
-	
-	# Single entries
-	elsif (exists $self->{entry}->{id}) {
-	    $response{entry} = $self->{entry}->_json
-	};
-    }; 
-    return Mojo::JSON->new->encode(\%response);
+  return Mojo::JSON->new->encode(\%response);
 };
 
 # Return XML document
 sub to_xml {
-    my $self = shift;
+  my $self = shift;
 
-    my $response = Mojolicious::Plugin::SerialXML->new('response');
+  my $response = Mojolicious::Plugin::XML::Base->new('response');
 
-    my %hash;
-    foreach (@RESPONSE) {
-	$response->add($_ => $self->{$_}) if exists $self->{$_};
+  my %hash;
+  foreach (@RESPONSE) {
+    $response->add($_ => $self->{$_}) if exists $self->{$_};
+  };
+
+  if ($self->{entry}) {
+
+    # Multiple entries
+    if (ref($self->{entry}) eq 'ARRAY') {
+      foreach ( @{ $self->{entry} } ) {
+	next unless exists $_->{id};
+	$response->add($_->_xml);
+      };
+    }
+
+    # Single entries
+    elsif (exists $self->{entry}->{id}) {
+      $response->add($self->{entry}->_xml);
     };
+  };
 
-    if ($self->{entry}) {
-
-	# Multiple entries
-	if (ref($self->{entry}) eq 'ARRAY') {
-	    foreach ( @{ $self->{entry} } ) {
-		next unless exists $_->{id};
-		$response->add($_->_xml);
-	    };
-	}
-	
-	# Single entries
-	elsif (exists $self->{entry}->{id}) {
-	    $response->add($self->{entry}->_xml);
-	};
-    };
- 
-    return $response->to_pretty_xml;
+  return $response->to_pretty_xml;
 };
 
 1;
@@ -199,8 +200,12 @@ The response will contain only valid keys.
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::SerialXML>,
+L<Mojolicious::Plugin::XML>,
 L<Mojolicious::Plugin::PortableContacts::Entry>.
+
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
 
 =head1 COPYRIGHT AND LICENSE
 

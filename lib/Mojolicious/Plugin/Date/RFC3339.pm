@@ -157,6 +157,10 @@ The code is heavily based on L<Mojo::Date>,
 written by Sebastian Riedel. See L<Mojo::Date>
 for additional copyright and license information.
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 Copyright (C) 2011, Nils Diewald.
 
 This program is free software, you can redistribute it

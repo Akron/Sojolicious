@@ -6,37 +6,35 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 16;
+use Test::More tests => 15;
 
-use_ok('Mojolicious::Plugin::ActivityStreams');
-
-
+use_ok('Mojolicious::Plugin::XML::Atom');
 
 # new
-my $as = Mojolicious::Plugin::ActivityStreams->new('feed');
-is(ref($as), 'Mojolicious::Plugin::ActivityStreams::Document', 'new 1');
-my $as_feed = $as->new_feed;
-is(ref($as_feed), 'Mojolicious::Plugin::ActivityStreams::Document', 'new 2');
-$as = $as->new_entry;
-is(ref($as), 'Mojolicious::Plugin::ActivityStreams::Document', 'new 3');
+my $as = Mojolicious::Plugin::XML::Atom->new('feed');
+$as->add_extension('Mojolicious::Plugin::XML::ActivityStreams');
+
+is(ref($as), 'Mojolicious::Plugin::XML::Atom', 'new 1');
+my $as_entry = Mojolicious::Plugin::XML::Atom->new('entry');
+is(ref($as), 'Mojolicious::Plugin::XML::Atom', 'new 2');
 
 
-# add actor
-$as_feed->add_actor(name => 'Fry');
-is($as_feed->at('feed > author > name')->text,
+# add author
+$as->add_author(name => 'Fry');
+is($as->at('feed > author > name')->text,
    'Fry',
-   'Add actor 1');
-my $person = $as->new_person(name => 'Bender',
-		             uri => 'http://sojolicio.us/bender');
-$as->add_actor($person);
-is($as->at('entry > author > name')->text,
+   'Add author 1');
+my $person = $as_entry->new_person(name => 'Bender',
+				   uri => 'http://sojolicio.us/bender');
+$as_entry->add_author($person);
+is($as_entry->at('entry > author > name')->text,
    'Bender',
-    'Add actor 2');
-is($as->at('entry > author > uri')->text,
+    'Add author 2');
+is($as_entry->at('entry > author > uri')->text,
    'http://sojolicio.us/bender',
-    'Add actor 3');
+    'Add author 3');
 
-$as = $as_feed->add_entry($as);
+$as_entry = $as->add_entry($as_entry);
 
 
 # add verb

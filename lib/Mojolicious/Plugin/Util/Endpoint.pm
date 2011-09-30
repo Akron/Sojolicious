@@ -277,6 +277,10 @@ controller stash.
 
 L<Mojolicious> (best with SSL support).
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2011, Nils Diewald.

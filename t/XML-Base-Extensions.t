@@ -3,36 +3,37 @@ $|++;
 
 package Atom;
 use lib '../lib';
-use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 
 our $PREFIX = 'atom';
-our $NS = 'http://www.w3.org/2005/Atom';
+our $NAMESPACE = 'http://www.w3.org/2005/Atom';
 
 # Add id
 sub add_id {
   my $self = shift;
   my $id   = shift;
   return unless $id;
-  $self->at('*')->attrs('xml:id' => $id);
-  $self->add_pref('id', $id);
+  my $element = $self->add('id', $id);
+  $element->parent->attrs('xml:id' => $id);
+  return $element;
 };
 
 package Fun;
 use lib '../lib';
-use Mojo::Base 'Mojolicious::Plugin::XML::Serial';
+use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 
-our $NS = 'http://sojolicio.us/ns/fun';
+our $NAMESPACE = 'http://sojolicio.us/ns/fun';
 our $PREFIX = 'fun';
 
 sub add_happy {
   my $self = shift;
   my $word = shift;
 
-  my $cool = $self->add('Cool');
+  my $cool = $self->add('-Cool');
 
-  $cool->add_pref('Happy',
-		  {foo => 'bar'},
-		  uc($word) . '!!! \o/ ' );
+  $cool->add('Happy',
+	     {foo => 'bar'},
+	     uc($word) . '!!! \o/ ' );
 };
 
 package main;
@@ -54,13 +55,13 @@ my $yeah = $node->add_happy('Yeah!');
 is($yeah->namespace, $fun_ns, 'Namespace');
 is($node->at('Cool')->namespace, $fun_ns, 'Namespace');
 
-
-$node = Mojolicious::Plugin::XML::Serial->new('object');
+$node = Mojolicious::Plugin::XML::Base->new('object');
 
 ok(!$node->at(':root')->namespace, 'Namespace');
 
 $node->add_extension('Fun');
 $yeah = $node->add_happy('Yeah!');
+
 
 is($yeah->namespace, $fun_ns, 'Namespace');
 

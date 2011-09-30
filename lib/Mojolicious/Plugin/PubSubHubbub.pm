@@ -749,6 +749,10 @@ false value. If verification is granted, this value has to be set to true.
 L<Mojolicious>,
 L<Mojolicious::Plugin::Util::Endpoint> (optional).
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2011, Nils Diewald.

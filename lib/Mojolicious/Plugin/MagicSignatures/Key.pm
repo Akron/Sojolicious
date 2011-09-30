@@ -491,6 +491,10 @@ Either L<Math::BigInt::GMP> or L<Math::BigInt::Pari> are recommended.
 
 The signing and verifification is currently not working!
 
+=head1 AVAILABILITY
+
+  https://github.com/Akron/Sojolicious
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2011, Nils Diewald.
