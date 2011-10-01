@@ -4,7 +4,6 @@ use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 our $PREFIX    = 'ostatus';
 our $NAMESPACE = 'http://ostatus.org/schema/1.0/';
 
-
 # Only use as an extension
 sub new {
   warn 'Only use as an extension to Atom';

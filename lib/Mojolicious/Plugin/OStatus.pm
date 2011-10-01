@@ -27,6 +27,7 @@ sub register {
     new_ostatus => ['Atom',
 		    'ActivityStreams',
 		    'Atom-Threading',
+		    'GeoRSS',
 		    'OStatus'] # PortableContacts
   });
 };

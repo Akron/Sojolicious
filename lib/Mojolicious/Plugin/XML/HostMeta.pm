@@ -10,7 +10,6 @@ sub add_host { shift->add('Host', shift) };
 
 1;
 
-
 __END__
 
 =pod

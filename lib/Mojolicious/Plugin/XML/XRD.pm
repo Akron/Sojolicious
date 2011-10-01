@@ -14,6 +14,9 @@ sub new {
 
   my $xrd = $class->SUPER::new(@_);
 
+  # Todo: To make this work embedded,
+  #        a 'register' method is needed
+
   # Add XMLSchema instance namespace
   $xrd->add_namespace(
     'xsi' => 'http://www.w3.org/2001/XMLSchema-instance');

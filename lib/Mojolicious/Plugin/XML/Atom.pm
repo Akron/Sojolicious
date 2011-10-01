@@ -3,12 +3,12 @@ use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 use Mojolicious::Plugin::Date::RFC3339;
 use Mojo::ByteStream 'b';
 
-# Namespace declaration
-use constant XHTML_NS => 'http://www.w3.org/1999/xhtml';
-
 our $MIME      = 'application/atom+xml';
 our $PREFIX    = 'atom';
 our $NAMESPACE = 'http://www.w3.org/2005/Atom';
+
+# Namespace declaration
+use constant XHTML_NS => 'http://www.w3.org/1999/xhtml';
 
 # see http://search.cpan.org/~aristotle/XML-Atom-SimpleFeed-0.86/lib/XML/Atom/SimpleFeed.pm
 

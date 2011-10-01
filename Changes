@@ -1,3 +1,6 @@
+0.10 2011-10-02
+        - Added GeoRSS (Simple) support.
+
 0.10 2011-10-01
         - Refurbished SerialXML and renamed to XML.
         - Added Mojolicious::Plugin::XML namespace.
