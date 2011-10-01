@@ -24,10 +24,10 @@ sub register {
   };
 
   $mojo->plugin('XML' => {
-    new_ostatus_as => ['Atom',
-		       'ActivityStreams',
-		       'Atom-Threading',
-		       'OStatus'] # PortableContacts
+    new_ostatus => ['Atom',
+		    'ActivityStreams',
+		    'Atom-Threading',
+		    'OStatus'] # PortableContacts
   });
 };
 

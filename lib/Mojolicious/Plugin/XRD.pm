@@ -21,7 +21,7 @@ sub register {
 	  format => 'json'
 	)},
 	any  => sub { $c->render(
-	  data   => $xrd->to_xml,
+	  data   => $xrd->to_pretty_xml,
 	  format => 'xrd'
 	)}
       );

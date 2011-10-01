@@ -9,6 +9,7 @@ lib/Mojolicious/Plugin/INames.pm
 lib/Mojolicious/Plugin/VCard.pm
 lib/Mojolicious/Plugin/PubSubHubbub/Hub.pm
 lib/Mojolicious/Plugin/XML/Atom/Pub.pm
+lib/Mojolicious/Plugin/XML/MagicEnvelope.pm
 t/Atom-Pub.pm
 script*
 MYMETA*

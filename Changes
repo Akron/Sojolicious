@@ -1,6 +1,6 @@
 0.10 2011-10-01
-        - Refurbished SerialXMLL and renamed to XML.
-        - Added XML namespace.
+        - Refurbished SerialXML and renamed to XML.
+        - Added Mojolicious::Plugin::XML namespace.
         - Added lots of tests.
         - Changed everything to support new XML module.
 
