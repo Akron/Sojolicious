@@ -6,6 +6,8 @@ our $MIME      = 'application/xrd+xml';
 our $NAMESPACE = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
 our $PREFIX    = 'xrd';
 
+# xml_mime 'application/xrd+xml';
+
 # Constructor
 sub new {
   my $class = shift;

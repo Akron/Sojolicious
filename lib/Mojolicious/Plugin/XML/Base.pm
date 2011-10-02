@@ -10,6 +10,7 @@ use constant {
                'standalone="yes"?>'
 };
 
+
 # Construct new serial object
 sub new {
   my $class = shift;

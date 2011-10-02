@@ -10,6 +10,7 @@ lib/Mojolicious/Plugin/VCard.pm
 lib/Mojolicious/Plugin/PubSubHubbub/Hub.pm
 lib/Mojolicious/Plugin/XML/Atom/Pub.pm
 lib/Mojolicious/Plugin/XML/MagicEnvelope.pm
+lib/Mojolicious/Plugin/XML/Test.pm
 t/Atom-Pub.pm
 script*
 MYMETA*
