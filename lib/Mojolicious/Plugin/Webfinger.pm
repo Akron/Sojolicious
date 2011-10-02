@@ -332,7 +332,7 @@ loading the plugin, so the path is correct.
 
 =head1 HOOKS
 
-=over2
+=over 2
 
 =item C<before_fetching_webfinger>
 

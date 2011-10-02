@@ -419,7 +419,7 @@ for serving the PortableContacts API endpoint.
 
 =head1 HOOKS
 
-=over2
+=over 2
 
 =item C<get_poco>
 

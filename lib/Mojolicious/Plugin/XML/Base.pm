@@ -586,6 +586,11 @@ Mojolicious::Plugin::XML::Base - XML generator base class
   #   </fun:env>
   # </entry>
 
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::XML::Base> allows for the simple creation
+of serialized XML documents with multiple namespaces and
+pretty printing.
 
 =head1 METHODS
 
@@ -595,29 +600,53 @@ L<Mojo::DOM> and implements the following new ones.
 =head2 C<new>
 
   my $xml = Mojolicious::Plugin::XML::Base->new(<<'EOF');
+  <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  <entry>
+    <fun>Yeah!</fun>
+  <entry>
+  EOF
 
+  my $xml = Mojolicious::Plugin::XML::Base->new('Document');
+  my $xml = Mojolicious::Plugin::XML::Base->new('Document',
+                                                { foo => bar });
   my $xml = $xml->new('Document', {id => 'new'}, 'My Doc');
+
+Construct a new L<Mojolicious::Plugin::XML::Base> object.
+Accepts either all parameters supported by L<Mojo::DOM> or
+all parameters supported by C<add>.
 
 =head2 C<add>
 
+  my $xml = Mojolicious::Plugin::XML::Base->new('Document');
+  $xml = $xml->add('Element');
+  $xml = $xml->add('Element', { type => 'text/plain' });
+  $xml = $xml->add('Element', { type => 'text/plain' }, 'Hello World!');
+  $xml = $xml->add('Element', 'Hello World!');
+  $xml = $xml->add('Element', 'Hello World!', 'This is a comment!');
   $xml = $xml->add('Data', { -type => 'base64' }, 'PdGzjvj..');
 
-  $xml = $xml->add('a', { href => 'http://...' });
-  my $node = $xml->new('strong', 'My Doc');
-  $xml->add($node);
+  my $element = $xml->new('Element', 'Hello World!');
+  $xml->add($element);
 
-Appends a new Element to the document root and returns a
-C<Mojolicious::Plugin::XML::Base> object.
-In Extension context, a prefix is automatically prepended.
-To prevent prefixing in extension context, prepend a C<-> to
-the element name.
+Append a new Element to a C<Mojolicious::Plugin::XML::Base> object.
+Returns the root node of the added C<Mojolicious::Plugin::XML::Base>
+object.
 
-  $self->add('-Link', { foo => 'bar' });
-  # Always <Link foo="bar" />
+It accepts either C<Mojolicious::Plugin::XML::Base> objects to
+be added, or newly defined elements.
+Parameters to define elements are a tag name, an optional Hash reference
+including all attributes of the XML element, an optional text content,
+and an optional comment on the element.
+If the comment should be introduced without text content, text content
+has to be undef.
 
-Allows for special rendering of content types with C<-type> attribute:
+For rendering element content, a special C<-type> attribute can be used:
 
-=hover2
+=over 2
+
+=item C<escape>      XML escape the content of the node.
+
+=item C<raw>         Treat children as raw data (no pretty printing).
 
 =item C<armour(:n)?> Indent the content and automatically
                      introduce linebreaks after every
@@ -625,17 +654,21 @@ Allows for special rendering of content types with C<-type> attribute:
                      Intended for base64 encoded data.
                      Defaults to 60 characters
 
-=item C<escape>      XML escape the content of the node.
-
-=item C<raw>         Treat children as raw data (no pretty printing).
-
 =back
+
+In extension context (see L<Extensions>), a potential prefix is automatically
+prepended. To prevent prefixing in extension context, prepend a C<-> to
+the element name. See L<Extensions> for further information.
+
+  $self->add('Link', { foo => 'bar' });
+  $self->add('-Link', { foo => 'bar' });
+  # Both <Link foo="bar" /> in normal context
 
 =head2 C<comment>
 
   $node = $node->comment('Resource Descriptor');
 
-Prepend a comment to the XRD node.
+Prepend a comment to the current node.
 
 =head2 C<add_namespace>
 
@@ -646,13 +679,16 @@ Prepend a comment to the XRD node.
 Add namespace to the node's root.
 The first parameter gives the prefix, the second one
 the namespace. The prefix parameter is optional.
+Namespaces are always added to the document's root, that
+means, they have to be unique in the scope of the whole
+document.
 
 =head2 C<add_extension>
 
-  $xml->add_extension('Fun','Atom');
+  $xml->add_extension('Fun','Mojolicious::Plugin::XML::Atom');
 
 Add an array of packages as extensions to the root
-of the document.
+of the document. See L<Extensions> for further information.
 
 =head2 C<to_pretty_xml>
 
@@ -667,7 +703,7 @@ and thus provides two ways of extending the functionality:
 By using a derived class as a base class or by extending a
 base class with the C<add_extension> method.
 
-For this purpose three new class variables are used:
+For this purpose three class variables can be set:
 
 =over 2
 
@@ -697,7 +733,7 @@ These class variables can be defined in a derived XML::Base class.
   };
 
 You can use this derived object in your application as you
-would with any other object class.
+would do with any other object class.
 
   package main;
   use Fun;
@@ -718,9 +754,6 @@ method.
 
 Without any changes to the class, you can use this module as an
 extension as well.
-
-  package main;
-  use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 
   my $obj = Mojolicious::Plugin::XML::Base->new('object');
   $obj->add_extension('Fun');
@@ -752,8 +785,9 @@ whether it is derived or not.
     my $self = shift;
     my $id   = shift;
     return unless $id;
-    $self->at('*')->attrs('xml:id' => $id);
-    $self->add('id', $id);
+    my $element = $self->add('id', $id);
+    $element->parent->attrs('xml:id' => $id);
+    return $self;
   };
 
   package main;
@@ -779,9 +813,6 @@ If the extension is part of the module but in a package with a different
 name, you can define the C<$DELEGATE> variable in the module namespace
 to link to the intended package.
 
-Having, for example, a controller class 'Atom' with an appended document
-package ...
-
   package Atom;
   use Mojo::Base 'Mojolicious::Controller';
 
@@ -797,7 +828,8 @@ package ...
 
   # ... (Document methods)
 
-... you can load the controller class and use the document
+Having, for example, a controller class 'Atom' with an appended document
+package, you can load the controller class and use the document
 class as the extension in your application.
 
   package main;

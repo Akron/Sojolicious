@@ -164,6 +164,9 @@ Mojolicious::Plugin::XML - XML generation with Mojolicious
 
 =head1 DESCRIPTION
 
+L<Mojolicious::Plugin::XML> is a plugin to support
+XML documents based on L<Mojolicious::Plugin::XML::Base>.
+
 =head1 HELPERS
 
 =head2 C<new_xml>
@@ -180,8 +183,30 @@ use 'Base' as the base class:
   $c->render_xml($xml)
   $c->render_xml($xml, code => 404)
 
-Render documents based on L<Mojolicious::Plugin::XML>
-wwith their associated mime type.
+Render documents based on L<Mojolicious::Plugin::XML::Base>.
+You can associate a mime type to be used with the document by
+providing a class variable in your base class:
+
+=over 2
+
+=item C<$MIME> Mime Type of the XML document
+
+=back
+
+So a new base class can be written as:
+
+  package Fun;
+  use Mojo::Base 'Mojolicious::Plugin::XML::Base';
+
+  our $NAMESPACE = 'http://sojolicio.us/ns/fun';
+  our $PREFIX    = 'fun';
+  our $MIME      = 'application/fun+xml';
+
+  sub add_happy {
+    my $self = shift;
+    my $word = shift;
+    $self->add('Happy', '\o/' . $word . '\o/');
+  };
 
 =head1 DEPENDENCIES
 

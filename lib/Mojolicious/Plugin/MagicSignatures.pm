@@ -386,7 +386,7 @@ L<Mojolicious::Plugin::MagicSignatures> establishes a helper
 called C<get_magickeys>.
 It accepts a hash containing the following parameters
 
-=over2
+=over 2
 
 =item C<acct>:     The Webfinger Account name for discovery
 =item C<key_url>:  The url of the MagicKey or a set of MagicKeys
@@ -430,7 +430,7 @@ the second parameter is an optional Hash reference,
 containing the possible parameters for L<get_magickeys>
 and the following in addition:
 
-=over2
+=over 2
 
 =item C<key>:     The MagicKey as a string or a MagicKey object
 =item C<sig>:     A specified signature value
