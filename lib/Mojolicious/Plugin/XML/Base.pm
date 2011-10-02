@@ -570,7 +570,7 @@ Mojolicious::Plugin::XML::Base - XML generator base class
 
   $data->comment('This is base64 data!');
 
-  print $xml->to_xml;
+  print $xml->to_pretty_xml;
 
   # <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   # <entry xmlns:fun="http://sojolicio.us/ns/fun">
