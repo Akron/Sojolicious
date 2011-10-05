@@ -22,75 +22,73 @@ sub new {
 
 # Parse date value
 sub parse {
-    my ($self, $date) = @_;
+  my ($self, $date) = @_;
 
-    return $self unless defined $date;
+  return $self unless defined $date;
 
-    if ($date =~ /^\d+$/) {
-	$self->epoch($date);
-    }
-    
-    elsif (my ($year, $month, $mday,
-	       $hour, $min, $sec,
-	       $offset) = ($date =~ $RFC3339_RE)) {
-	my $epoch;
-	$month--;
+  if ($date =~ /^\d+$/) {
+    $self->epoch($date);
+  }
 
-	eval {
-	    $epoch = Time::Local::timegm($sec, $min, $hour,
-					 $mday, $month, $year);
-	};
+  elsif (my ($year, $month, $mday,
+	     $hour, $min, $sec,
+	     $offset) = ($date =~ $RFC3339_RE)) {
+    my $epoch;
+    $month--;
 
-	# Calculate offsets
-	if (uc($offset) ne 'Z' &&
-	    (
-	     my ($os_dir,
-		 $os_hour,
-		 $os_min) = ($offset =~ /^([-\+])(\d?\d)(?::(\d?\d))?$/))) {
-
-	    # Negative offset
-	    if ($os_dir eq '-') {
-		$epoch += ($os_hour * 60 * 60) if $os_hour;
-		$epoch += ($os_min * 60) if $os_min;
-	    }
-	    
-	    # Positive offset
-	    else {
-		$epoch -= ($os_hour * 60 * 60) if $os_hour;
-		$epoch -= ($os_min * 60) if $os_min;
-	    };
-	};
-
-	if (!$@ && $epoch > 0) {
-	    $self->epoch($epoch);
-	    return $epoch
-	};
+    eval {
+      $epoch = Time::Local::timegm($sec, $min, $hour,
+				   $mday, $month, $year);
     };
 
-    return $self;
+    # Calculate offsets
+    if (uc($offset) ne 'Z' &&
+	  (
+	    my ($os_dir,
+		$os_hour,
+		$os_min) = ($offset =~ /^([-\+])(\d?\d)(?::(\d?\d))?$/))) {
+
+      # Negative offset
+      if ($os_dir eq '-') {
+	$epoch += ($os_hour * 60 * 60) if $os_hour;
+	$epoch += ($os_min * 60) if $os_min;
+      }
+
+      # Positive offset
+      else {
+	$epoch -= ($os_hour * 60 * 60) if $os_hour;
+	$epoch -= ($os_min * 60) if $os_min;
+      };
+    };
+
+    if (!$@ && $epoch > 0) {
+      $self->epoch($epoch);
+      return $self
+    };
+  };
+
+  return $self;
 };
 
 # return string
 sub to_string {
-    my $self = shift;
+  my $self = shift;
 
-    my $epoch = $self->epoch;
-    $epoch = time unless defined $epoch;
-    my ($sec, $min, $hour,
-	$mday, $month, $year) = gmtime $epoch;
+  my $epoch = $self->epoch;
+  $epoch = time unless defined $epoch;
+  my ($sec, $min, $hour,
+      $mday, $month, $year) = gmtime $epoch;
 
-    # Format
-    return sprintf(
-	"%04d-%02d-%02dT%02d:%02d:%02dZ",
-	($year + 1900), ($month + 1), $mday,
-	$hour, $min, $sec);
+  # Format
+  return sprintf(
+    "%04d-%02d-%02dT%02d:%02d:%02dZ",
+    ($year + 1900), ($month + 1), $mday,
+    $hour, $min, $sec);
 };
 
 1;
 
 __END__
-
-
 
 =pod
 

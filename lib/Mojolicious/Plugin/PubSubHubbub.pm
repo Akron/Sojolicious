@@ -1,7 +1,7 @@
 package Mojolicious::Plugin::PubSubHubbub;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
-use Mojo::IOLoop;
+use Mojo::DOM;
 
 use constant ATOM_NS => 'http://www.w3.org/2005/Atom';
 
@@ -51,12 +51,14 @@ sub register {
       return unless $param eq 'cb';
 
       # Set endpoint if enabled
-      if (exists $mojo->renderer->helpers->{'endpoint'}) {
-	$route->endpoint(
-	  'pubsub-'.$param => {
-	    scheme => $plugin->secure ? 'https' : 'http',
-	    host   => $plugin->host });
+      unless (exists $mojo->renderer->helpers->{'endpoint'}) {
+	$mojo->plugin('Util::Endpoint');
       };
+
+      $route->endpoint(
+	'pubsub-'.$param => {
+	  scheme => $plugin->secure ? 'https' : 'http',
+	  host   => $plugin->host });
 
       # Add 'callback' route
       if ($param eq 'cb') {
@@ -112,9 +114,6 @@ sub publish {
 			     ->to_string)->url_escape;
   };
 
-  # Temporary:
-  # return $post
-
   # Post to hub
   # Todo: Maybe better post_form
   my $res = $c->ua
@@ -122,6 +121,14 @@ sub publish {
       ->post( $plugin->hub,
 	      $global_param,
 	      $post);
+
+
+  # No response
+  unless ($res) {
+    $c->app->log->debug('Cannot ping hub - maybe no SSL support')
+      if index($plugin->hub, 'https') == 0;
+    return 0;
+  };
 
   # is 2xx, incl. 204 aka successful
   return 1 if $res->is_status_class(200);
@@ -164,11 +171,11 @@ sub verify {
     };
 
     # Run hook to see, if verification is granted.
-    $plugin->app->run_hook( 'on_pubsub_verification' =>
-			      ( $plugin,
-				$c,
-				\%param,
-				\$ok ) );
+    $c->app->plugins->run_hook( 'on_pubsub_verification' =>
+				  ( $plugin,
+				    $c,
+				    \%param,
+				    \$ok ) );
 
     if ($ok) {
       return $c->render(
@@ -195,21 +202,25 @@ sub _change_subscription {
     return;
   };
 
-  # delete lease seconds if no integer or not necessary
-  if ( ( exists $param{lease_seconds} &&
-         $param{lease_seconds} =~ /^\d+$/) ||
-	   $param{mode} eq 'unsubscribe') {
+  # delete lease seconds if no integer
+  if ( exists $param{lease_seconds} &&
+       $param{lease_seconds} !~ /^\d+$/) {
     delete $param{lease_seconds};
   };
 
+  # Set to default
+  $param{lease_seconds} ||= $plugin->lease_seconds;
+
+  # delete lease seconds if not necessary
+  delete $param{lease_seconds} if $param{mode} eq 'unsubscribe';
+
   # Get callback endpoint
   # Works only if endpoints provided
-  $param{'callback'} = $c->get_endpoint('pubsub-cb');
+  $param{'callback'} = $c->endpoint('pubsub-cb');
 
   # Render post string
-  my $post = '';
-  foreach ( qw/callback
-	       mode
+  my $post = 'hub.callback='. b($param{'callback'})->url_escape;
+  foreach ( qw/mode
 	       topic
 	       verify
 	       lease_seconds
@@ -228,34 +239,42 @@ sub _change_subscription {
 
   $post .= '&hub.verify=' . $_ . 'sync' foreach ('a','');
 
-  $plugin->app->run_hook(
-    'before_pubsub_'.$param{mode} => ( $plugin,
-				       $c,
-				       \%param,
-				       \$post ));
+  my $mode = $param{mode};
+
+  my $mojo = $c->app;
+
+  $mojo->plugins->run_hook(
+    'before_pubsub_'.$mode => ( $plugin,
+				$c,
+				\%param,
+				\$post ));
 
 
   # Todo: better post_form
-
-  # Temporary
-  # return $post;
 
   # Send subscription change to hub
   my $res = $c->ua
     ->max_redirects(3)
     ->post($param{hub},
 	   $global_param,
-	   $post);
+	   $post)->tx;
 
   # is 2xx, incl. 204 aka successful
   #         and 202 aka accepted
 
-  $plugin->app->run_hook(
-    'after_pubsub_'.$param{mode} => ( $plugin,
-				      $c,
-				      \%param,
-				      $res->status,
-				      $res->body ));
+  # No response
+  unless ($res) {
+    $mojo->log->debug('Cannot ping hub - maybe no SSL support')
+      if index($plugin->hub, 'https') == 0;
+    return 0;
+  };
+
+  $mojo->plugins->run_hook(
+    'after_pubsub_'.$mode => ( $plugin,
+			       $c,
+			       \%param,
+			       $res->code,
+			       $res->body ));
 
   my $success = $res->is_status_class(200) ? 1 : 0;
 
@@ -283,6 +302,7 @@ sub callback {
   ) unless $type;
 
   # No topics to process
+  # Temporär
   return _render_success($c) unless $topics->[0];
 
   my $secret;
@@ -290,44 +310,49 @@ sub callback {
 
   my @old_topics = @$topics;
 
+  $c->app->log->debug('Send topics to hook: '.join('; ',@$topics));
+
   # Check for secret and which topics are wanted
-  $mojo->run_hook(
+  $mojo->plugins->run_hook(
     'on_pubsub_acceptance' => ( $plugin,
 				$c,
+				$type,
 				$topics,
 				\$secret,
 				\$x_hub_on_behalf_of ));
 
-  # Render before processing
-  _render_success( $c => $x_hub_on_behalf_of );
+#  # Render before processing
+#  _render_success( $c => $x_hub_on_behalf_of );
 
   # No topics to process
-  return unless $topics->[0];
+  return _render_success( $c => $x_hub_on_behalf_of )
+    unless $topics->[0];
 
-  # Process content
-  Mojo::IOLoop->timer(
-    0 => sub {
+  $mojo->log->debug('Start parsing topics: '.join('; ',@$topics));
 
-      # Secret is needed
-      if ($secret) {
-	return unless _check_signature($c, $secret);
-      };
+# todo: try on_finish
 
-      # Some topics are unwanted
-      if (@$topics != @old_topics) {
-	# filter dom based on topics
-	$dom = _filter_topics($dom, $type, $topics);
-      };
+  # Secret is needed
+  if ($secret) {
+    return unless _check_signature($c, $secret);
+  };
 
-      $mojo->run_hook( 'on_pubsub_content' =>
-			 ( $plugin,
-			   $c,
-			   $type,
-			   $dom ));
-      return;
-    });
+  # Some topics are unwanted
+  if (@$topics != @old_topics) {
+    # filter dom based on topics
+    $dom = _filter_topics($dom, $type, $topics);
+  };
 
-  return;
+  $mojo->log->debug('Now I\'ve got the dom! Run hook.');
+
+  $mojo->plugins->run_hook( 'on_pubsub_content' =>
+			      ( $plugin,
+				$c,
+				$type,
+				$dom ));
+
+  return _render_success( $c => $x_hub_on_behalf_of );
+
 };
 
 # Find topics of entries
@@ -341,13 +366,16 @@ sub _find_topics {
 
   my $aggregated = 0;
 
-  my $ct = $c->req->headers->header('Content-Type') || 'text';
+  my $ct = $c->req->headers->header('Content-Type') || 'unknown';
+
+  # Todo: add topic to every entry
 
   # Is RSS
-  if ($ct eq 'application/rss+xml') {
+  if ($ct =~ m{^application/(?:rss|rdf)\+xml$}) {
     $type = 'rss';
 
-    $dom = $c->req->dom;
+    # Mojolicious::Plugin::XML::Atom?
+    $dom = Mojo::DOM->new($c->req->body, xml => 1);
 
     # From Atom namespace
     my $link = $dom->at('channel > link[rel="self"]');
@@ -358,13 +386,15 @@ sub _find_topics {
       $link = $dom->at('channel > item > source');
       @topics = $link->attrs('url') if $link;
     };
+
+    $c->app->log->debug('Check in RSS: '.join(';',@topics));
   }
 
   # Is Atom
   elsif ($ct eq 'application/atom+xml') {
     $type = 'atom';
 
-    $dom = $c->req->dom;
+    $dom = Mojo::DOM->new($c->req->body, xml => 1);
 
     # Possibly aggregated feed
     $aggregated = 1;
@@ -395,10 +425,12 @@ sub _find_topics {
     else {
       $aggregated = 0;
     };
+
   }
 
   # Unsupported content type
   else {
+    $c->app->log->debug('Unsupported media type: '.$ct);
     return;
   };
 
@@ -673,7 +705,8 @@ hub's response message body is returned additionally.
 
   $mojo->hook(
     on_pubsub_acceptance' > sub {
-      my ($plugin, $c, $topics, $secret, $on_behalf) = @_;
+      my ($plugin, $c, $type,
+          $topics, $secret, $on_behalf) = @_;
 
       $topics = [ grep($_ !~ /catz/, @$topics) ];
       $$secret = 'zoidberg';
@@ -684,9 +717,9 @@ hub's response message body is returned additionally.
 
 This hook is released, when content arrived the pubsub
 endpoint. The parameters include the plugin object, the current
-Controller object, an array reference of topics, an empty string
-reference for a possible secret, and a string reference
-for the C<X-Hub-On-Behalf-Of> value, initially 0.
+controller object, the content type, an array reference of topics,
+an empty string reference for a possible secret, and a string
+reference for the C<X-Hub-On-Behalf-Of> value, initially 0.
 
 This hook can be used to filter unwanted topics, to give a
 necessary secret for signed content, and information on
@@ -816,7 +849,7 @@ If verification is granted, this value has to be set to true.
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Mojolicious::Plugin::Util::Endpoint> (optional).
+L<Mojolicious::Plugin::Util::Endpoint>.
 
 =head1 AVAILABILITY
 
