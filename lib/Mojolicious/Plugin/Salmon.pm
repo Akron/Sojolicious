@@ -330,6 +330,7 @@ sub _discover_author {
 };
 
 # Render according to the accepted format
+# Todo: respond_to
 sub _render_me {
   my $plugin = shift;
   my $c      = shift;

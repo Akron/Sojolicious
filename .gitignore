@@ -14,6 +14,7 @@ lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/Atom-Pub.pm
+t-sojo
 script*
 MYMETA*
 Makefile

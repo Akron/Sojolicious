@@ -8,253 +8,253 @@ use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
 # Register plugin
 sub register {
-    my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo, $param) = @_;
 
-    # Set mime-types
-    for ($mojo->types) {
-	$_->type('mkey'    => 'application/magic-key');
-	$_->type('me+xml'  => 'application/magic-envelope+xml');
-	$_->type('me+json' => 'application/magic-envelope+json');
-    };
+  # Set mime-types
+  for ($mojo->types) {
+    $_->type('mkey'    => 'application/magic-key');
+    $_->type('me+xml'  => 'application/magic-envelope+xml');
+    $_->type('me+json' => 'application/magic-envelope+json');
+  };
 
-    # Load Webfinger if not already loaded.
-    unless (exists $mojo->renderer->helpers->{'webfinger'}) {
-	$mojo->plugin('Webfinger' =>
-		      {
-			  host   => $param->{'host'},
-			  secure => $param->{'secure'}
-		      });
-    };
+  # Load Webfinger if not already loaded.
+  unless (exists $mojo->renderer->helpers->{'webfinger'}) {
+    $mojo->plugin('Webfinger' =>
+		    {
+		      host   => $param->{'host'},
+		      secure => $param->{'secure'}
+		    });
+  };
 
-    # Add 'magicenvelope' helper
-    $mojo->helper(
-	'magicenvelope' => sub {
-	    # New MagicEnvelope instance object
-	    my $me = Mojolicious::Plugin::MagicSignatures::Envelope
-		->new( @_[1..$#_] );
+  # Add 'magicenvelope' helper
+  $mojo->helper(
+    'magicenvelope' => sub {
+      # New MagicEnvelope instance object
+      my $me = Mojolicious::Plugin::MagicSignatures::Envelope
+	->new( @_[1..$#_] );
 
-	    # MagicEnvelope can not be build
-	    return if (!$me || !$me->data);
+      # MagicEnvelope can not be build
+      return if (!$me || !$me->data);
 
-	    # Return MagicEnvelope
-	    return $me;
-	});
+      # Return MagicEnvelope
+      return $me;
+    });
 
-    # Add 'magickey' helper
-    $mojo->helper(
-	'magickey' => sub {
-	    # New MagicKey instance object
-	    return Mojolicious::Plugin::MagicSignatures::Key
-		->new( @_[1..$#_] );
-	});
+  # Add 'magickey' helper
+  $mojo->helper(
+    'magickey' => sub {
+      # New MagicKey instance object
+      return Mojolicious::Plugin::MagicSignatures::Key
+	->new( @_[1..$#_] );
+    });
 
-    # Add 'verify_magicenvelope' helper
-    $mojo->helper(
-	'verify_magicenvelope' => sub {
-	    return $plugin->verify_magicenvelope( @_ );
-	});
+  # Add 'verify_magicenvelope' helper
+  $mojo->helper(
+    'verify_magicenvelope' => sub {
+      return $plugin->verify_magicenvelope( @_ );
+    });
 
-    # Add 'get_magickeys' helper
-    $mojo->helper(
-	'get_magickeys' => sub {
-	    return $plugin->get_magickeys( @_ );
-	});
+  # Add 'get_magickeys' helper
+  $mojo->helper(
+    'get_magickeys' => sub {
+      return $plugin->get_magickeys( @_ );
+    });
 
-    # Add magickey to webfinger document
-    $mojo->hook(
-	'before_serving_webfinger' => sub {
-	    my ($c, $acct, $xrd) = @_;
+  # Add magickey to webfinger document
+  $mojo->hook(
+    'before_serving_webfinger' => sub {
+      my ($c, $acct, $xrd) = @_;
 
-	    # Get keys
-	    my $mkeys = $c->get_magickeys('acct'      => $acct,
-					  'discovery' => 0);
+      # Get keys
+      my $mkeys = $c->get_magickeys('acct'      => $acct,
+				    'discovery' => 0);
 
-	    return unless defined $mkeys->[0];
+      return unless defined $mkeys->[0];
 
-	    # Structure is = [[mkey,id?]+]
+      # Structure is = [[mkey,id?]+]
 
-	    # Based on spec-00
-	    # Only allowed for one single key (for the moment)
-	    unless (defined $mkeys->[1]) {
-		my $mkey = $mkeys->[0]->[0];
-		$xrd->add_link('magic-public-key',
-			       { href =>
-				     'data:' .
-				     'application/magic-public-key,' .
-				     $mkey->to_string
-			       })->comment('MagicKey based on MagicSignatures-00');
-	    };
+      # Based on spec-00
+      # Only allowed for one single key (for the moment)
+      unless (defined $mkeys->[1]) {
+	my $mkey = $mkeys->[0]->[0];
+	$xrd->add_link('magic-public-key',
+		       { href =>
+			   'data:' .
+			     'application/magic-public-key,' .
+			       $mkey->to_string
+			     })->comment('MagicKey based on MagicSignatures-00');
+      };
 
-	    # Based on spec-01
-	    my $first = 0;
-	    foreach my $mkey (@$mkeys) {
-		my %att_hash = ('-type' => 'base64');
+      # Based on spec-01
+      my $first = 0;
+      foreach my $mkey (@$mkeys) {
+	my %att_hash = ('-type' => 'base64');
 
-		if ($mkey->[1]) {
-		    $xrd->add_ns('mk' => ME_NS) unless $first++;
-		    $att_hash{'mk:key_id'} = $mkey->[1] ;
-		};
+	if ($mkey->[1]) {
+	  $xrd->add_ns('mk' => ME_NS) unless $first++;
+	  $att_hash{'mk:key_id'} = $mkey->[1] ;
+	};
 
-		$xrd->add_property(ME_NS,
-				   \%att_hash,
-				   $mkey->[0]->to_string
-		    )->comment('MagicKey based on MagicSignatures-01');
-	    };
-	    return;
-	});
+	$xrd->add_property(ME_NS,
+			   \%att_hash,
+			   $mkey->[0]->to_string
+			 )->comment('MagicKey based on MagicSignatures-01');
+      };
+      return;
+    });
 };
 
 # Get MagicKeys
 sub get_magickeys {
-    my $plugin = shift;
-    my $c      = shift;
-    my %param  = @_;
+  my $plugin = shift;
+  my $c      = shift;
+  my %param  = @_;
 
-    # Enable discovery if not explicitely forbidden
-    $param{discovery} = 1 unless exists $param{discovery};
+  # Enable discovery if not explicitely forbidden
+  $param{discovery} = 1 unless exists $param{discovery};
 
-    my @magickeys;
+  my @magickeys;
 
-    # Run hook for caching or database retrieval
-    $c->app->plugins->run_hook(
-	'before_fetching_magickeys' => (
-	    $plugin, $c, \%param, \@magickeys
-	));
+  # Run hook for caching or database retrieval
+  $c->app->plugins->run_hook(
+    'before_fetching_magickeys' => (
+      $plugin, $c, \%param, \@magickeys
+    ));
 
-    # Discover public key
-    if (!$magickeys[0] && $param{discovery}) {
-	my $acct;
+  # Discover public key
+  if (!$magickeys[0] && $param{discovery}) {
+    my $acct;
 
-	# Use direct key access
-	if (exists $param{key_url}) {
-	    # todo
-	    # application/metadata+json. If so, look for the "magic_public_keys
-	}
+    # Use direct key access
+    if (exists $param{key_url}) {
+      # todo
+      # application/metadata+json. If so, look for the "magic_public_keys
+    }
 
-	# Use webfinger information
-	elsif (exists $param{acct}) {
-	    $acct = $param{acct};
-	};
-
-	# Discover based on Webfinger acct
-	if (!$magickeys[0] && $acct) {
-	    my $wf_xrd = $c->webfinger($acct);
-
-	    # Unable to find public MagicKey
-	    return 0 unless $wf_xrd;
-
-	    # Discovery based on spec-01
-	    # Key id is not specified
-	    unless (exists $param{key_id}) {
-		foreach (@{ $wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
-
-		    # Create key from property
-		    my @key = ($plugin->magickey($c, $_->text(0)));
-		    next unless $key[0];
-
-		    # Get key_id from property
-		    my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
-		    push(@key, $_->attrs($key_id_key)) if $key_id_key;
-
-		    # Add key to array
-		    push(@magickeys, \@key)
-		};
-	    }
-
-	    # Key id is specified, maybe undef
-	    else {
-		my $key_id = $param{key_id};
-		foreach (@{$wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
-
-		    # Get key_ids from property
-		    my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
-
-		    # Return public mkey if key_id is correct
-		    if (
-			(!defined $key_id && !$key_id_key) ||
-			($key_id eq $_->attrs($key_id_key))
-			) {
-
-			# Create key from property
-			my @key = ($plugin->magickey($c, $_->text(0)));
-			next unless $key[0];
-
-			# Use key_id
-			push(@key, $key_id) if defined $key_id;
-
-			# Add key to array
-			push(@magickeys, \@key);
-		    };
-		};
-	    };
-
-	    # Discovery based on spec-00
-	    unless ($magickeys[0]) {
-
-		# Currently no array og magic keys is supported
-
-		my $mkey_link = $wf_xrd->get_link('magic-public-key');
-
-		if ( $mkey_link ) {
-		    my $key = $mkey_link->attrs('href');
-		    $key =~ s/^data:application\/magic-public-key,\s*//;
-
-		    my $mkey = $c->magickey($key);
-
-		    return unless $mkey;
-
-		    push(@magickeys,[$mkey]);
-		};
-	    };
-	};
-	
-	# Run hook for caching
-	$c->app->plugins->run_hook(
-	    'after_fetching_magickeys',
-	    $plugin,
-	    $c,
-	    \%param,
-	    \@magickeys
-	    );
+    # Use webfinger information
+    elsif (exists $param{acct}) {
+      $acct = $param{acct};
     };
 
-    return \@magickeys;
+    # Discover based on Webfinger acct
+    if (!$magickeys[0] && $acct) {
+      my $wf_xrd = $c->webfinger($acct);
+
+      # Unable to find public MagicKey
+      return 0 unless $wf_xrd;
+
+      # Discovery based on spec-01
+      # Key id is not specified
+      unless (exists $param{key_id}) {
+	foreach (@{ $wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
+
+	  # Create key from property
+	  my @key = ($plugin->magickey($c, $_->text(0)));
+	  next unless $key[0];
+
+	  # Get key_id from property
+	  my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
+	  push(@key, $_->attrs($key_id_key)) if $key_id_key;
+
+	  # Add key to array
+	  push(@magickeys, \@key)
+	};
+      }
+
+      # Key id is specified, maybe undef
+      else {
+	my $key_id = $param{key_id};
+	foreach (@{$wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
+
+	  # Get key_ids from property
+	  my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
+
+	  # Return public mkey if key_id is correct
+	  if (
+	    (!defined $key_id && !$key_id_key) ||
+	      ($key_id eq $_->attrs($key_id_key))
+	    ) {
+
+	    # Create key from property
+	    my @key = ($plugin->magickey($c, $_->text(0)));
+	    next unless $key[0];
+
+	    # Use key_id
+	    push(@key, $key_id) if defined $key_id;
+
+	    # Add key to array
+	    push(@magickeys, \@key);
+	  };
+	};
+      };
+
+      # Discovery based on spec-00
+      unless ($magickeys[0]) {
+
+	# Currently no array og magic keys is supported
+
+	my $mkey_link = $wf_xrd->get_link('magic-public-key');
+
+	if ( $mkey_link ) {
+	  my $key = $mkey_link->attrs('href');
+	  $key =~ s/^data:application\/magic-public-key,\s*//;
+
+	  my $mkey = $c->magickey($key);
+
+	  return unless $mkey;
+
+	  push(@magickeys,[$mkey]);
+	};
+      };
+    };
+
+    # Run hook for caching
+    $c->app->plugins->run_hook(
+      'after_fetching_magickeys',
+      $plugin,
+      $c,
+      \%param,
+      \@magickeys
+    );
+  };
+
+  return \@magickeys;
 };
 
 
 # Verify MagicEnvelope
 sub verify_magicenvelope {
-    my $plugin = shift;
-    my $c      = shift;
-    my $me     = shift;
-    my %param  = %{ shift(@_) };
+  my $plugin = shift;
+  my $c      = shift;
+  my $me     = shift;
+  my %param  = %{ shift(@_) };
 
-    my $mkey = $param{'key'} || undef;
+  my $mkey = $param{'key'} || undef;
 
-    # If key_id does not exist, set to undef (default key)
-    $param{key_id} = undef unless exists $param{key_id};
+  # If key_id does not exist, set to undef (default key)
+  $param{key_id} = undef unless exists $param{key_id};
 
-    # Start key discovery
-    unless ($mkey) {
-	my $mkeys = $plugin->get_magickeys($c, %param);
-	$mkey = shift(@$mkeys);
-    };
+  # Start key discovery
+  unless ($mkey) {
+    my $mkeys = $plugin->get_magickeys($c, %param);
+    $mkey = shift(@$mkeys);
+  };
 
-    # Unable to find public MagicKey
-    return 0 unless $mkey;
-	
-    # Create MagicKey from whatever representation is given
-    $mkey = $c->magickey($mkey);
-    
-    # Get signature to verify
-    my $signature = $param{sig} || undef;
-    $signature = $me->sign($param{key_id} || undef) unless $signature;
+  # Unable to find public MagicKey
+  return 0 unless $mkey;
 
-    # No signature can be found for verification
-    return 0 unless $signature;
+  # Create MagicKey from whatever representation is given
+  $mkey = $c->magickey($mkey);
 
-    # Return verification value
-    return $mkey->verify($me->data, $signature);
+  # Get signature to verify
+  my $signature = $param{sig} || undef;
+  $signature = $me->sign($param{key_id} || undef) unless $signature;
+
+  # No signature can be found for verification
+  return 0 unless $signature;
+
+  # Return verification value
+  return $mkey->verify($me->data, $signature);
 };
 
 1;

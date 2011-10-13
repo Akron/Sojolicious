@@ -10,7 +10,6 @@ use constant {
                'standalone="yes"?>'
 };
 
-
 # Construct new serial object
 sub new {
   my $class = shift;
@@ -105,6 +104,15 @@ sub add {
   return $element;
 };
 
+
+# todo:
+# sub try_further {
+# };
+#
+# usage:
+# sub get_author {
+#   return $autor or $self->try_further;
+# };
 
 # Append a new child node to the XML Node
 sub _add_clean {

@@ -5,7 +5,8 @@ use warnings;
 $|++;
 use lib '../lib';
 
-use Test::More tests => 12;
+use Test::More tests => 33
+;
 
 # "Can't we have one meeting that doesn't end with digging up a corpse?"
 use_ok 'Mojolicious::Plugin::Date::RFC3339';
@@ -38,3 +39,53 @@ is $date->to_string, '1993-01-01T22:50:00Z', 'right date';
 $date = Mojolicious::Plugin::Date::RFC3339->new;
 ok $date->parse('1900-01-01T00:00:00Z'), 'right format';
 is $date->epoch, undef, 'no epoch value';
+
+# Granularity 4
+$date = Mojolicious::Plugin::Date::RFC3339->new;
+ok $date->parse('1993'), 'right format';
+is $date->to_string, 1993, 'correct date value';
+is $date->granularity, 4, 'correct granularity';
+
+# Granularity 3
+ok $date->parse('1993-11'), 'right format';
+is $date->to_string, '1993-11', 'correct date value';
+is $date->granularity, 3, 'correct granularity';
+
+# Granularity 2
+ok $date->parse('1993-11-3'), 'right format';
+is $date->to_string, '1993-11-03', 'correct date value';
+is $date->granularity, 2, 'correct granularity';
+
+# Granularity 1
+ok $date->parse('1993-11-3t19:20z'), 'right format';
+is $date->to_string, '1993-11-03T19:20Z', 'correct date value';
+is $date->granularity, 1, 'correct granularity';
+
+# Underspecified
+ok $date->parse('1993-11-3'), 'right format';
+is $date->to_string(4), '1993', 'correct date value';
+is $date->to_string(3), '1993-11', 'correct date value';
+is $date->to_string(2), '1993-11-03', 'correct date value';
+is $date->to_string(1), '1993-11-03T00:00Z', 'correct date value';
+is $date->to_string(0), '1993-11-03T00:00:00Z', 'correct date value';
+
+# Heavily underspecified
+ok $date->parse('2002'), 'right format';
+is $date->to_string, '2002', 'correct date value';
+is $date->to_string(0), '2002-01-01T00:00:00Z', 'correct date value';
+
+
+__END__
+   Year:
+      YYYY (eg 1997)
+   Year and month:
+      YYYY-MM (eg 1997-07)
+   Complete date:
+      YYYY-MM-DD (eg 1997-07-16)
+   Complete date plus hours and minutes:
+      YYYY-MM-DDThh:mmTZD (eg 1997-07-16T19:20+01:00)
+   Complete date plus hours, minutes and seconds:
+      YYYY-MM-DDThh:mm:ssTZD (eg 1997-07-16T19:20:30+01:00)
+   Complete date plus hours, minutes, seconds and a decimal fraction of a
+second
+      YYYY-MM-DDThh:mm:ss.sTZD (eg 1997-07-16T19:20:30.45+01:00)

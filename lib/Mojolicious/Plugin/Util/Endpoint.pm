@@ -29,18 +29,15 @@ sub register {
       my $r = $route;
       $r->pattern->match('/');
       while ($r) {
-	foreach (@{$r->pattern->symbols}) {
-	  $placeholders{$_} = '{' . $_ . '}';
-	};
+	$placeholders{$_} = '{' . $_ . '}' foreach @{$r->pattern->symbols};
 	$r = $r->parent;
       };
 
       # Set Endpoint url
-      my $endpoint_url = $mojo->url_for($name => 
-					  %placeholders)->to_abs->clone;
+      my $endpoint_url = $mojo->url_for($name => %placeholders)
+	                      ->to_abs->clone;
 
       for ($endpoint_url) {
-
 	# Host
 	$_->host($param->{host}) if exists $param->{host};
 
@@ -270,7 +267,7 @@ all undefined optional template parameters.
     print $key, ' => ', $value, "\n";
   };
 
-Returns a hash of all endpoints, intterpolated with the current
+Returns a hash of all endpoints, interpolated with the current
 controller stash.
 
 =head1 DEPENDENCIES

@@ -5,7 +5,7 @@ use warnings;
 $|++;
 use lib '../lib';
 
-use Test::More tests => 7;
+use Test::More tests => 9;
 
 # "Can't we have one meeting that doesn't end with digging up a corpse?"
 use_ok 'Mojolicious::Plugin::Date::RFC822';
@@ -30,3 +30,8 @@ is $date->new('Sun, 06 Nov 1994 08:49:37 MDT')->epoch,
 is $date->new('Sun, 06 Nov 1994 08:49:37 PDT')->epoch,
   784111777 + (7 * 60 * 60), 'right epoch value';
 
+is $date->new('Wed, 05 Oct 2011 09:28:33 PDT')->to_string,
+  'Wed, 05 Oct 2011 16:28:33 GMT', 'right date value';
+
+is $date->new('Sun, 06 Nov 1994 08:49:37 UT')->to_string,
+  'Sun, 06 Nov 1994 08:49:37 GMT', 'right date value';

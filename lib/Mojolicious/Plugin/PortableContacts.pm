@@ -178,7 +178,7 @@ sub _single {
 
   if ($id) {
 
-    # Clone parameters with values 
+    # Clone parameters with values
     my %param;
     foreach ($c->param) {
       $param{$_} = $c->param($_) if $c->param($_);
@@ -186,8 +186,10 @@ sub _single {
 
     # Get results
     $response = $plugin->read( $c =>
-				 $plugin->_get_param(\%param),
-			       id => $id
+				 (
+				   $plugin->_get_param(\%param),
+				   id => $id
+				 )
 			     );
     $status = 200 if $response->totalResults;
   };

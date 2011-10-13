@@ -35,11 +35,11 @@ is($entry->at('entry id')->text, 'http://sojolicio.us/blog/2', 'id');
 
 $entry->add_replies_link( 'http://sojolicio.us/entry/1/replies',
 			 { count => 5,
-			   updated => $entry->new_date(5000) });
+			   updated => $entry->new_date(500000) });
 
 my $link = $entry->at('link[rel="replies"]');
 is($link->attrs('thr:count'), 5, 'Thread Count');
-is($link->attrs('thr:updated'), '1970-01-01T01:23:20Z', 'Thread update');
+is($link->attrs('thr:updated'), '1970-01-06T18:53:20Z', 'Thread update');
 is($link->attrs('href'), 'http://sojolicio.us/entry/1/replies', 'Thread href');
 is($link->attrs('type'), 'application/atom+xml', 'Thread type');
 is($link->namespace, 'http://www.w3.org/2005/Atom', 'Thread namespace');

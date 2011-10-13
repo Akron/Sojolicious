@@ -5,17 +5,30 @@ use overload '""' => sub { shift->to_string }, fallback => 1;
 require Time::Local;
 
 has 'epoch';
+has 'granularity' => 0;
 
 # Based on Mojo::Date
 
 # rfc3339 timestamp
-my $RFC3339_RE = qr/^(\d{4})-(\d?\d)-(\d?\d)[Tt]
-                     (\d?\d):(\d?\d):(\d?\d)(?:\.\d*)?
-                     ([zZ]|[\-\+]?\d?\d(?::\d?\d)?)$/x;
+my $RFC3339_RE = qr/^(\d{4})          # year
+                     (?:-(\d?\d)      # year and month
+                      (?:-(\d?\d)     # complete date
+                       (?:[Tt](\d?\d) # + hour and minutes
+                         :(\d?\d)
+                        (?::(\d?\d)   # + hour, minutes and seconds
+                         (?:\.\d*)?   # + hour, minutes, seconds and a
+                        )?            #   decimal fraction of a second
+                        ([zZ]|[\-\+]\d?\d(?::\d?\d)?) # Offset
+                       )?
+                      )?
+                     )?$/x;
+
+# Timestamp offset
+my $OFFSET_RE = qr/^([-\+])(\d?\d)(?::(\d?\d))?$/;
 
 # Constructor
 sub new {
-  my $self = shift->SUPER::new();
+  my $self = shift->SUPER::new;
   $self->parse(@_);
   return $self;
 };
@@ -24,17 +37,41 @@ sub new {
 sub parse {
   my ($self, $date) = @_;
 
+  # No date defined
   return $self unless defined $date;
 
-  if ($date =~ /^\d+$/) {
+  # Epoch date
+  if ($date =~ /^\d+$/ && $date > 5000) {
     $self->epoch($date);
+    $self->granularity(0);
   }
 
+  # String date
   elsif (my ($year, $month, $mday,
 	     $hour, $min, $sec,
 	     $offset) = ($date =~ $RFC3339_RE)) {
     my $epoch;
+
+    # Check for granularity
+    my $gran = 0;
+    if (!defined $sec) {
+      $gran = 1, $sec = 0;
+      if (!defined $hour) {
+	$gran++, $hour = $min = 0;
+	if (!defined $mday) {
+	  $gran++, $mday = 1;
+	  if (!defined $month) {
+	    $gran++, $month = 1;
+	  };
+	};
+      };
+      $offset ||= 'Z';
+    };
+
     $month--;
+
+    # Set granularity
+    $self->granularity($gran);
 
     eval {
       $epoch = Time::Local::timegm($sec, $min, $hour,
@@ -42,29 +79,32 @@ sub parse {
     };
 
     # Calculate offsets
-    if (uc($offset) ne 'Z' &&
-	  (
-	    my ($os_dir,
-		$os_hour,
-		$os_min) = ($offset =~ /^([-\+])(\d?\d)(?::(\d?\d))?$/))) {
+    if (uc($offset) ne 'Z' && (
+      my ($os_dir, $os_hour, $os_min)
+	= ($offset =~ $OFFSET_RE))) {
 
       # Negative offset
       if ($os_dir eq '-') {
 	$epoch += ($os_hour * 60 * 60) if $os_hour;
-	$epoch += ($os_min * 60) if $os_min;
+	$epoch += ($os_min * 60)       if $os_min;
       }
 
       # Positive offset
       else {
 	$epoch -= ($os_hour * 60 * 60) if $os_hour;
-	$epoch -= ($os_min * 60) if $os_min;
+	$epoch -= ($os_min * 60)       if $os_min;
       };
     };
 
     if (!$@ && $epoch > 0) {
       $self->epoch($epoch);
-      return $self
+      return $epoch
     };
+  }
+
+  # No valid datetime
+  else {
+    return;
   };
 
   return $self;
@@ -72,18 +112,24 @@ sub parse {
 
 # return string
 sub to_string {
-  my $self = shift;
+  my $self  = shift;
+  my $level = $_[0] // $self->granularity;
 
-  my $epoch = $self->epoch;
-  $epoch = time unless defined $epoch;
+  my $epoch = $self->epoch // time;
+
   my ($sec, $min, $hour,
       $mday, $month, $year) = gmtime $epoch;
 
   # Format
-  return sprintf(
-    "%04d-%02d-%02dT%02d:%02d:%02dZ",
-    ($year + 1900), ($month + 1), $mday,
-    $hour, $min, $sec);
+  my $s = '%04d';
+  my @a = ($year + 1900);
+  $s .= '-%02d'      and push(@a, $month + 1)  if $level < 4;
+  $s .= '-%02d'      and push(@a, $mday)       if $level < 3;
+  $s .= 'T%02d:%02d' and push(@a, $hour, $min) if $level < 2;
+  $s .= ':%02d'      and push(@a, $sec)        if $level < 1;
+  $s .= 'Z' if $level < 2;
+
+  return sprintf($s, @a);
 };
 
 1;
@@ -109,6 +155,10 @@ Mojolicious::Plugin::Date::RFC3339 - Support for RFC3339 dates
 
 L<Mojolicious::Plugin::Date::RFC3339> implements date and time functions
 according to L<RFC3339|http://tools.ietf.org/html/rfc3339>.
+In addition it supports granularity as described in
+L<W3C date and time formats|http://www.w3.org/TR/NOTE-datetime>.
+
+decimal fraction of a second
 
 =head1 ATTRIBUTES
 
@@ -120,6 +170,21 @@ L<Mojolicious::Plugin::Date::RFC3339> implements the following attributes.
   $date     = $date->epoch(784111777);
 
 Epoch seconds.
+
+=head2 C<granularity>
+
+  my $granularity = $date->granularity;
+  $date->granulariy;
+
+Level of granularity.
+
+=over 2
+  item 0: Complete date plus hours, minutes and seconds
+  item 1: Complete date plus hours and minutes
+  item 2: Complete date
+  item 3: Year and month
+  item 4: Year
+=back
 
 =head1 METHODS
 
@@ -136,13 +201,18 @@ Construct a new L<Mojolicious::Plugin::Date::RFC3339> object.
 =head2 C<parse>
 
   $date = $date->parse('1993-01-01t18:50:00-04:00');
+  $date = $date->parse('1993-01-01');
   $date = $date->parse(1312043400);
+
+Parse RFC3339 and granularity compliant date strings.
 
 =head2 C<to_string>
 
   my $string = $date->to_string;
+  my $string = $date->to_string(3);
 
 Render date suitable to RFC3339 without offset information.
+Takes an optional parameter for granularity.
 
 =head1 DEPENDENCIES
 
