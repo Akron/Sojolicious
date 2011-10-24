@@ -6,8 +6,8 @@ use Mojolicious::Plugin::PortableContacts::Entry;
 has 'host';
 has 'secure' => 0;
 
-# Default count parameter.
-has 'count'  => 0; # unlimited
+# Default count parameter
+has 'count' => 0; # unlimited
 
 # Set condition regex
 our (%CONDITIONS_RE, $poco_ns);
@@ -98,7 +98,7 @@ sub register {
     });
 
   # Add 'poco' helper
-  $mojo->helper('poco'        => sub { $plugin->read( @_ ); } );
+  $mojo->helper('poco'        => sub { $plugin->read( @_ );   } );
   $mojo->helper('create_poco' => sub { $plugin->create( @_ ); } );
   $mojo->helper('update_poco' => sub { $plugin->update( @_ ); } );
   $mojo->helper('delete_poco' => sub { $plugin->delete( @_ ); } );
@@ -129,7 +129,7 @@ sub read {
 };
 
 # Add PortableContacts Entry
-sub create { return shift->_set('create'    => @_) };
+sub create { return shift->_set('create' => @_) };
 
 # Update PortableContacts Entry
 sub update { return shift->_set('update' => @_) };
@@ -366,9 +366,8 @@ The helper C<poco> returns the result set of a PortableContacts
 Query as a L<Mojolicious::Plugin::PortableContacts::Response> object.
 The minimal set of possible parameters are described
 L<http://portablecontacts.net/draft-spec.html>.
-In addition to that, user ids (as in /@me/@all/{id}) should be 
+In addition to that, user ids (as in /@me/@all/{id}) should be
 provided as C<me_id => {id}> and C<id => {id}>.
-
 
 =head2 C<create_poco>
 
@@ -377,8 +376,7 @@ provided as C<me_id => {id}> and C<id => {id}>.
                                  givenName => 'Homer',
                                  familyName => 'Simpson'
                                });
-  print $entry->{id};
-  # 15
+  print $entry->{id}; # 15
 
 The helper C<create_poco> saves a new PortableContacts entry.
 Returns the new PortableContacts entry.
@@ -412,8 +410,8 @@ Returns an empty PortableContacts entry.
   # PoCo Endpoint
   # Establishes the routes for
   #  /contacts/
-  #  /contacts/@me/@all
   #  /contacts/@me/@self
+  #  /contacts/@me/@all
   #  /contacts/@me/@all/{id}
 
 L<Mojolicious::Plugin::PortableContacts> provides a route shortcut
@@ -430,7 +428,7 @@ from a data store.
 The hook passes the current plugin object, the current Controller object,
 the query parameters as a hash reference and an empty
 L<Mojolicious::Plugin::PortableContacts::Response> object, expected to
-be filled with the requested resultset.
+be filled with the requested result set.
 
 =back
 

@@ -158,8 +158,6 @@ according to L<RFC3339|http://tools.ietf.org/html/rfc3339>.
 In addition it supports granularity as described in
 L<W3C date and time formats|http://www.w3.org/TR/NOTE-datetime>.
 
-decimal fraction of a second
-
 =head1 ATTRIBUTES
 
 L<Mojolicious::Plugin::Date::RFC3339> implements the following attributes.
@@ -174,7 +172,7 @@ Epoch seconds.
 =head2 C<granularity>
 
   my $granularity = $date->granularity;
-  $date->granulariy;
+  $date->granulariy(1);
 
 Level of granularity.
 
@@ -213,6 +211,7 @@ Parse RFC3339 and granularity compliant date strings.
 
 Render date suitable to RFC3339 without offset information.
 Takes an optional parameter for granularity.
+Uses the objects granularity level by default.
 
 =head1 DEPENDENCIES
 

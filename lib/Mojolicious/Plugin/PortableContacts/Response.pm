@@ -164,8 +164,8 @@ Absolute start index of the query result entries.
 
 =head2 C<totalResults>
 
-  my $si = $response->startIndex;
-  $response->startIndex(20);
+  my $total = $response->totalResults;
+  $response->totalResults(5);
 
 Number of query results in total.
 
