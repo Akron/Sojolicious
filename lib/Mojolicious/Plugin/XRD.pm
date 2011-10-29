@@ -14,6 +14,9 @@ sub register {
 
       $c->stash('format' => $c->param('format')) unless $c->stash('format');
 
+      # Add CORS header
+      $c->res->headers->header('Access-Control-Allow-Origin' => '*');
+
       # content negotiation
       $c->respond_to(
 	json => sub { $c->render(
