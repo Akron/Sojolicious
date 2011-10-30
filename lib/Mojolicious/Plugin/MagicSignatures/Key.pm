@@ -202,6 +202,10 @@ sub _verify_emsa_pkcs1_v1_5 {
 
   # Compare codes with success
   return 1 if _b64url_to_hex($EM_1) eq _b64url_to_hex($EM_2);
+  #  return 1 if b64url_encode($EM_1) eq b64url_encode($EM_2);
+  #  return 1 if _b64url_to_hex(b64url_encode($EM_1)) eq _b64url_to_hex(b64url_encode($EM_2));
+
+
 
   # No success
   return;

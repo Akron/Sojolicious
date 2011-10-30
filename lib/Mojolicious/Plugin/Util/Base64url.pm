@@ -1,6 +1,5 @@
 package Mojolicious::Plugin::Util::Base64url;
 use Mojo::Base -strict;
-
 use MIME::Base64;
 
 use Exporter 'import';

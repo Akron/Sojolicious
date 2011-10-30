@@ -1,15 +1,15 @@
-use 5.008002;
+#!/usr/bin/env perl
+use 5.010001;
+use strict;
+use warnings;
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
     VERSION_FROM => "Readme.pod",
     NAME         => "Sojolicious",
-    ($] >= 5.005 ?
-      (
-       AUTHOR         => 'Nils Diewald') : ()
-    ),
+    AUTHOR         => 'Nils Diewald',
     PREREQ_PM => {
-        'Mojolicious'     => 1.40
+        'Mojolicious'     => 2.12
     }
 );
 

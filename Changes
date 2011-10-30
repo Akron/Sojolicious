@@ -1,5 +1,8 @@
-0.10 2011-10-02
+0.11 2011-10-30
         - Added GeoRSS (Simple) support.
+        - Added CORS support.
+        - Fixed lots of bugs in PubSubHubbub.
+        - Added PubSubHubbub test suite.
 
 0.10 2011-10-01
         - Refurbished SerialXML and renamed to XML.

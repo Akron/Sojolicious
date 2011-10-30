@@ -29,15 +29,18 @@ sub register {
       my $r = $route;
       $r->pattern->match('/');
       while ($r) {
-	$placeholders{$_} = '{' . $_ . '}' foreach @{$r->pattern->symbols};
+	foreach (@{$r->pattern->symbols}) {
+	  $placeholders{$_} = '{' . $_ . '}';
+	};
 	$r = $r->parent;
       };
 
       # Set Endpoint url
-      my $endpoint_url = $mojo->url_for($name => %placeholders)
-	                      ->to_abs->clone;
+      my $endpoint_url = $mojo->url_for($name => 
+					  %placeholders)->to_abs->clone;
 
       for ($endpoint_url) {
+
 	# Host
 	$_->host($param->{host}) if exists $param->{host};
 
@@ -88,8 +91,7 @@ sub register {
 
       # Endpoint undefined
       unless (defined $endpoints{$name}) {
-	$c->app->log->debug(qq{Endpoint "$name" not defined.});
-	return '';
+	return $c->url_for($name)->to_abs->to_string;
       };
 
       # Get url for route
@@ -255,8 +257,11 @@ the controller and fill the template variables.
                          });
   # https://sojolicio.us/suggest?q=simpson
 
-The special parameter C<?> can be set C<undef> to ignore
+The special parameter C<?> can be set to C<undef> to ignore
 all undefined optional template parameters.
+
+If the defined endpoint can't be found, the value for C<url_for>
+is returned.
 
 =head2 C<get_endpoints>
 
@@ -267,7 +272,7 @@ all undefined optional template parameters.
     print $key, ' => ', $value, "\n";
   };
 
-Returns a hash of all endpoints, interpolated with the current
+Returns a hash of all endpoints, intterpolated with the current
 controller stash.
 
 =head1 DEPENDENCIES

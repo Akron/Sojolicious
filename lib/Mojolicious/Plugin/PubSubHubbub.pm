@@ -12,14 +12,9 @@ has 'secure' => 0;
 has 'lease_seconds' => (30 * 24 * 60 * 60);
 has 'hub';
 
-our ($global_param,
-     @challenge_chars);
+our @challenge_chars;
 
 BEGIN {
-  $global_param = {
-    'Content-Type' =>
-      'application/x-www-form-urlencoded'
-    };
   @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9);
 };
 
@@ -29,6 +24,7 @@ sub register {
   my ($plugin, $mojo, $param) = @_;
 
   # Get host parameter
+  # Todo: kill all host informtion in all plugins
   if (exists $param->{host}) {
     $plugin->host( $param->{host} );
   } else {
@@ -40,7 +36,12 @@ sub register {
   };
 
   # Set secure
+  # Todo: Kill all secure information in all plugins
   $plugin->secure( $param->{secure} );
+
+  if ($param->{hub}) {
+    $plugin->hub($param->{hub});
+  };
 
   # Add 'pubsub' shortcut
   $mojo->routes->add_shortcut(
@@ -67,20 +68,19 @@ sub register {
 	    my $c = shift;
 
 	    # Hook on verification
-	    if ($c->param('hub.mode')) {
-	      $plugin->verify( $c );
-	    }
+	    return $plugin->verify($c) if $c->param('hub.mode');
 
 	    # Hook on callback
-	    else {
-	      $plugin->callback($c);
-	    };
+	    return $plugin->callback($c);
 	  });
       };
     });
 
   # Add 'publish' helper
-  $mojo->helper( 'pubsub_publish' => \&publish );
+  $mojo->helper(
+    'pubsub_publish' => sub {
+      $plugin->publish( @_ );
+    });
 
   # Add 'subscribe' helper
   $mojo->helper(
@@ -99,63 +99,52 @@ sub register {
     });
 };
 
+
 # Ping a hub for topics
 sub publish {
   my $plugin = shift;
   my $c      = shift;
 
-  return unless @_;
+  # Nothing to publish or no hub defined
+  return unless @_ || !$plugin->hub;
+
+  # Set all urls
+  my @urls = map($c->endpoint($_), @_);
 
   # Create post message
-  my $post = 'hub.mode=publish';
-  foreach ( @_ ) {
-    $post .= '&hub.url='.b($c->url_for($_)
-			     ->to_abs
-			     ->to_string)->url_escape;
-  };
+  my %post = ( 'hub.mode' => 'publish',
+	       'hub.url' => \@urls);
 
   # Post to hub
-  # Todo: Maybe better post_form
   my $res = $c->ua
     ->max_redirects(3)
-      ->post( $plugin->hub,
-	      $global_param,
-	      $post);
-
+      ->post_form( $plugin->hub, \%post )->res;
 
   # No response
   unless ($res) {
     $c->app->log->debug('Cannot ping hub - maybe no SSL support')
       if index($plugin->hub, 'https') == 0;
-    return 0;
+    return;
   };
 
   # is 2xx, incl. 204 aka successful
   return 1 if $res->is_status_class(200);
 
   # Not successful
-  return 0;
+  return;
 };
+
 
 # Verify a changed subscription or automatically refresh
 sub verify {
   my $plugin = shift;
   my $c = shift;
 
-  # Not correct
-  unless ($c->param('hub.mode') ||
-	  $c->param('hub.topic') ||
-	  $c->param('hub.challenge')) {
+  # Good request
+  if ($c->param('hub.topic') &&
+      $c->param('hub.challenge') &&
+      $c->param('hub.mode') =~ /^(?:un)?subscribe$/) {
 
-    return $c->render(
-      'template'       => 'pubsub-endpoint',
-      'template_class' => __PACKAGE__,
-      'status'         => 400  # bad request
-    );
-  }
-
-  # Correct
-  else {
     my $challenge = $c->param('hub.challenge');
 
     # Not verified
@@ -190,21 +179,22 @@ sub verify {
   return $c->render_not_found;
 };
 
+
 # subscribe or unsubscribe from a topic
 sub _change_subscription {
   my $plugin = shift;
   my $c      = shift;
   my %param  = @_;
 
-  # No topic url given
+  # No topic or hub url given
   if (!exists $param{topic} || $param{topic} !~ m{^https?://}i ||
-      !exists $param{hub}   || $param{hub}   !~ m{^https?://}i ) {
+      !exists $param{hub}) {
     return;
   };
 
   # delete lease seconds if no integer
   if ( exists $param{lease_seconds} &&
-       $param{lease_seconds} !~ /^\d+$/) {
+	 $param{lease_seconds} !~ /^\d+$/) {
     delete $param{lease_seconds};
   };
 
@@ -219,25 +209,18 @@ sub _change_subscription {
   $param{'callback'} = $c->endpoint('pubsub-cb');
 
   # Render post string
-  my $post = 'hub.callback='. b($param{'callback'})->url_escape;
-  foreach ( qw/mode
-	       topic
-	       verify
-	       lease_seconds
-	       secret/ ) {
-    if (exists $param{$_}) {
-      $post .= '&hub.' . $_ . '='. b($param{$_})->url_escape;
-    };
+  my %post = ( callback => $param{'callback'} );
+  foreach ( qw/mode topic verify
+	       lease_seconds secret/ ) {
+    $post{ $_ } = $param{ $_ } if exists $param{ $_ };
   };
 
-  $post .= '&hub.verify_token=';
-  if (exists $param{verify_token}) {
-    $post .= b($param{verify_token})->url_escape;
-  } else {
-    $post .= ($param{verify_token} = _challenge(12));
-  };
+  # Use verify token
+  $post{'verify_token'} = exists $param{verify_token} ?
+                          $param{verify_token} :
+			  ($param{verify_token} = _challenge(12));
 
-  $post .= '&hub.verify=' . $_ . 'sync' foreach ('a','');
+  $post{'verify'} = $_ . 'sync' foreach ('a','');
 
   my $mode = $param{mode};
 
@@ -247,26 +230,21 @@ sub _change_subscription {
     'before_pubsub_'.$mode => ( $plugin,
 				$c,
 				\%param,
-				\$post ));
+				\%post ));
 
-
-  # Todo: better post_form
+  # Prefix all parameters
+  %post = map {'hub.' . $_ => $post{$_} } keys %post;
 
   # Send subscription change to hub
   my $res = $c->ua
     ->max_redirects(3)
-    ->post($param{hub},
-	   $global_param,
-	   $post)->tx;
-
-  # is 2xx, incl. 204 aka successful
-  #         and 202 aka accepted
+    ->post_form($param{hub}, \%post)->res;
 
   # No response
   unless ($res) {
     $mojo->log->debug('Cannot ping hub - maybe no SSL support')
       if index($plugin->hub, 'https') == 0;
-    return 0;
+    return;
   };
 
   $mojo->plugins->run_hook(
@@ -276,6 +254,7 @@ sub _change_subscription {
 			       $res->code,
 			       $res->body ));
 
+  # is 2xx, incl. 204 aka successful and 202 aka accepted
   my $success = $res->is_status_class(200) ? 1 : 0;
 
   return ($success, $res->{body}) if wantarray;
@@ -288,26 +267,40 @@ sub callback {
   my $c      = shift;
   my $mojo   = $c->app;
 
+  my $ct = $c->req->headers->header('Content-Type') || 'unknown';
+  my $type;
+
+  # Is Atom
+  if ($ct eq 'application/atom+xml') {
+    $type = 'atom';
+  }
+
+  # Is RSS
+  elsif ($ct =~ m{^application/r(?:ss|df)\+xml$}) {
+    $type = 'rss';
+  }
+
+  # Unsupported content type
+  else {
+    $c->app->log->debug('Unsupported media type: '.$ct);
+    return _render_fail($c);
+  };
+
+  # Mojolicious::Plugin::XML::RSS/Atom?
+  my $dom = Mojo::DOM->new($c->req->body, xml => 1);
+
   # Find topics in Payload
-  my ($type,
-      $topics,
-      $dom,
-      $aggregated) = _find_topics($c);
+  my $topics = _find_topics($type, $dom);
 
-  # Payload had wrong content type
-  return $c->render(
-    'template'       => 'pubsub-endpoint',
-    'template_class' => __PACKAGE__,
-    'status'         => 400 # bad request
-  ) unless $type;
+  $c->app->log->debug('Check in ' . $type . ': '. join(';', @$topics));
 
-  # No topics to process
-  # Temporär
+  # No topics to process - but technically fine
   return _render_success($c) unless $topics->[0];
 
   my $secret;
   my $x_hub_on_behalf_of = 0;
 
+  # Save unfiltered topics for later comparison
   my @old_topics = @$topics;
 
   $c->app->log->debug('Send topics to hook: '.join('; ',@$topics));
@@ -321,179 +314,172 @@ sub callback {
 				\$secret,
 				\$x_hub_on_behalf_of ));
 
-#  # Render before processing
-#  _render_success( $c => $x_hub_on_behalf_of );
+  # Render before processing
+  _render_success( $c => $x_hub_on_behalf_of );
 
   # No topics to process
-  return _render_success( $c => $x_hub_on_behalf_of )
-    unless $topics->[0];
+  #return _render_success( $c => $x_hub_on_behalf_of )
+  #  unless $topics->[0];
 
-  $mojo->log->debug('Start parsing topics: '.join('; ',@$topics));
+  return unless $topics->[0];
 
-# todo: try on_finish
+  $c->on_finish(
+    sub {
+      $mojo->log->debug('Start parsing topics: '.join('; ',@$topics));
 
-  # Secret is needed
-  if ($secret) {
-    return unless _check_signature($c, $secret);
-  };
+      # Secret is needed
+      if ($secret) {
 
-  # Some topics are unwanted
-  if (@$topics != @old_topics) {
-    # filter dom based on topics
-    $dom = _filter_topics($dom, $type, $topics);
-  };
+	# Unable to verify secret
+	unless ( _check_signature( $c, $secret )) {
+	  $mojo->log->debug('Unable to verify secret for '.join('; ',@$topics));
+	  return; # _render_success( $c => $x_hub_on_behalf_of );
+	};
+      };
 
-  $mojo->log->debug('Now I\'ve got the dom! Run hook.');
+      # Some topics are unwanted
+      if (@$topics != @old_topics) {
 
-  $mojo->plugins->run_hook( 'on_pubsub_content' =>
-			      ( $plugin,
-				$c,
-				$type,
-				$dom ));
+	# filter dom based on topics
+	$topics = _filter_topics($dom, $topics);
+      };
 
-  return _render_success( $c => $x_hub_on_behalf_of );
+      $mojo->log->debug('Now I\'ve got the dom! Run hook.');
 
+      $mojo->plugins->run_hook( 'on_pubsub_content' =>
+				  ( $plugin,
+				    $c,
+				    $type,
+				    $dom ));
+    });
+
+    return; # _render_success( $c => $x_hub_on_behalf_of );
 };
+
 
 # Find topics of entries
 sub _find_topics {
-  my $c = shift;
+  my $type = shift;
+  my $dom  = shift;
 
-  # No secret
-  my ($dom,
-      @topics,
-      $type);
+  # Get all source links
+  my $links = $dom->find('source > link[rel="self"][href]');
 
-  my $aggregated = 0;
+  # Save href as topics
+  my @topics = @{ $links->map( sub { $_->attrs('href') } ) } if $links;
 
-  my $ct = $c->req->headers->header('Content-Type') || 'unknown';
+  # Find all entries, regardless if rss or atom
+  my $entries = $dom->find('item, feed > entry');
 
-  # Todo: add topic to every entry
+  # Not every entry has a source
+  if ($links->size != $entries->size) {
 
-  # Is RSS
-  if ($ct =~ m{^application/(?:rss|rdf)\+xml$}) {
-    $type = 'rss';
+    # One feed or entry
+    my $link = $dom->at('feed > link[rel="self"][href],'.
+			'channel > link[rel="self"][href]');
 
-    # Mojolicious::Plugin::XML::Atom?
-    $dom = Mojo::DOM->new($c->req->body, xml => 1);
+    my $self_href;
 
-    # From Atom namespace
-    my $link = $dom->at('channel > link[rel="self"]');
-    @topics = $link->attrs('href') if $link;
+    # Channel or feed link
+    if ($link) {
+      $self_href = $link->attrs('href');
+    }
 
-    unless (@topics) {
+    # Source of first item in RSS
+    elsif (!$self_href && $type eq 'rss') {
       # Possible
-      $link = $dom->at('channel > item > source');
-      @topics = $link->attrs('url') if $link;
+      $link = $dom->at('item > source');
+      $self_href = $link->attrs('url') if $link;
     };
 
-    $c->app->log->debug('Check in RSS: '.join(';',@topics));
-  }
+    # Add topic to all entries
+    _add_topics($type, $dom, $self_href) if $self_href;
 
-  # Is Atom
-  elsif ($ct eq 'application/atom+xml') {
-    $type = 'atom';
+    # Get all source links
+    $links = $dom->find('source > link[rel="self"][href]');
 
-    $dom = Mojo::DOM->new($c->req->body, xml => 1);
-
-    # Possibly aggregated feed
-    $aggregated = 1;
-
-    my $link = $dom->find('feed > entry > source > link[rel="self"]');
-    @topics = $link->map( sub { $_->attrs('href') } ) if $link;
-
-    # obviously not aggregated
-    if (!@topics) {
-
-      # One feed or entry
-      $link = $dom->at('link[rel="self"]');
-
-      @topics = $link->attrs('href') if $link;
-
-      # Not aggregated
-      $aggregated = 0;
-    }
-
-    # Make unique
-    elsif (@topics > 1) {
-
-      my %topics = map {$_ => 1 } @topics;
-      @topics = keys %topics;
-    }
-
-    # Not aggregated
-    else {
-      $aggregated = 0;
-    };
-
-  }
-
-  # Unsupported content type
-  else {
-    $c->app->log->debug('Unsupported media type: '.$ct);
-    return;
+    # Save href as topics
+    @topics = @{ $links->map( sub { $_->attrs('href') } ) } if $links;
   };
 
-  return ($type, \@topics, $dom, $aggregated)
+  if (@topics > 1) {
+    my %topics = map { $_ => 1 } @topics;
+    @topics = keys %topics;
+  };
+
+  return \@topics;
 };
 
-# filter entries based on their topic 
-sub _filter_topics {
-  my $dom     = shift;
-  my $type    = shift;
-  my %allowed = map { $_ => 1 } @{ shift(@_) };
 
-  my $topic_elem = $dom->at('link[rel="self"]');
-  my $feed_topic = $topic_elem->attrs('href') if $topic_elem;
+# Add topic to entries
+sub _add_topics {
+  my $type      = shift;
+  my $dom       = shift;
+  my $self_href = shift;
 
-  # atom entries
-  if ($type eq 'atom') {
-    $dom->find('entry')->each(
-      sub {
-	my $entry = shift;
+  my $link = '<link rel="self" href="' . $self_href . '" />';
 
-	# Find topic of the entry
-	$topic_elem =
-	  $entry->at('source > link[rel="self"]');
-	my $topic = $topic_elem ?
-	  $topic_elem->attrs('href') : $feed_topic;
+  # Add source information to each entry
+  $dom->find('item, entry')->each(
+    sub {
+      my $entry = shift;
+      my $source;
 
-	# Delete entry
-	unless ($topic || exists $allowed{$topic}) {
-	  $entry->replace('');
+      # Sources are found
+      if (my $sources = $entry->find('source')) {
+	foreach my $s (@$sources) {
+	  if ($s->namespace eq ATOM_NS) {
+	    $source = $s;
+	    last;
+	  };
 	};
-	return;
-      });
-  }
+      };
 
-  # rss entries
-  else {
-    $dom->find('item')->each(
-      sub {
-	my $entry = shift;
+      # No source found
+      unless ($source) {
+	$source = $entry->append_content('<source xmlns="' . ATOM_NS . '" />')
+	  ->at('source[xmlns=' . ATOM_NS . ']');
+      }
 
-	# Find topic of the entry
-	my $topic;
-	$topic_elem = $entry->at('source[url]');
+      # Link already there
+      elsif ($source->at('link[rel="self"][href]')) {
+	return $dom;
+      };
 
-	if ($topic_elem) {
-	  $topic = $topic_elem->attrs('url');
-	} else {
-	  $topic_elem =
-	    $entry->at('source > link[rel="self"]');
-	  $topic = $topic_elem ?
-	    $topic_elem->attrs('href') : $feed_topic;
-	};
+      # Add link
+      $source->append_content( $link );
+    });
 
-	# Delete entry
-	unless ($topic || exists $allowed{$topic}) {
-	  $entry->replace('');
-	};
-	return;
-      });
-  };
   return $dom;
 };
+
+
+# filter entries based on their topic
+sub _filter_topics {
+  my $dom     = shift;
+
+  my %allowed = map { $_ => 1 } @{ shift(@_) };
+
+  my $links = $dom->find('feed > entry > source > link[rel="self"][href],' .
+	                 'item  > source > link[rel="self"][href]');
+
+  my %topics;
+
+  # Delete entries that are not allowed
+  $links->each(
+    sub {
+      my $l = shift;
+      my $href = $l->attrs('href');
+      unless (exists $allowed{$href}) {
+	$l->parent->parent->replace('');
+      } else {
+	$topics{$href} = 1;
+      };
+    });
+
+  return [ keys %topics ];
+};
+
 
 # Check signature
 sub _check_signature {
@@ -507,7 +493,8 @@ sub _check_signature {
   # Signature expected but not given
   return unless $signature;
 
-  $signature = s/^sha1=//;
+  # Delete signature prefix - don't remind, if it's not there.
+  $signature =~ s/^sha1=//i;
 
   # Generate check signature
   my $signature_check = b($req->body)->hmac_sha1_sum( $secret );
@@ -517,6 +504,7 @@ sub _check_signature {
 
   return;
 };
+
 
 # Render success
 sub _render_success {
@@ -538,11 +526,21 @@ sub _render_success {
   );
 };
 
+# Render fail
+sub _render_fail {
+  return shift->render(
+    'template'       => 'pubsub-endpoint',
+    'template_class' => __PACKAGE__,
+    'status'         => 400  # bad request
+  );
+};
 
+
+# Create challenge string
 sub _challenge {
-  my $chal;
+  my $chal = '';
   for (1..$_[0] || 8) {
-    $chal .= $challenge_chars[int(rand(@challenge_chars))];
+    $chal .= $challenge_chars[ int( rand( @challenge_chars ) ) ];
   };
   return $chal;
 };
@@ -568,9 +566,7 @@ __DATA__
       This is an endpoint for the
       <a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html">PubSubHubbub protocol</a>
     </p>
-    <p>
-      Your request was bad.
-    </p>
+    <p>Your request was not correct.</p>
 
 
 __END__
@@ -641,7 +637,7 @@ Use C<http> or C<https>.
   $ps->hub('http://pubsubhubbub.appspot.com/');
   my $hub = $ps->hub;
 
-The preferred hub. Currently local hubs are not implemented.
+The preferred hub. Currently local hubs are not supported.
 
 =head2 C<lease_seconds>
 
@@ -701,14 +697,14 @@ hub's response message body is returned additionally.
 
 =head1 HOOKS
 
-=head2 C<before_pubsub_acceptance>
+=head2 C<on_pubsub_acceptance>
 
   $mojo->hook(
     on_pubsub_acceptance' > sub {
       my ($plugin, $c, $type,
           $topics, $secret, $on_behalf) = @_;
 
-      $topics = [ grep($_ !~ /catz/, @$topics) ];
+      @$topics = grep($_ !~ /catz/, @$topics);
       $$secret = 'zoidberg';
       $$on_behalf = 3;
 
@@ -749,6 +745,10 @@ content is delivered.
 The parameters include the plugin object, the current
 controller object, the content type, and the - maybe topic
 filtered - content as a L<Mojo::DOM> object.
+
+The L<Mojo::DOM> object is modified in a way that each entry in
+the feed (either RSS or Atom) includes its topic in
+'source link[rel="self"][href]'.
 
 =head2 C<before_pubsub_subscribe>
 
