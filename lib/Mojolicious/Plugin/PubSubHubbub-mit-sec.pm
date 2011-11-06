@@ -5,6 +5,9 @@ use Mojo::DOM;
 
 use constant ATOM_NS => 'http://www.w3.org/2005/Atom';
 
+has 'host';
+has 'secure' => 0;
+
 # Default lease seconds before automatic subscription refreshing
 has 'lease_seconds' => ( 30 * 24 * 60 * 60 );
 has 'hub';
@@ -19,6 +22,22 @@ BEGIN {
 # Register plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
+
+  # Get host parameter
+  # Todo: kill all host informtion in all plugins
+  if (exists $param->{host}) {
+    $plugin->host( $param->{host} );
+  } else {
+    if (exists $mojo->renderer->helpers->{'hostmeta'}) {
+      $plugin->host( $mojo->hostmeta('host') || 'localhost' );
+    } else {
+      $plugin->host( 'localhost' );
+    };
+  };
+
+  # Set secure
+  # Todo: Kill all secure information in all plugins
+  $plugin->secure( $param->{secure} );
 
   $plugin->hub($param->{hub}) if $param->{hub};
 
@@ -35,8 +54,10 @@ sub register {
 	$mojo->plugin('Util::Endpoint');
       };
 
-      # Set PubSubHubbub endpoints
-      $route->endpoint('pubsub-' . $param);
+      $route->endpoint(
+	'pubsub-'.$param => {
+	  scheme => $plugin->secure ? 'https' : 'http',
+	  host   => $plugin->host });
 
       # Add 'callback' route
       if ($param eq 'cb') {
@@ -59,15 +80,21 @@ sub register {
       $plugin->publish( @_ );
     });
 
-  # Add 'subscribe' and 'unsubscribe' helper
-  foreach my $action (qw(subscribe unsubscribe)) {
-    $mojo->helper(
-      'pubsub_' . $action => sub {
-	return $plugin->_change_subscription( shift,
-					      mode => $action,
-					      @_);
-      });
-  };
+  # Add 'subscribe' helper
+  $mojo->helper(
+    'pubsub_subscribe' => sub {
+      return $plugin->_change_subscription( shift,
+					    mode => 'subscribe',
+					    @_);
+    });
+
+  # Add 'unsubscribe' helper
+  $mojo->helper(
+    'pubsub_unsubscribe' => sub {
+      return $plugin->_change_subscription( shift,
+					    mode => 'unsubscribe',
+					    @_ );
+    });
 };
 
 
@@ -232,7 +259,6 @@ sub _change_subscription {
   return $success;
 };
 
-
 # Incoming data callback
 sub callback {
   my $plugin = shift;
@@ -259,9 +285,7 @@ sub callback {
   };
 
   # Mojolicious::Plugin::XML::RSS/Atom?
-  my $dom = Mojo::DOM->new;
-  $dom->xml(1);
-  $dom->parse($c->req->body);
+  my $dom = Mojo::DOM->new($c->req->body, xml => 1);
 
   # Find topics in Payload
   my $topics = _find_topics($type, $dom);
@@ -356,13 +380,12 @@ sub _find_topics {
     my $self_href;
 
     # Channel or feed link
-    if ( $link ) {
+    if ($link) {
       $self_href = $link->attrs('href');
     }
 
     # Source of first item in RSS
-    elsif ( !$self_href && $type eq 'rss' ) {
-
+    elsif (!$self_href && $type eq 'rss') {
       # Possible
       $link = $dom->at('item > source');
       $self_href = $link->attrs('url') if $link;
@@ -593,6 +616,20 @@ not the hub part.
 The plugin is data store agnostic. Please use this plugin by applying hooks.
 
 =head1 ATTRIBUTES
+
+=head2 C<host>
+
+  $ps->host('sojolicio.us');
+  my $host = $ps->host;
+
+The host for the PubSubHubbub enabled domain.
+
+=head2 C<secure>
+
+  $ps->secure(1);
+  my $sec = $wf->secure;
+
+Use C<http> or C<https>.
 
 =head2 C<hub>
 

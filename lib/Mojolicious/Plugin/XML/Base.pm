@@ -43,7 +43,8 @@ sub new {
     };
 
     # Create root element by parent class
-    my $root = $class->SUPER::new( PI . $element, xml => 1 );
+    my $root = $class->SUPER::new( PI . $element );
+    $root->xml(1);
 
     # Transform special attributes
     foreach my $special ( grep( index($_, '-') == 0, keys %$att ) ) {

@@ -76,7 +76,7 @@ sub register {
       # Maybe testing, if the hook will release anything
       my $hostmeta_clone = dclone($hostmeta);
 
-      $c->app->plugins->run_hook(
+      $c->app->plugins->emit_hook(
 	'before_serving_hostmeta',
 	$c,
 	$hostmeta_clone);
@@ -109,7 +109,7 @@ sub _get_hostmeta {
 
   # Hook for caching
   my $hostmeta_xrd;
-  $c->app->plugins->run_hook(
+  $c->app->plugins->emit_hook(
     'before_fetching_hostmeta',
     $c,
     $host,
@@ -157,7 +157,7 @@ sub _get_hostmeta {
   # Host validation is now deprecated
 
   # Hook for caching
-  $c->app->plugins->run_hook(
+  $c->app->plugins->emit_hook(
     'after_fetching_hostmeta',
     $c,
     $host,

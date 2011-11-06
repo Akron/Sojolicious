@@ -24,7 +24,8 @@ use_ok('Mojo::DOM');
 my $self_href = 'http://sojolicio.us/blog';
 
 # Add topics in RSS
-my $dom = Mojo::DOM->new(xml => 1)->parse($rss);
+my $dom = Mojo::DOM->new;
+$dom->xml(1)->parse($rss);
 
 Mojolicious::Plugin::PubSubHubbub::_add_topics('rss',
 					       $dom,

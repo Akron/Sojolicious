@@ -92,7 +92,7 @@ sub register {
 
 	  # Run 'on_prepare_webfinger' hook
 	  my $ok = 0;
-	  $mojo->plugins->run_hook(
+	  $mojo->plugins->emit_hook(
 	    'on_prepare_webfinger' => (
 	      $plugin, $c, $uri, \$ok
 	    ));
@@ -126,7 +126,7 @@ sub _get_webfinger {
 
   # Hook for caching
   my $acct_xrd;
-  $c->app->plugins->run_hook(
+  $c->app->plugins->emit_hook(
     'before_fetching_webfinger' =>
       ( $c,$norm,\$acct_xrd )
     );
@@ -195,7 +195,7 @@ sub _get_webfinger {
     return undef unless $acct_xrd;
 
     # Hook for caching
-    $c->app->plugins->run_hook(
+    $c->app->plugins->emit_hook(
       'after_fetching_webfinger'=> (
 	$c, $norm, \$acct_xrd, $acct_xrd_doc->res
       ));
@@ -223,7 +223,7 @@ sub _get_finger {
     $wf_xrd->add('Subject' => $norm);
 
     # Run hook
-    $c->app->plugins->run_hook(
+    $c->app->plugins->emit_hook(
       'before_serving_webfinger' => (
 	$c, $norm, $wf_xrd
       ));

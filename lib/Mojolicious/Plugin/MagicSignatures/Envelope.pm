@@ -31,7 +31,8 @@ sub new {
   # Message is me-xml
   if ($_[0] =~ /^[\s\t\n]*\</) {
 
-    my $dom = Mojo::DOM->new(xml => 1);
+    my $dom = Mojo::DOM->new;
+    $dom->xml(1);
     $dom->parse( shift );
 
     # Extract envelope from env or provenance

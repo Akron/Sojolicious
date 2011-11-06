@@ -110,6 +110,8 @@ sub read {
   my $plugin = shift;
   my $c = shift;
 
+warn 'oooo';
+
   # Init response object
   my $response = { entry => (@_ > 1 ? [] : +{} ) };
 
