@@ -1,7 +1,9 @@
 blib
 log
 Sandbox
-lib/Sojolicious
+lib/Sojolicious/User.pm
+lib/Sojolicious/Model.pm
+lib/Sojolicious/Model
 lib/Sojourner
 lib/Mojolicious/Plugin/OAuth.pm
 lib/Mojolicious/Plugin/XRDS.pm
@@ -14,13 +16,13 @@ lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/Atom-Pub.pm
-t-sojo
 script*
 MYMETA*
 Makefile
 pm_to_blib
 *~
 *.sqlite
+*.log
 *.db
 .*
 !.gitignore
