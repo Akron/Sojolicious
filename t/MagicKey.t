@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-use Test::More tests => 33;
+use Test::More tests => 49;
 use Math::BigInt try => 'GMP,Pari';
 use strict;
 use warnings;
@@ -23,15 +23,29 @@ ok($os2ip eq '22756313778701413365784'.
              '01782410999343477943894'.
              '174703601131715860591662', 'os2ip'); # 2
 
-
 # test i2osp
 my $i2osp = *{"${module}::_i2osp"}->($os2ip);
 ok($i2osp eq $test_msg, 'i2osp');                  # 3
 
 # test from http://cpansearch.perl.org/src/VIPUL/Crypt-RSA-1.99/t/01-i2osp.t
-my $number = 4; 
+my $number = 4;
 $i2osp = *{"${module}::_i2osp"}->($number, 4);
 $os2ip = *{"${module}::_os2ip"}->($i2osp);
+
+# tests from https://github.com/bendiken/rsa
+{
+  local $SIG{__WARN__} = sub {};
+  is(*{"${module}::_i2osp"}->(9_202_000, 2), undef, 'Ruby-RSA i2osp - 1');
+};
+is(*{"${module}::_i2osp"}->(9_202_000, 3), "\x8C\x69\x50", 'Ruby-RSA i2osp - 2');
+is(*{"${module}::_i2osp"}->(9_202_000, 4), "\x00\x8C\x69\x50", 'Ruby-RSA i2osp - 3');
+is(*{"${module}::_i2osp"}->(9_202_000, 5), "\x00\x00\x8C\x69\x50", 'Ruby-RSA i2osp - 4');
+
+is(*{"${module}::_os2ip"}->("\x8C\x69\x50"), 9_202_000, 'Ruby-RSA os2ip - 1');
+is(*{"${module}::_os2ip"}->("\x00\x8C\x69\x50"), 9_202_000, 'Ruby-RSA os2ip - 2');
+is(*{"${module}::_os2ip"}->("\x00\x00\x8C\x69\x50"), 9_202_000, 'Ruby-RSA os2ip - 3');
+is(*{"${module}::_os2ip"}->("\x00"), 0, 'Ruby-RSA os2ip - 4');
+
 
 is($os2ip, $number, 'Crypt::RSA::Test i2osp and os2ip - 1');
 
@@ -40,7 +54,7 @@ $number = '1234857092384759348579032847529875982374'.
     '8327456823746587342658736587324658736453548634'.
     '9864390323422374897503987560374089721346786456'.
     '7836498734612897468237648745698743648796487932'.
-    '6487964378569287346529'; 
+    '6487964378569287346529';
 $i2osp = *{"${module}::_i2osp"}->($number, 102);
 $os2ip = *{"${module}::_os2ip"}->($i2osp);
 
@@ -242,6 +256,177 @@ my $test_sig = 'mNpBIpTUOESnuQMlS8aWZ4hwdS'.
 is($sig, $test_sig,  'Signature');       # 14
 
 ok($mkey->verify($test_msg, $sig), 'Verification');
+
+
+
+
+# MiniMe-Test
+my $encodedPrivateKey = 'RSA.hkwS0EK5Mg1dpwA4shK5FNtHmo9F7sIP6gKJ5fyFWNotO'.
+  'bbbckq4dk4dhldMKF42b2FPsci109MF7NsdNYQ0kXd3jNs9VLCHUujxiafVjhw06hFNWBmv'.
+  'ptZud7KouRHz4Eq2sB-hM75MEn3IJElOquYzzUHi7Q2AMalJvIkG26c=.AQAB.JrT8YywoB'.
+  'oYVrRGCRcjhsWI2NBUBWfxy68aJilEK-f4ANPdALqPcoLSJC_RTTftBgz6v4pTv2zqiJY9N'.
+  'zuPo5mijN4jJWpCA-3HOr9w8Kf8uLwzMVzNJNWD_cCqS5XjWBwWTObeMexrZTgYqhymbfxx'.
+  'z6Nqxx352oPh4vycnXOk=';
+
+$test_msg = '<?xml version="1.0" encoding="UTF-8"?>
+<entry xmlns="http://www.w3.org/2005/Atom" xmlns:activity="http://activitystrea.ms/spec/1.0/">
+  <id>mimime:12345689</id>
+  <title>Tuomas is now following Pamela Anderson</title>
+  <content type="text/html">Tuomas is now following Pamela Anderson</content>
+  <updated>2010-07-26T06:42:55+02:00</updated>
+  <author>
+    <uri>http://lobstermonster.org/tuomas</uri>
+    <name>Tuomas Koski</name>
+  </author>
+  <activity:actor>
+    <activity:object-type>http://activitystrea.ms/schema/1.0/person</activity:object-type>
+    <id>tuomas@lobstermonster.org</id>
+    <title>Tuomas Koski</title>
+    <link ref="alternate" type="text/html" href="http://identi.ca/tkoski"/>
+  </activity:actor>
+  <activity:verb>http://activitystrea.ms/schema/1.0/follow</activity:verb>
+</entry>
+';
+
+$mkey = Mojolicious::Plugin::MagicSignatures::Key->new($encodedPrivateKey);
+
+is($mkey->n, '943066743310294637166748645282057347360756671091156842137084'.
+     '35141648141927985088529225709405863492354842374715166239287844430890'.
+     '04299402993407490921024495696687088026331904825469176835780456268938'.
+     '49274386282190086526533262351511700816722159326410823741996001680552'.
+     '36119049012074140202348780844511591714446247', "MiniMe Modulus");
+is($mkey->emLen, 128, 'MiniMe k');
+is($mkey->d, '271809629894382644940151596208748969807854078768342487314454'.
+     '22149176675051920447033409286738290667975199011489613120739553129607'.
+     '42820260664090118498058068890245077295780990608282043243495479227665'.
+     '68948318488153478026241124799584980220284065382244666330019163253412'.
+     '99059585838510324221094995040115830750141673', 'MiniMe d');
+
+$emsa = *{"${module}::_emsa_encode"}->(b64url_encode($test_msg),
+				       $mkey->emLen,
+				       'sha-256');
+
+is(*{"${module}::_os2ip"}->($emsa), '5486124068793688683255936251187209270'.
+     '07439263593233207011200198845619738175967294716517569953636279361328'.
+     '47253378721117449581838627446479032241037182456702996144987007100062'.
+     '64535421091908069935709303403272242499531581061652193678930299235825'.
+     '807389982341969138792568181955265625405564094607923748235797538',
+     'MiniMe Emsa');
+
+$s  = *{"${module}::_rsasp1"}->($mkey, *{"${module}::_os2ip"}->($emsa));
+
+is ($s, '73566588907461886099519843442396193568480155532931162082566271355'.
+      '1463198070878875086737348779970249327936945557033384802550845145427'.
+      '3939279392302681231072454777631917225158347073586290871595765317421'.
+      '4372063208691722812578754298808626514003045898777784320439862473316'.
+      '607422581254522605209868208033224632023651', 'MiniMe rsasp1');
+
+is (b64url_encode(*{"${module}::_i2osp"}->($s, $mkey->emLen)),
+    'aMMmGLJd81bgBdU26WjVCT1zIH17ND0dlfArs1Kii_fVYFyz6IEyQzM3GddvzAfJ51vo-'.
+    'uN_RY9TEHtoHp12N9Abg9AbCcrPcBGvcP7VBhFWw857v_sYlbD6nek9cX9JKBu-C_Xf20'.
+    'QGuE5dPFL0S4kZsuemeQ8p6cJAj_RbumM=', 'MiniMe signature 1');
+
+is (b64url_encode(*{"${module}::_sign_emsa_pkcs1_v1_5"}->($mkey, b64url_encode($test_msg))),
+    'aMMmGLJd81bgBdU26WjVCT1zIH17ND0dlfArs1Kii_fVYFyz6IEyQzM3GddvzAfJ51vo-'.
+    'uN_RY9TEHtoHp12N9Abg9AbCcrPcBGvcP7VBhFWw857v_sYlbD6nek9cX9JKBu-C_Xf20'.
+    'QGuE5dPFL0S4kZsuemeQ8p6cJAj_RbumM=', 'MiniMe signature 2');
+
+is($mkey->sign(b64url_encode($test_msg)),
+    'aMMmGLJd81bgBdU26WjVCT1zIH17ND0dlfArs1Kii_fVYFyz6IEyQzM3GddvzAfJ51vo-'.
+    'uN_RY9TEHtoHp12N9Abg9AbCcrPcBGvcP7VBhFWw857v_sYlbD6nek9cX9JKBu-C_Xf20'.
+    'QGuE5dPFL0S4kZsuemeQ8p6cJAj_RbumM=', 'MiniMe signature 3');
+
+
+
+
+
+__END__
+
+
+
+
+
+
+# http://books.google.com/books?id=B7yYcdClkswC&pg=PA387&lpg=PA387&dq=test+rsavp1&source=bl&ots=IeAEtfVzLI&sig=HdhO8BtnP0hxf9y1_qJh_z6bkmc&hl=de&ei=SLjPToTfIsr3sgbMs82zDA&sa=X&oi=book_result&ct=result&resnum=4&ved=0CD0Q6AEwAw#v=onepage&q=test%20rsavp1&f=false
+
+
+###
+
+# Todo:
+
+# The RSA Validation System (RSAVS)
+# B.1.3 SigVerRSA.req
+# CAVS 3.2
+# "SigVer RSA (X9.31)" information for "testshas"
+# Mod sizes selected: 1024 1536
+# Generated on Wed Apr 28 08:35:11 2004
+my $mod = 1024;
+my ($e, $m);
+$n = '9ec4d483330916b69eee4e9b7614eafc4fbf60e74b5127a3ff5bd9d48c7ecf8418d94d1e60388bb68546f8bc92deb1974b9def6748fbb4ec93029ea8b7bea36f61c5c6aeedfd512a0f765846fad5edacb08c3d75cf1d43b48b394c94323c3f3e9ba6612f93fe2900134217433afb088b5ca33fc4e6b270194df077d2b6592743';
+$e = '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003';
+$m = '7c5177b2ef9ecc43c6b2048397d70f2b7dc98feabec59815aee4b49bd0a72b373fd381e94c7f3fa6696bf74f469382e039048ceae3ef534311fcabfbe0e046932532326a0b7aa378fe8cf33ec814
+e7fdfa7134278ec74113ca4f2ff468f2170cf317921d74b97f214ebc003a6781c6ec88b88f8a0775eceea386486daf05260b';
+$s = '01da3b0936cc9e6261e80595e46ea228c93cb7f348b2cace6a5a2704eba204b96d5cb9e29cd2cb9ba968eeab994294e5f4fa2c6d44b52bc8768a802c4bc8201f267fc9e6dfea53b98677f21a77e7178ae0166151470f628831afa59203b6a233f133544d51669eb2e5de159ed3819ef0cc5047447116351b78ee6831e9498746';
+
+foreach ($n, $e, $s, $m) {
+  $_ = Math::BigInt->from_hex( "0x" . $_ );
+};
+$mkey = Mojolicious::Plugin::MagicSignatures::Key->new(n => $n, e => $e);
+
+is(*{"${module}::_bitsize"}->($n), $mod, 'Key length');
+is(*{"${module}::_octet_len"}->($n), ($mod / 8), 'Key length');
+
+warn '*'.$mkey->verify($m, b64url_encode(*{"${module}::_i2osp"}->($s, $mod))).'*';
+
+###
+# $e = '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003';
+# $mod = 1536;
+$m = '7ad2f4bfbed0dba767ec7f106f4750376f2945c4c09624fbe022fe361706f8935a7252ea6f25a102523c5f04d847a62f92a239cef403c467b64f65367bb26ad9b1ee5d4db8f33e1946b10fc90a2a969e8fcb5e8464fcff447af69ffbcdd4b9cb46ed1dd0e06238560bf396494e17a5ec2f4bbcce57aa5bfbf2beb56f55966bd0';
+$s = '009f3e544f38658c3ab1af8a09623cb611167908c01eced7863a93d417d76098d5148485669c119adfbe0d7d0cda483e788c0c5b8186c192156a9a54d75d462f0da558978a7b12fe2baf9c07b3c4191d4bf15d5f66a1c5f7079b8a535e95638a4dbf7095ef4e147b8fdd3e3498f13853710f44f778ec6b79e95646cbb27414e4';
+
+foreach ($s, $m) {
+  $_ = Math::BigInt->from_hex( "0x" . $_ );
+};
+#$mkey = Mojolicious::Plugin::MagicSignatures::Key->new(n => $n, e => $e);
+
+is(*{"${module}::_bitsize"}->($n), $mod, 'Key length');
+is(*{"${module}::_octet_len"}->($n), ($mod / 8), 'Key length');
+
+warn '*'.$mkey->verify($m, b64url_encode(*{"${module}::_i2osp"}->($s, $mod))).'*';
+
+__END__
+###
+$e = '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003';
+$m = 'f5de826b61d81957cc4fcf26c959f1432c4b0f4f1b7fac0b685439791e77453e5961ee4b5b219bbcdd5ced00a392f23b53a29ce8879172c3218786e6df1aa7322fcfd7f044de00b86936e29295c1505c40e99c6c765b50762a0b1eafcc781a321e3127a34398af1318e69824c86f736e9b28f6210f66aceb2ae8eb1c0e180708';
+$s = '35f86e0912d099298062967bb41f6d8dadba532ecc9a66f9ad51c5dbb8de8fb29b06f8a022c4d28a18e7a5f9515fab51b428b7a73957fd877fcaff2fe4d3a026dae0388747cb1fbd69b20df0781b41bfd5692f0fa4033a0399479c1a6036f8d27a9bd2018ebeb736a098090bf5ed791b9cb12cb963ebd03dd46ffcee68b95b4b';
+
+###
+$e = '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010001';
+$m = '489b177653809b9921b178eca7ddf8a31df19e45b9d40b02be551e46b5625f8efa7a9e7b7b64d724bd2259b12021272663b29f7c6abe59f63fb452b258c74a7f18576aee97ac2aaca6ea720e0e41ffee196509b6543e23ba92e062cb34bdc108a819c4f830bf5cd6e5f30b2cfba748a446f2251afdbd2ff5bfc096b8d3ad8ed4';
+$s = '494ce82c0af37d1b222d381b4383994f60b4897b3f6314c167bf679507436fc9f5cb6d7309d9c50ffe0a0838c4d2874824c78cd55a8f34654b53d9bce3989d779556b51560d92b9031ffa7f8b72dfc6f607e829e467b17affff854ba524b6df27e53d6ef605859d2e24ebdb84db49c6af92496677da4d173cc054b68eb065b7f'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 __END__
