@@ -7,6 +7,8 @@ our $DELEGATE = 'Mojolicious::Plugin::XML::XRD';
 sub register {
   my ($plugin, $mojo) = @_;
 
+  $mojo->types->type('jrd'    => 'application/json');
+
   # Add 'render_xrd' helper
   $mojo->helper(
     'render_xrd' => sub {
@@ -20,6 +22,10 @@ sub register {
       # content negotiation
       $c->respond_to(
 	json => sub { $c->render(
+	  data   => $xrd->to_json,
+	  format => 'json'
+	)},
+	jrd => sub { $c->render(
 	  data   => $xrd->to_json,
 	  format => 'json'
 	)},

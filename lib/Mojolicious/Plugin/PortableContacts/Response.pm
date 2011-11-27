@@ -13,10 +13,9 @@ has 'itemsPerPage';
 # Constructor
 sub new {
   my $class = shift;
-  my $self = $class->SUPER::new(@_);
+  my $self = $class->SUPER::new( @_ );
 
   if (exists $self->{entry}) {
-
     # Multiple contacts
     if (ref($self->{entry}) eq 'ARRAY') {
       $self->{entry} = [
@@ -38,11 +37,15 @@ sub new {
 
 # Private function for entry objects
 sub _new_entry {
+  # Is an entry already
   if (ref($_[0]) eq
 	'Mojolicious::Plugin::PortableContacts::Entry') {
     return $_[0];
-  } else {
-    return Mojolicious::Plugin::PortableContacts::Entry->new(@_);
+  }
+
+  # Is no entry yet
+  else {
+    return Mojolicious::Plugin::PortableContacts::Entry->new( @_ );
   };
 };
 
@@ -84,7 +87,7 @@ sub to_json {
     };
   };
 
-  return Mojo::JSON->new->encode(\%response);
+  return Mojo::JSON->new->encode( \%response );
 };
 
 # Return XML document
@@ -130,11 +133,13 @@ Mojolicious::Plugin::PortableContacts::Response
 =head1 SYNOPSIS
 
   my $res = { entry => [
-                { id => 15,
-                  name => {
-                    givenName  => 'Bender',
-                    familyName => 'Rodriguez'
-            }}]};
+              { id => 15,
+                name => {
+                  givenName  => 'Bender',
+                  familyName => 'Rodriguez'
+                }
+              }
+            ]};
 
   my $response =
        Mojolicious::Plugin::PortableContacts::Response->new($res);
@@ -176,9 +181,8 @@ Number of query results in total.
   };
 
 Array ref of entries in the query results.
-This will return an array ref, even if a
-single entry is expected. The items are
-L<Mojolicious::Plugin::PortableContacts::Entry>
+This will return an array ref, even if a single entry is expected.
+The items are L<Mojolicious::Plugin::PortableContacts::Entry>
 objects.
 
 =head1 METHODS

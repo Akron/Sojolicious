@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::Util::Base64url;
 use Mojo::Base -strict;
-use MIME::Base64;
+
+use Mojo::Util qw/b64_encode b64_decode/;
 
 use Exporter 'import';
 our @EXPORT = qw(b64url_encode
@@ -14,7 +15,8 @@ sub b64url_encode ($;$) {
   return '' unless $v;
 
   utf8::encode $v if utf8::is_utf8 $v;
-  $v = encode_base64($v, '');
+#  $v = encode_base64($v, '');
+  $v = b64_encode($v, '');
   $v =~ tr{+/}{-_};
   $v =~ tr{\t-\x0d }{}d;
   $v =~ s/\=+$// unless $p;
@@ -34,7 +36,8 @@ sub b64url_decode ($) {
     $v .= chr(61) x (4 - $padding);
   };
 
-  return decode_base64($v);
+  return b64_decode($v);
+#  return decode_base64($v);
 };
 
 1;

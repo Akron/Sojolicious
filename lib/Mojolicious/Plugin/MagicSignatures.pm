@@ -6,6 +6,7 @@ use Mojolicious::Plugin::MagicSignatures::Key;
 
 use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
+
 # Register plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
@@ -103,6 +104,7 @@ sub register {
       return;
     });
 };
+
 
 # Get MagicKeys
 sub get_magickeys {
@@ -248,13 +250,14 @@ sub verify_magicenvelope {
 
   # Get signature to verify
   my $signature = $param{sig} || undef;
-  $signature = $me->sign($param{key_id} || undef) unless $signature;
+  $signature = $me->signature($param{key_id} || undef) unless $signature;
 
   # No signature can be found for verification
   return 0 unless $signature;
 
   # Return verification value
-  return $mkey->verify($me->data, $signature);
+  # TODO: me->verif instead!
+  return $mkey->verify($me->sig_base, $signature);
 };
 
 1;

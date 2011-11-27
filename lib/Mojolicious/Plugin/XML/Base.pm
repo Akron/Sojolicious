@@ -14,6 +14,9 @@ use constant {
 sub new {
   my $class = shift;
 
+# Todo: Is often called with class = '<...>' - this seems to be totally wrong!!!
+
+
   # Todo: Change order for speed (often 'charset' is $_[0])
   # Create from parent class
   if ( ref($class)             ||

@@ -47,7 +47,14 @@ sub register {
       my $c = shift;
 
       if (!$_[0]) {
-	return $hostmeta;
+	my $hostmeta_clone = dclone($hostmeta);
+	$c->app->plugins->emit_hook(
+	  'before_serving_hostmeta',
+	  $plugin,
+	  $c,
+	  $hostmeta_clone);
+
+	return $hostmeta_clone;
       }
 
       elsif ($_[0] eq 'host') {
@@ -78,6 +85,7 @@ sub register {
 
       $c->app->plugins->emit_hook(
 	'before_serving_hostmeta',
+	$plugin,
 	$c,
 	$hostmeta_clone);
 
@@ -111,6 +119,7 @@ sub _get_hostmeta {
   my $hostmeta_xrd;
   $c->app->plugins->emit_hook(
     'before_fetching_hostmeta',
+    $plugin,
     $c,
     $host,
     \$hostmeta_xrd
@@ -159,6 +168,7 @@ sub _get_hostmeta {
   # Hook for caching
   $c->app->plugins->emit_hook(
     'after_fetching_hostmeta',
+    $plugin,
     $c,
     $host,
     \$hostmeta_xrd,
@@ -254,8 +264,8 @@ the host's own hostmeta document.
 
   sub register {
      my ($self, $mojo) = @_;
-     $mojo->plugins->add_hook('before_hostmeta' => sub {
-	my $plugins = shift;
+     $mojo->hook('before_hostmeta' => sub {
+	my $plugin = shift;
         my $c = shift;
 	my $hostmeta = shift;
 	$hostmeta->add_link('try');

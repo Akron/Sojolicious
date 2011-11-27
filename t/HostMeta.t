@@ -11,11 +11,16 @@ use Test::Mojo;
 use Mojolicious::Lite;
 
 
+my $host = 'hostme.ta';
+
 my $t = Test::Mojo->new;
 my $app = $t->app;
+$app->plugin('HostMeta', host => $host);
 
-$app->plugin('host_meta' =>
-	     { host => 'sojolicio.us', secure => 1 });
+my $c = Mojolicious::Controller->new;
+$c->app($app);
+$c->req->url->parse('http://' . $host);
+
 
 my $h = $app->renderer->helpers;
 
@@ -40,15 +45,15 @@ $t->get_ok('/.well-known/host-meta')
     ->element_exists('XRD[xsi]')
     ->element_exists_not('Link')
     ->element_exists_not('Property')
-    ->element_exists('Host')->text_is('sojolicio.us');
+    ->element_exists('Host')->text_is($host);
 
-$app->hook('before_serving_hostmeta' => sub {
-    my ($c, $xrd) = @_;
+$app->hook(
+  'before_serving_hostmeta' => sub {
+    my ($plugin, $c, $xrd) = @_;
     $xrd->add('Property', { type => 'foo' }, 'bar');
     is($c->endpoint('hostmeta'),
-       'https://sojolicio.us/.well-known/host-meta',
-       'Correct url');
-	   });
+       'http://'.$host.'/.well-known/host-meta', 'Correct url');
+  });
 
 $t->get_ok('/.well-known/host-meta')
     ->status_is(200)
@@ -60,17 +65,17 @@ $t->get_ok('/.well-known/host-meta')
     ->element_exists('Property')
     ->element_exists('Property[type="foo"]')
     ->text_is('bar')
-    ->element_exists('Host')->text_is('sojolicio.us');
+    ->element_exists('Host')->text_is($host);
 
 $app->hook('before_fetching_hostmeta',
 	   => sub {
-	       my ($c, $host, $xrd_ref) = @_;
+	     my ($plugin, $c, $host, $xrd_ref) = @_;
 
-	       if ($host eq 'example.org') {
-		   my $xrd = $c->new_xrd;
-		   my $sublink = $xrd->add('Link', { rel => 'bar' }, 'foo' );
-		   $$xrd_ref = $xrd;
-	       }
+	     if ($host eq 'example.org') {
+	       my $xrd = $c->new_xrd;
+	       my $sublink = $xrd->add('Link', { rel => 'bar' }, 'foo' );
+	       $$xrd_ref = $xrd;
+	     }
 	   });
 
 my $xrd = $t->app->hostmeta('example.org');

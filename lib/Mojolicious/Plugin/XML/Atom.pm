@@ -283,6 +283,9 @@ sub add_link {
   unless (defined $_[1]) {
     return $self->add('link', { rel => 'related',
 				href => shift });
+  } elsif (@_ == 2) {
+    return $self->add('link', { rel  => shift,
+				href => shift });
   };
 
   my %values = @_;
@@ -508,11 +511,16 @@ Adds a unique identifier to the Atom object.
 
 =head2 C<add_link>
 
+  $atom->add_link('http://sojolicio.us/#12345');
+  $atom->add_link(related => 'http://sojolicio.us/#12345');
   $atom->add_link(rel => 'self',
                   href => 'http://sojolicio.us/#12345');
 
 Adds link information to the Atom object. If no relation
 attribute is given, the default relation is 'related'.
+Accepts either one scalar as a reference of a related link,
+a pair of scalars for the relational type and the reference
+or multiple hashes for the attributes of the link.
 
 =head2 C<add_logo>
 

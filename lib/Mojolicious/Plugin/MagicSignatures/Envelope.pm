@@ -112,7 +112,7 @@ sub new {
   }
 
   # Message is me as a compact string
-  elsif (index($_[0], '.YmFzZTY0dXJs.')) {
+  elsif (index($_[0], '.YmFzZTY0dXJs.') > 0) {
 
     # Parse me compact string
     my $value = [];

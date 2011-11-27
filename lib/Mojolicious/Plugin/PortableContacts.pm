@@ -110,8 +110,6 @@ sub read {
   my $plugin = shift;
   my $c = shift;
 
-warn 'oooo';
-
   # Init response object
   my $response = { entry => (@_ > 1 ? [] : +{} ) };
 
@@ -122,11 +120,12 @@ warn 'oooo';
   my $param = (@_ > 1) ? { @_ } : { id => $_[0] };
 
   # Run 'get_poco' hook
-  $c->app->plugins->run_hook('read_poco',
-			     $plugin,
-			     $c,
-			     $param,
-			     $response);
+  $c->app->plugins->emit_hook('read_poco',
+			      $plugin,
+			      $c,
+			      $param,
+			      $response);
+
   return _new_response($response);
 };
 
@@ -159,11 +158,11 @@ sub _set {
 
   # Run 'x_poco' hook
   my $ok = 0;
-  $c->app->plugins->run_hook($action . '_poco',
-			     $plugin,
-			     $c,
-			     $entry,
-			     \$ok);
+  $c->app->plugins->emit_hook($action . '_poco',
+			      $plugin,
+			      $c,
+			      $entry,
+			      \$ok);
 
   return $entry if $ok;
   return;
@@ -287,7 +286,7 @@ sub render {
   return $c->respond_to(
     xml => sub { shift->render('status' => $param{status} || 200,
 			       'format' => 'xml',
-			       'data' => $response->to_pretty_xml) },
+			       'data' => $response->to_xml) },
 
     any => sub { shift->render('status' => $param{status} || 200,
 			       'format' => 'json',

@@ -19,6 +19,7 @@ sub register {
     $mojo->plugin('MagicSignatures', {'host' => $param->{'host'}} );
   };
 
+  # Todo: Delete all security and host things
   # Attributes
   # set host
   if (defined $param->{host}) {
@@ -35,9 +36,11 @@ sub register {
     'salmon' => sub {
       my ($route, $param) = @_;
 
-      # Todo: Mojo-Debug
-      warn 'Unknown Salmon parameter' && return
-	unless $param =~ /^(?:mentioned|all-replies|signer)$/;
+      # Not a valid shortcut parameter
+      unless ($param =~ /^(?:mentioned|all-replies|signer)$/) {
+	$mojo->log->debug("Unknown Salmon shortcut parameter $param");
+	return;
+      };
 
       # Handle GET requests
       $route->get->to(
@@ -56,7 +59,9 @@ sub register {
 	  host   => $plugin->host }
       );
 
+      # All replies route
       if ($param eq 'all-replies') {
+
 	# Add reply handle to webfinger
 	$mojo->hook(
 	  'before_serving_webfinger' => sub {
@@ -70,7 +75,7 @@ sub register {
 
 	# Handle POST requests
 	$route->post->to(
-	  'cb' => sub { $plugin->_all_replies( @_ ) }
+	  'cb' => sub { $plugin->_salmon_response( 'reply', @_ ) }
 	);
       }
 
@@ -91,7 +96,7 @@ sub register {
 
 	# Handle POST requests
 	$route->post->to(
-	  'cb' => sub { $plugin->_mentioned( @_ ) }
+	  'cb' => sub { $plugin->_salmon_response( 'mentioned', @_ ) }
 	);
       }
 
@@ -100,6 +105,9 @@ sub register {
 
 	# Todo: Fragen: Gibt es schon eine Signer-URI?
 	my $salmon_signer_url = $mojo->endpoint('salmon-signer');
+
+
+	# Todo - on hook like lrdd
 
 	# Add signer link to host-meta
 	my $link = $mojo->hostmeta->add_link(
@@ -114,9 +122,16 @@ sub register {
 	);
       };
     });
-    # Helpers?
+
+  # Salmon send helper
+  $mojo->helper(
+    'salmon' => sub {
+      return $plugin->salmon_send(@_);
+    });
 };
 
+
+# Handle salmon - todo
 sub salmon {
   my $plugin = shift;
   my $c = shift;
@@ -159,13 +174,15 @@ sub salmon {
   };
 };
 
-# to be implemented!
+# To be implemented!
+# Needs OAuth token check
 sub _signer {
   my $plugin = shift;
-
-  warn 'Salmon signer is not yet implemented.';
-
   my $c = shift;
+
+  $c->app->debug('Salmon signer is not yet implemented.');
+  return;
+
 
   # Check OAuth token
   # 401 if not correct
@@ -182,7 +199,10 @@ sub _signer {
 
   my $me = $c->magicenvelope(\%me_data);
 
-  warn 'ME is empty.' unless $me;
+  unless ($me) {
+    $c->app->log('Unable to sign MagicEnvelope.');
+    return;
+  };
 
   # Retrieve based on oauth
   my $mkey = 'RSA.'.
@@ -197,13 +217,21 @@ sub _signer {
   # Sign magic envelope
   $me->sign( { key => $mkey } );
 
-  return $plugin->_render_me($c,$me);
+#  return $plugin->_render_me($c,$me);
+  return $c->respond_to(
+    'me-json'    => $me->to_json,
+    'me-compact' => $me->to_compact,
+    'text'       => $me->to_compact,
+    'all'        => $me->to_xml
+  );
 };
 
-sub _all_replies {
-  my $c = shift;
+sub _salmon_response {
+  my $c       = shift;
+  my $req     = $c->req;
+  my $plugins = $c->app->plugins;
 
-  my $req = $c->req;
+  my $action = 'reply'; # 'mention
 
   # Verify OAuth
   # 401 if not correct
@@ -211,108 +239,76 @@ sub _all_replies {
 
   # Verify MagicSignature
   # 400 if not correct
-  if ($req->body) {
-    my $me = $c->magicenvelope($req->body);
-    unless ($me) {
-      return $c->render(
-	status   => 400,
-	template => 'salmon',
-	title    => 'Salmon Error',
-	content  => 'The posted magic '.
-	  'envelope seems '.
-	    'to be empty.',
-	template_class => __PACKAGE__
-      );
-    };
 
-    # my $author = $self->_discover_author($me);
+  my $me;
 
-    # my $verb = $c->activity($me)->verb;
+  # Magic envelope is not valid
+  if (!$req->body || !($me = $c->magicenvelope($req->body))) {
 
-    $c->app->plugins->run_hook( 'before_salmon_reply_verification'
-				  => $c, $me);
+    # Error
+    return $c->render(
+      status   => 400,
+      template => 'salmon',
+      title    => 'Salmon Error',
+      content  => 'The posted magic ' .
+	          'envelope seems ' .
+	          'to be empty.',
+      template_class => __PACKAGE__
+    )
+  };
 
-    # verification
+  # my $author = $self->_discover_author($me);
+  # my $verb = $c->activity($me)->verb;
 
-    # Ceck Timestamp
-    # 400 if not valid
+  $plugins->emit_hook(
+    'before_salmon_' . $action . '_verification' => ($c, $me)
+  );
 
-    # Further Checks. Via hook.
+  # Get authors public keys
+  my $public_keys = $c->get_magickeys(
+    acct      => 'acct:akron@sojlicio.us', # $user_uri,
+    discovery => 0
+  );
 
-    $c->app->plugins->run_hook( 'on_salmon_reply'
-				  => $c, $me);
+  # verification
+  # Check Timestamp
+  #REQUIRED: Check the atom:updated timestamp on the Atom entry against the current server time and the validity period of the signing key. The timestamp SHOULD be no more than one hour behind the current time, and the signing key's validity period MUST cover the atom:updated timestamp. Error code (if provided): 400 Bad Request. The server MAY provide a human readable string in the response body. 
+
+  # Todo: Hook for further checks
+
+  # Verify magic envelope
+  if ($me->verify($public_keys)) {
+
+    # Hook on salmon reply
+    $plugins->emit_hook(
+      'on_salmon_' . $action => ($c, $me)
+    );
 
     unless ($c->rendered) {
       $c->render(
 	status         => 200,
-	template       => 'salmon-reply-ok',
+	template       => 'salmon-' . $action . '-ok',
 	template_class => __PACKAGE__
       );
     };
-
     return;
-
-  } else {
-    return $c->render(
-      status   => 400,
-      template => 'salmon',
-      title    => 'Salmon Error',
-      content  => 'The posted magic '.
-	'envelope seems '.
-	  'to be empty.',
-      template_class => __PACKAGE__
-    );
   };
+
+  # Maybe request new magickeys,
+  # in case there is a caching error
+
+  # 400 if not verified
+  return $c->render(
+    status   => 400,
+    template => 'salmon',
+    title    => 'Salmon Error',
+    content  => 'The posted magic ' .
+                "envelope can't be validated.",
+    template_class => __PACKAGE__
+  );
 };
 
 
-sub _mentioned {
-  my $c = shift;
-
-  my $req = $c->req;
-
-  if ($req->body) {
-    my $me = $c->magicenvelope($req->body);
-    unless ($me) {
-      return $c->render(
-	status   => 400,
-	template => 'salmon',
-	title    => 'Salmon Error',
-	content  => 'The posted magic '.
-	  'envelope seems '.
-	    'to be empty.',
-	template_class => __PACKAGE__
-      );
-    };
-
-    $c->app->plugins->run_hook( 'before_salmon_mention_verification'
-				  => $c, $me);
-
-    # my $author = $self->discover_author($me);
-
-    $c->app->plugins->run_hook( 'on_salmon_mention'
-				  => $c, $me);
-
-    unless ($c->rendered) {
-      $c->render(
-	status => 200,
-	template => 'salmon-mentioned-ok',
-	template_class => __PACKAGE__
-      );
-    };
-
-  } else {
-    return $c->render(
-      status   => 400,
-      template => 'salmon',
-      title    => 'Salmon Error',
-      content  => 'The posted magic '.
-	'envelope seems '.
-	  'to be empty.',
-      template_class => __PACKAGE__
-    );
-  };
-};
 
 sub _discover_author {
   my $plugin = shift;
@@ -329,87 +325,75 @@ sub _discover_author {
   return;
 };
 
-# Render according to the accepted format
-# Todo: respond_to
-sub _render_me {
+
+# Specific to Sojolicious
+sub salmon_send {
   my $plugin = shift;
   my $c      = shift;
-  my $me     = shift;
+  my $entry  = shift;
+  my $param  = shift;
 
-  my $accept = $c->req->headers->header('Accept');
+  # param: { key_id      => 'key_4', # Todo: Allow multiple signing
+  #          send_to     => ['acct:bob@sojolicio.us'],
+  #          mentioned   => ['acct:alice@sojolicio.us'],
+  #          in_reply_to => 'https://sojolicio.us/blog/1' }
 
-  unless ($accept) {
-    return $c->render(
-      'format' => 'me-xml',
-      'data'   => $me->to_xml
+  # The user, who wants to send the salmon
+  my $user   = 'acct:akron@sojolicio.us';
+
+  # Get send_to parameter or create
+  my @send_to = $param->{send_to} ?
+    ( ref($param->{send_to}) eq 'ARRAY' ?
+	@{$param->{send_to}} : ($param->{send_to})) : ();
+
+  # Resource of the reply
+  if (defined $param->{in_reply_to}) {
+    $entry->add_in_reply_to(
+      $param->{in_reply_to} => { href => $param->{in_reply_to} }
     );
-  } else {
-
-    # Check, which format should be delivered
-    foreach my $type ( _accept( $accept ) ) {
-
-      # Accept xml
-      if ($type =~ m{(?:xml|/\*$)}) {
-	return $c->render(
-	  'format' => 'me-xml',
-	  'data'   => $me->to_xml
-	);
-      }
-
-      # Accept json
-      elsif ($type =~ m{json}) {
-	return $c->render(
-	  'format' => 'me-json',
-	  'data'   => $me->to_json
-	);
-      }
-
-      # Accept compact format
-      elsif ($type =~ m{(?:text|compact)}) {
-	return $c->render(
-	  'format' => 'me-compact',
-	  'data'   => $me->to_compact
-	);
-      };
-    };
-
   };
 
-  # The accepted format cannot be delivered.
-  return $c->render(
-    'format' => 'text/plain',
-    'status' => 406,
-    'data' => q{The requested Content-Type can not be delivered.}
+  # Todo: Discover Salmon endpoints of the mentioned users
+  if (exists $param->{mentioned} ) {
+    foreach ( @{ $param->{mentioned} } ) {
+      $entry->add_link(mentioned => $_);
+    };
+    push(@send_to, $_ );
+  };
+
+  # Add updated timestamp
+  $entry->add_updated;
+
+  my $me = $c->magicenvelope({
+    data      => $entry->to_pretty_xml,
+    data_type => 'application/atom+xml'
+  });
+
+  # todo: create provenance
+
+  # Get authors public keys
+  # Todo: Allow multiple signin
+  my $magickeys = $c->get_magickeys(
+    acct      => 'acct:akron@sojlicio.us', # $user_uri,
+    key_id    => exists $param->{key_id} ? $param->{key_id} : undef,
+    discovery => 0
   );
-};
 
-# Sort by accept string
-sub _accept {
-  my $accept = shift;
-
-  my @accept_new;
-
-  foreach (split(/\s*,\s*/, $accept)) {
-    my @content_type = split(/\s*;\s*/, $_ );
-    my %accept_v = (
-      type => shift(@content_type)
-    );
-    foreach (@content_type) {
-      my ($k, $v) = split(/\s*=\s*/, $_);
-      $accept_v{$k} = $v;
-    };
-    unless ($accept_v{q}) {
-      $accept_v{q} = 1;
-    };
-    push(@accept_new, \%accept_v);
+  # Unable to sign magicenvelope
+  if (!$magickeys || !$me->sign( @{ $magickeys->[0] } )) {
+    $c->app->log->warn('Unable to sign magicenvelope');
+    return;
   };
 
-  return (
-    map( $_->{type},
-	 sort { $a->{q} <=> $b->{q} } @accept_new
-       ));
-};
+  # Send magicenvelope
+  # Todo: Allow async sending and discovery
 
+  # Todo: discover $param->{in_reply_to}
+
+  foreach my $uri (@send_to) {
+    # may be salmon endpoint, maybe lrrd, maybe webfinger
+  };
+};
 
 1;
 

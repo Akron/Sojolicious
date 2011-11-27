@@ -26,7 +26,7 @@ sub register {
   $mojo->plugin('XML' => {
     new_ostatus => ['Atom',
 		    'ActivityStreams',
-		    'Atom-Threading',
+		    'Atom::Threading',
 		    'GeoRSS',
 		    'OStatus'] # PortableContacts
   });

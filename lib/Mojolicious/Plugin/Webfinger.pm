@@ -2,33 +2,27 @@ package Mojolicious::Plugin::Webfinger;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 
-has 'host';
-has 'secure' => 0;
-
-# Todo: Make lrdd including Webfinger
-
 # Register Plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
-  # Load Host-Meta if not already loaded.
-  # This automatically loads the XRD and Endpoints plugins.
-  unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
-    $mojo->plugin('HostMeta', {'host' => $param->{'host'} });
+  # Load LRDD if not already loaded.
+  # This automatically loads the Hostmeta, XRD and Endpoints plugins.
+  unless (exists $mojo->renderer->helpers->{'lrdd'}) {
+    $mojo->plugin('LRDD');
   };
-
-  if (exists $param->{host}) {
-    $plugin->host( $param->{host} );
-  } else {
-    $plugin->host( $mojo->hostmeta('host') || 'localhost' );
-  };
-
-  $plugin->secure( $param->{secure} );
 
   # Add 'webfinger' helper
   $mojo->helper(
     'webfinger' => sub {
-      return $plugin->_get_webfinger(@_);
+      my $c = shift;
+      my ($user, $domain, $norm) = $c->parse_acct( shift );
+
+      # If local, serve local
+      if ($domain ~~ [$c->req->url->host, 'localhost']) {
+	return $plugin->_serve_webfinger($c, $norm);
+      };
+      return $c->lrdd($norm => $domain);
     });
 
   # Add 'parse_acct' helper
@@ -42,8 +36,11 @@ sub register {
       # Split user from domain
       my ($user, $domain) = split('@', lc $acct);
 
-      # Use host domain if no domain is given
-      $domain ||= $plugin->host;
+      # Acct is not valid
+      return unless $user =~ /^[-_\w]+$/;
+
+      # Use request host if no host is given
+      $domain ||= $c->req->url->host || 'localhost';
 
       # Create norm writing
       my $norm = 'acct:' . $user . '@' . $domain;
@@ -52,163 +49,36 @@ sub register {
       return $norm;
     });
 
-  # Add 'webfinger' shortcut
-  $mojo->routes->add_shortcut(
-    'webfinger' => sub {
-      my ($route, $param_key) = @_;
+  # on prepare webfinger hook
+  $mojo->hook(
+    'on_prepare_lrdd' => sub {
+      my ($lrdd_plugin, $c, $uri, $ok_ref) = @_;
 
-      # Set endpoint-uri
-      $route->endpoint(
-	'webfinger' => {
-	  scheme => $plugin->secure ? 'https' : 'http',
-	  host   => $plugin->host,
-	  query  => $param_key ? [ $param_key => '{uri}' ] : undef
-	});
+      my ($user, $domain, $norm);
+      if (!$$ok_ref && ($uri = $c->parse_acct($uri))) {
 
-      # Retrieve Endpoint-Uri
-      my $endpoint = $mojo->endpoint('webfinger');
+	# Emit 'on_prepare_webfinger' hook
+	$mojo->plugins->emit_hook(
+	  'on_prepare_webfinger' => (
+	    $plugin, $c, $uri, $ok_ref
+	  ));
 
-      # Create lrdd link attributes
-      my $lrdd = { type => 'application/xrd+xml' };
-
-      # If It's a template, point the lrdd to it
-      my $type = index($endpoint, '{uri}') > 0 ? 'template' : 'href';
-      $lrdd->{$type} = $endpoint;
-
-      # Add Route to Hostmeta
-      $mojo->hostmeta->add_link('lrdd' => $lrdd)
-	->comment('Webfinger')
-	  ->add('Title','Resource Descriptor');
-
-      # Point the route to a callback
-      $route->to(
-	cb => sub {
-	  my $c = shift;
-
-	  # Get uri from route
-	  my $uri = $c->stash('uri');
-	  $uri = $c->param($param_key) if ($param_key && !$uri);
-	  $uri = $c->parse_acct($uri);
-
-	  # Run 'on_prepare_webfinger' hook
-	  my $ok = 0;
-	  $mojo->plugins->emit_hook(
-	    'on_prepare_webfinger' => (
-	      $plugin, $c, $uri, \$ok
-	    ));
-
-	  # uri was not resolved
-	  return $c->render_not_found unless $ok;
-
+	if ($$ok_ref) {
 	  # Get local xrd document
-	  my $xrd = $plugin->_get_finger($c, $uri);
+	  my $xrd = $plugin->_serve_webfinger($c, $uri);
 
 	  # Serve local XRD document
-	  return $c->render_xrd($xrd) if $xrd;
-
-	  # Not found
-	  return $c->render_not_found;
-	});
-    });
+	  $c->render_xrd($xrd) if $xrd;
+	};
+      };
+      return;
+    }
+  );
 };
 
-# Fetch webfinger
-sub _get_webfinger {
-  my $plugin = shift;
-  my $c      = shift;
-
-  # Get user and domain
-  my ($user, $domain, $norm) = $c->parse_acct( shift );
-
-  if ($domain eq $plugin->host) {
-    return $plugin->_get_finger($c, $norm);
-  };
-
-  # Hook for caching
-  my $acct_xrd;
-  $c->app->plugins->emit_hook(
-    'before_fetching_webfinger' =>
-      ( $c,$norm,\$acct_xrd )
-    );
-
-  # Serve XRD from cache
-  return $acct_xrd if $acct_xrd;
-
-  # Get host-meta from domain
-  my $domain_hm = $c->hostmeta($domain);
-
-  # No host-meta found
-  return undef unless $domain_hm;
-
-  # Returns a Mojo::DOM node
-  my $lrdd = $domain_hm->get_link('lrdd');
-
-  my $webfinger_uri;
-
-  # Get webfinger uri by using template
-  if ($webfinger_uri = $lrdd->{'template'}) {
-    my $acct = b($norm)->url_escape;
-    $webfinger_uri =~ s/\{uri\}/$acct/;
-  }
-
-  # Get webfinger uri by using href
-  elsif (not ($webfinger_uri = $lrdd->{'href'})) {
-    return undef;
-  };
-
-  my $ua = $c->ua->max_redirects(3);
-
-#    # If the Uri has no host-information:
-#    # Problematic, when there was a redirect like at yahoo.com!
-#    if ($webfinger_uri !~ /^https?:/) {
-#	# Todo: Get xml:base
-#        my $new_uri = Mojo::URL->new($webfinger_uri);
-#	$new_uri->host($domain);
-#	$new_uri->scheme('https');
-#
-#        if ($webfinger_uri =~ /^\//) {
-#
-#        } else {
-#
-#	};
-#
-#	$acct_doc = $ua->get($new_uri);
-#	if ($acct_doc) {
-#	} else {
-#	    $new_uri->scheme('http');
-#	    # ...
-#	};
-#
-#     } else {
-
-  # Webfinger XRD document
-  my $acct_xrd_doc = $ua->get($webfinger_uri);
-
-  # Webfinger request was a success
-  if ($acct_xrd_doc &&
-	$acct_xrd_doc->res->is_status_class(200)) {
-
-    # Return Mojolicious::Plugin::XRD object
-    $acct_xrd = $c->new_xrd($acct_xrd_doc->res->body);
-
-    # Retrieved document is no XRD
-    return undef unless $acct_xrd;
-
-    # Hook for caching
-    $c->app->plugins->emit_hook(
-      'after_fetching_webfinger'=> (
-	$c, $norm, \$acct_xrd, $acct_xrd_doc->res
-      ));
-
-    return $acct_xrd;
-  };
-
-  # Found no webfinger document
-  return undef;
-};
 
 # Serve webfinger
-sub _get_finger {
+sub _serve_webfinger {
   my $plugin = shift;
   my $c      = shift;
 
@@ -217,7 +87,7 @@ sub _get_finger {
 
   # Get local account data
   if (!$domain ||
-	$domain eq $plugin->host) {
+      $domain ~~ [$c->req->url->host, 'localhost']) {
 
     my $wf_xrd = $c->new_xrd;
     $wf_xrd->add('Subject' => $norm);
@@ -225,12 +95,11 @@ sub _get_finger {
     # Run hook
     $c->app->plugins->emit_hook(
       'before_serving_webfinger' => (
-	$c, $norm, $wf_xrd
+	$plugin, $c, $norm, $wf_xrd
       ));
 
     # Return webfinger document
     return $wf_xrd;
-
   };
 
   return undef;
@@ -250,49 +119,33 @@ Mojolicious::Plugin::Webfinger - Webfinger Plugin
   $app->plugin('Webfinger');
 
   my $r = $app->routes;
-  $r->route('/webfinger/:uri')->webfinger;
+  $r->route('/webfinger/:uri')->lrdd;
 
-  my $profile_page = 
+  my $profile_page =
     $c->webfinger('acct:bob@example.org')
         ->get_link('describedby')
         ->attrs->{'href'};
 
   # Mojolicious::Lite
   plugin 'Webfinger';
-  (any '/webfinger')->webfinger;
+  (any '/webfinger')->lrdd;
 
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::Webfinger> provides several functions for
 the Webfinger Protocol (see L<http://code.google.com/p/webfinger/wiki/WebFingerProtocol|Specification>).
-
-=head1 ATTRIBUTES
-
-=head2 C<host>
-
-  $wf->host('sojolicio.us');
-  my $host = $wf->host;
-
-The host for the webfinger domain.
-
-=head2 C<secure>
-
-  $wf->secure(1);
-  my $sec = $wf->secure;
-
-Use C<http> or C<https>.
+It hooks into link-based descriptor discovery as provided by
+L<Mojolicious::Plugin::LRDD>.
 
 =head1 HELPERS
 
 =head2 C<webfinger>
 
     # In Controllers:
-    my $xrd = $self->webfinger;
+    my $xrd = $self->webfinger('me');
     my $xrd = $self->webfinger('acct:me@sojolicio.us');
 
 Returns the Webfinger L<Mojolicious::Plugin::XRD> document.
-If no account name is given, the user's own webfinger document
-is returned.
 
 =head2 C<parse_acct>
 
@@ -301,67 +154,52 @@ is returned.
         $self->parse_acct('acct:me@sojolicious');
     my $norm = $self->parse_acct('me');
 
-Returns the the user and the domain part of an acct scheme and
+Returns the user, the domain part of an acct scheme and
 the normative writing. It accepts short writings like 'acct:me'
 and 'me' as well as full acct writings.
 In a string context, it returns the normative writing.
 
-=head1 SHORTCUTS
-
-=head2 C<webfinger>
-
-  $r->route('/test/:uri')->webfinger;
-  # Webfinger at /test/{uri}
-
-  $r->route('/test/')->webfinger('q');
-  # Webfinger at /test/q={uri}
-
-  $r->route('/test/')->webfinger;
-  # Webfinger at /test/
-
-L<Mojolicious::Plugin::Webfinger> provides a route shortcut
-for serving a C<lrdd> Link relation in C</.well-known/host-meta>
-(see L<Mojolicious::Plugin::HostMeta).
-
-Please set a C<host> as well as the C<secure> parameter when
-loading the plugin, so the path is correct.
-
-  $app->plugin('webfinger',
-               'host' => 'example.org',
-               'secure' => 1)
-
 =head1 HOOKS
 
-=over 2
+In this plugin, Webfinger is treated as a special case
+of link-based ressource descriptor discovery. Please refer
+to L<Mojolicious::Plugin::LRDD> for further hooks
+regarding discovery.
 
-=item C<before_fetching_webfinger>
+=item C<on_prepare_webfinger>
 
-This hook is run before a webfinger account is fetched.
-This is useful for chaching. The hook passes the current
-??? object, the account name and an empty string reference,
-meant to refer to the xrd_object.
-If the XRD reference is filled, the fetching will not proceed. 
+  $mojo->hook(
+    'on_prepare_webfinger' => sub {
+      my ($plugin, $c, $acct, $ok_ref) = @_;
+      if ($uri eq 'akron@sojolicio.us') {
+        $$ok_ref = 1;
+      };
+    });
 
-=item C<after_fetching_webfinger>
-
-This hook is run after a webfinger document is retrieved.
-This can be used for caching.
-The hook passes the current ??? object, the account name,
-a string reference, meant to refer to the XRD object, and the
-L<Mojo::Message::Response> object from the request. 
+This hook is run before a webfinger document is served.
+The hook passes the plugin object, the current controller object,
+the acct ressource and a scalar reference.
+If a ressource description exists for a given acct name,
+the scalar of the scalar reference should be set to true.
 
 =item C<before_serving_webfinger>
 
-This hook is run before a webfinger document is served.
-The hook passes the current ??? object, the account name
-and the XRD object. 
+  $mojo->hook(
+    'before_serving_webfinger' => sub {
+      my ($plugin, $c, $acct, $wf_xrd) = @_;
+      $wf_xrd->add_link('hcard' => { href => '/me.hcard' } );
+    });
+
+This hook is run before the XRD document is served.
+The hook passes the plugin object, the current controller object,
+the acct name and the XRD object.
 
 =back
 
 =head1 DEPENDENCIES
 
 L<Mojolicious> (best with SSL support),
-L<Mojolicious::Plugin::HostMeta>.
+L<Mojolicious::Plugin::LRDD>.
 
 =head1 AVAILABILITY
 

@@ -8,7 +8,7 @@ our %endpoints;
 
 # Register Plugin
 sub register {
-  my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo, $gparam) = @_;
 
   # Add 'endpoint' shortcut
   $mojo->routes->add_shortcut(
@@ -36,48 +36,18 @@ sub register {
       };
 
       # Set Endpoint url
-      my $endpoint_url = $mojo->url_for($name => 
-					  %placeholders)->to_abs->clone;
+      my $endpoint_url = $mojo->url_for(
+	$name => %placeholders)->to_abs->clone;
 
       for ($endpoint_url) {
-
-	# Host
-	$_->host($param->{host}) if exists $param->{host};
-
-	# Port
-	$_->port( $param->{port} ) if exists $param->{port};
-
-	# Scheme
-	if (exists $param->{scheme}) {
-	  $_->scheme( $param->{scheme} );
-	}
-
-	# Secure flag
-	# This is DEPRECATED!
-	elsif (exists $param->{secure}) {
-	  $mojo->log->warn('secure is deprecated!');
-	  $_->scheme( $param->{secure} ? 'https' : 'http' );
-	}
-
-	# Defaults to http
-	else {
-	  $_->scheme( 'http' );
-	};
-
-	# Set query parameter
-	if (exists $param->{query}) {
-	  $_->query( $param->{query} );
-	};
+	$_->host($param->{host})     if exists $param->{host};
+	$_->port($param->{port})     if exists $param->{port};
+	$_->scheme($param->{scheme}) if exists $param->{scheme};
+	$_->query($param->{query})   if exists $param->{query};
       };
 
-      my $endpoint = $endpoint_url->to_string;
-
-      # Unescape template variables
-      $endpoint =~
-	s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
-
       # Set to stash
-      $endpoints{$name} = $endpoint;
+      $endpoints{$name} = $endpoint_url;
 
       return $route;
     });
@@ -91,11 +61,30 @@ sub register {
 
       # Endpoint undefined
       unless (defined $endpoints{$name}) {
+	$c->app->log->warn("No endpoint defined for $name.");
 	return $c->url_for($name)->to_abs->to_string;
       };
 
       # Get url for route
-      my $endpoint = $endpoints{$name};
+      my $endpoint_url = $endpoints{$name};
+
+      # Add request information
+      my $req_url = $c->req->url;
+      for ($endpoint_url) {
+	$_->host($req_url->host)     unless $_->host;
+	unless ($_->scheme) {
+	  if ($_->host) {
+	    $_->scheme($req_url->scheme || 'http');
+	  };
+	};
+	$_->port($req_url->port)     unless $_->port;
+      };
+
+      my $endpoint = $endpoint_url->to_abs->to_string;
+
+      # Unescape template variables
+      $endpoint =~
+	s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
 
       # Get stash or defaults hash
       my $stash_param = ref($c) eq 'Mojolicious::Controller' ?
@@ -143,7 +132,7 @@ sub register {
       return $endpoint;
     });
 
-  # Add 'endpoints' helper
+  # Add 'get_endpoints' helper
   $mojo->helper(
     'get_endpoints' => sub {
       my $c = shift;

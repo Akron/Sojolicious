@@ -27,15 +27,18 @@ my $PLURAL_RE = qr/^(?:email|
 my $VALID_RE = qr(^$SINGULAR_RE|$PLURAL_RE$);
 my $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
 
+
 # Return XML document
 sub to_xml {
   return shift->_xml->to_pretty_xml;
 };
 
-# Return cleaned xml serialized object
+
+# Return cleaned XML serialized object
 sub _xml {
   my $self = shift;
 
+  # New XML object
   my $entry = Mojolicious::Plugin::XML::Base->new('entry');
 
   foreach my $key (keys %$self) {
@@ -43,9 +46,13 @@ sub _xml {
     # Normal vattributes
     if (!ref $self->{$key} && $key =~ $SINGULAR_RE) {
 
+      # Is no note
       unless ($key eq 'note') {
 	$entry->add($key, $self->{$key});
-      } else {
+      }
+
+      # Is a note
+      else {
 	$entry->add($key => {-type => 'raw'} =>
 		      '<![CDATA['.$self->{$key}.']]>');
       };
@@ -53,7 +60,7 @@ sub _xml {
 
     # Complex attributes
     else {
-      if (ref($self->{$key}) eq 'HASH'  && $key =~ $SINGULAR_RE) {
+      if (ref($self->{$key}) eq 'HASH'  && $key =~ /$SINGULAR_RE/) {
 	my $node = $entry->add($key);
 	while (my ($sub_key, $sub_value) = each (%{$self->{$key}})) {
 	  $node->add($sub_key, $sub_value);
@@ -63,6 +70,8 @@ sub _xml {
       # Plural attributes
       elsif ($key =~ $PLURAL_RE) {
 	foreach my $sub_node (@{$self->{$key}}) {
+
+	  # Complex sub attribute
 	  if ((ref $sub_node) eq 'HASH') {
 	    my $node = $entry->add($key);
 	    while (my ($sub_key, $sub_value) = each (%{$sub_node})) {
@@ -79,6 +88,8 @@ sub _xml {
 	      };
 	    };
 	  }
+
+	  # Simple sub attribute
 	  else {
 	    $entry->add($key, $sub_node);
 	  };
@@ -90,10 +101,12 @@ sub _xml {
   return $entry;
 };
 
+
 # Return JSON document
 sub to_json {
   return Mojo::JSON->new->encode( shift->_json );
 };
+
 
 # Return cleaned hash
 sub _json {

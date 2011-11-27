@@ -17,74 +17,75 @@ my $app = $t->app;
 
 $app->plugin('Util::Endpoint');
 
+my $endpoint_host = 'endpoi.nt';
+
 # Set endpoint
 my $r_test = $app->routes->route('/test');
 $r_test->endpoint('test1' =>
-		  {
-		      host => 'sojolicio.us',
+		    {
+		      host   => $endpoint_host,
 		      scheme => 'https'
-		  });	
+		    });
 
 is($app->endpoint('test1'),
-   'https://sojolicio.us/test',
+   "https://$endpoint_host/test",
    'endpoint 1');
 
 $r_test->endpoint(test2 => {
-    host => 'sojolicio.us',
+    host => $endpoint_host,
     scheme => 'https',
     query => [ a => '{var1}'] });
 
 is($app->endpoint('test2'),
-   'https://sojolicio.us/test?a={var1}',
+   'https://'.$endpoint_host.'/test?a={var1}',
    'endpoint 2');
 
 is($app->endpoint('test2', {var1 => 'b'}),
-   'https://sojolicio.us/test?a=b',
+   'https://'.$endpoint_host.'/test?a=b',
    'endpoint 3');
 
 $r_test->endpoint(test3 => {
-		      host => 'sojolicio.us',
-			  query => [ a => '{var1}',
-				     b => '{var2}'
-			  ]});
-
+  host => $endpoint_host,
+  query => [ a => '{var1}',
+	     b => '{var2}'
+	   ]});
 
 is($app->endpoint('test3', {var1 => 'b'}),
-   'http://sojolicio.us/test?a=b&b={var2}',
+   'http://'.$endpoint_host.'/test?a=b&b={var2}',
    'endpoint 4');
 
 is($app->endpoint('test3', {var2 => 'd'}),
-   'http://sojolicio.us/test?a={var1}&b=d',
+   'http://'.$endpoint_host.'/test?a={var1}&b=d',
    'endpoint 5');
 
 is($app->endpoint('test3', {var1 => 'c', var2 => 'd'}),
-   'http://sojolicio.us/test?a=c&b=d',
+   'http://'.$endpoint_host.'/test?a=c&b=d',
    'endpoint 6');
 
 $r_test = $app->routes->route('/suggest');
 $r_test->endpoint(test4 => {
-		      host => 'sojolicio.us',
+		      host => $endpoint_host,
 		      query => [ q => '{searchTerms}',
 		                 start => '{startIndex?}'
 			  ]});
 
 is($app->endpoint('test4'),
-   'http://sojolicio.us/suggest?q={searchTerms}&start={startIndex?}',
+   'http://'.$endpoint_host.'/suggest?q={searchTerms}&start={startIndex?}',
    'endpoint 7');
 
 is($app->endpoint('test4' => { searchTerms => 'simpsons'}),
-   'http://sojolicio.us/suggest?q=simpsons&start={startIndex?}',
+   'http://'.$endpoint_host.'/suggest?q=simpsons&start={startIndex?}',
    'endpoint 8');
 
 is($app->endpoint('test4' => { startIndex => 4}),
-   'http://sojolicio.us/suggest?q={searchTerms}&start=4',
+   'http://'.$endpoint_host.'/suggest?q={searchTerms}&start=4',
    'endpoint 9');
 
 is($app->endpoint('test4' => {
                      searchTerms => 'simpsons',
                      '?' => undef
                   }),
-   'http://sojolicio.us/suggest?q=simpsons',
+   'http://'.$endpoint_host.'/suggest?q=simpsons',
    'endpoint 10');
 
 my $acct    = 'acct:akron@sojolicio.us';
@@ -93,7 +94,7 @@ is($app->endpoint('test4' => {
                      searchTerms => $acct,
                      startIndex => $btables
                   }),
-   'http://sojolicio.us/suggest?' . 
+   'http://'.$endpoint_host.'/suggest?' . 
    'q=' . b($acct)->url_escape . 
    '&start=' . b($btables)->url_escape,
    'endpoint 11');
@@ -160,19 +161,19 @@ is($app->endpoint('test6' =>
 my $hash = $app->get_endpoints;
 
 is ($hash->{test1},
-    'https://sojolicio.us/test',
+    'https://'.$endpoint_host.'/test',
     'hash-test 1');
 
 is ($hash->{test2},
-    'https://sojolicio.us/test?a={var1}',
+    'https://'.$endpoint_host.'/test?a={var1}',
     'hash-test 2');
 
 is ($hash->{test3},
-    'http://sojolicio.us/test?a={var1}&b={var2}',
+    'http://'.$endpoint_host.'/test?a={var1}&b={var2}',
     'hash-test 3');
 
 is ($hash->{test4},
-    'http://sojolicio.us/suggest?q={searchTerms}&start={startIndex?}',
+    'http://'.$endpoint_host.'/suggest?q={searchTerms}&start={startIndex?}',
     'hash-test 4');
 
 is ($hash->{test5},

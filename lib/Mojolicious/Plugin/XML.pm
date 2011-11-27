@@ -81,6 +81,7 @@ sub register {
 	return Mojolicious::Plugin::XML::Base->new( @_ );
       });
 
+
     # Add 'render_xml' helper
     $mojo->helper(
       'render_xml' => sub {
