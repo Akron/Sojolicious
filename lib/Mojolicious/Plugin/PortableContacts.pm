@@ -68,10 +68,9 @@ sub register {
 	  my ($plugin, $c, $xrd_ref) = @_;
 
 	  # The endpoint now may return the correct host
-	  my $poco = { rel  => $poco_ns,
-		       href => $mojo->endpoint('poco') };
 
-	  for ($xrd_ref->add_link($poco)) {
+	  for ($xrd_ref->add_link($poco_ns =>
+	      {href => $c->endpoint('poco')})) {
 	    $_->comment('Portable Contacts');
 	    $_->add('Title','Portable Contacts API Endpoint');
 	  };
