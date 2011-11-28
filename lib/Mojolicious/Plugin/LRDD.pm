@@ -39,9 +39,9 @@ sub register {
 	  query  => $param_key ? [ $param_key => '{uri}' ] : undef
 	});
 
-      # Add Route to Hostmeta
+      # Add Route to Hostmeta - exactly once
       $mojo->hook(
-	before_serving_hostmeta => sub {
+	on_prepare_hostmeta => sub {
 	  my ($hm_plugin, $c, $hostmeta) = @_;
 
 	  # Retrieve Endpoint-Uri

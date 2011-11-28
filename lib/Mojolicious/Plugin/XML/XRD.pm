@@ -30,11 +30,13 @@ sub new {
 # Add Property
 sub add_property {
   my $self = shift;
+  my $type = shift;
 
-  my %hash = (
-    type => shift,
-    %{ shift(@_) } 
-  );
+  my %hash =
+    (ref($_[0]) && ref($_[0]) eq 'HASH') ?
+      %{ shift(@_) } : ();
+
+  $hash{type} = $type;
 
   return $self->add('Property' => \%hash => @_ );
 };
@@ -56,10 +58,14 @@ sub get_property {
 # Add Link
 sub add_link {
   my $self = shift;
-  my %hash = (
-    rel => shift,
-    %{ shift(@_) } 
-  );
+  my $rel = shift;
+
+  my %hash =
+    (ref($_[0]) && ref($_[0]) eq 'HASH') ?
+      %{ shift(@_) } : ();
+
+  $hash{rel} = $rel;
+
   return $self->add('Link' => \%hash => @_ );
 };
 

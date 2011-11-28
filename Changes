@@ -1,7 +1,8 @@
-0.13 2011-11-27
+0.13 2011-11-28
         - Half working version of MagicSignatures.
         - Added LRDD support.
         - Fundamental changes to Util::Endpoint.
+        - Small improvements to Hostmeta.
 
 0.12 2011-11-09
         - Added Oro.

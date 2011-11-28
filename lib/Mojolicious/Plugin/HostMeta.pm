@@ -36,6 +36,22 @@ sub register {
 
     # Add host-information to host-meta
     $hostmeta->add_host($plugin->host);
+  }
+
+  # Get host information on first request
+  else {
+    $mojo->hook(
+      'on_prepare_hostmeta' =>
+	sub {
+	  my ($plugin, $c, $xrd_ref) = @_;
+	  my $host = $c->req->url->host;
+	  if ($host) {
+	    $plugin->host($host);
+
+	    # Add host-information to host-meta
+	    $hostmeta->add_host($host);
+	  }
+	});
   };
 
   # use https or http
@@ -47,19 +63,13 @@ sub register {
       my $c = shift;
 
       if (!$_[0]) {
-	my $hostmeta_clone = dclone($hostmeta);
-	$c->app->plugins->emit_hook(
-	  'before_serving_hostmeta',
-	  $plugin,
-	  $c,
-	  $hostmeta_clone);
 
-	return $hostmeta_clone;
-      }
-
-      elsif ($_[0] eq 'host') {
-	return $plugin->host unless $_[1];
-	return $plugin->host($_[1]);
+	return $plugin->_prepare_and_serve($c, $hostmeta);
+#      }
+#
+#      elsif ($_[0] eq 'host') {
+#	return $plugin->host unless $_[1];
+#	return $plugin->host($_[1]);
       };
 
       return $plugin->_get_hostmeta($c, @_);
@@ -80,15 +90,7 @@ sub register {
     cb => sub {
       my $c = shift;
 
-      # Maybe testing, if the hook will release anything
-      my $hostmeta_clone = dclone($hostmeta);
-
-      $c->app->plugins->emit_hook(
-	'before_serving_hostmeta',
-	$plugin,
-	$c,
-	$hostmeta_clone);
-
+      my $hostmeta_clone = $plugin->_prepare_and_serve($c, $hostmeta);
       return $c->render_xrd($hostmeta_clone);
     });
 
@@ -179,6 +181,42 @@ sub _get_hostmeta {
   return $hostmeta_xrd;
 };
 
+
+# Run hooks for preparation and serving of hostmeta
+sub _prepare_and_serve {
+  my ($plugin,
+      $c,
+      $hostmeta) = @_;
+
+  my $plugins = $c->app->plugins;
+  my $ophm = 'on_prepare_hostmeta';
+
+  # Emit on_prepare_hostmeta only once
+  if ($plugins->has_subscribers( $ophm )) {
+    $plugins->emit_hook(
+      $ophm =>
+	($plugin,
+	 $c,
+	 $hostmeta));
+
+    # Unsubscribe all subscribers
+    foreach (@{$plugins->subscribers( $ophm )}) {
+      $plugins->unsubscribe($ophm => $_);
+    };
+  };
+
+  # Clone hostmeta reference
+  my $hostmeta_clone = dclone($hostmeta);
+
+  $plugins->emit_hook(
+    'before_serving_hostmeta' =>
+      ($plugin,
+       $c,
+       $hostmeta_clone));
+
+  return $hostmeta_clone;
+};
+
 1;
 
 __END__
@@ -257,6 +295,25 @@ the host's own hostmeta document.
 
 =over 2
 
+=item C<on_prepare_hostmeta>
+
+  package Mojolicious::Plugin::Foo;
+  use Mojo::Base 'Mojolicious::Plugin';
+
+  sub register {
+     my ($self, $mojo) = @_;
+     $mojo->hook('on_prepare_hostmeta' => sub {
+	my $plugin = shift;
+        my $c = shift;
+	my $hostmeta = shift;
+	$hostmeta->add_link('permanent');
+  };
+
+This hook is run when the host's own hostmeta document is
+prepared. The hook passes the plugin object, the current controller
+object and the hostmeta document.
+This hook is only emitted once for each subscriber.
+
 =item C<before_serving_hostmeta>
 
   package Mojolicious::Plugin::Foo;
@@ -264,7 +321,7 @@ the host's own hostmeta document.
 
   sub register {
      my ($self, $mojo) = @_;
-     $mojo->hook('before_hostmeta' => sub {
+     $mojo->hook('before_serving_hostmeta' => sub {
 	my $plugin = shift;
         my $c = shift;
 	my $hostmeta = shift;
