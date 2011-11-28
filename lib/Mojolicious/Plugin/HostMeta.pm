@@ -65,11 +65,12 @@ sub register {
       if (!$_[0]) {
 
 	return $plugin->_prepare_and_serve($c, $hostmeta);
-#      }
-#
-#      elsif ($_[0] eq 'host') {
-#	return $plugin->host unless $_[1];
-#	return $plugin->host($_[1]);
+      }
+
+      elsif ($_[0] eq 'host') {
+	warn "->hostmeta('host') is DEPRECATED!";
+	return $plugin->host unless $_[1];
+	return $plugin->host($_[1]);
       };
 
       return $plugin->_get_hostmeta($c, @_);

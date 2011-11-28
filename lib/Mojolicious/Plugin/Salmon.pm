@@ -25,6 +25,7 @@ sub register {
   if (defined $param->{host}) {
     $plugin->host($param->{host});
   } else {
+# TODO: This is not supported anymore!
     $plugin->host( $mojo->hostmeta('host') || 'localhost' );
   };
 
@@ -104,18 +105,22 @@ sub register {
       elsif ($param eq 'signer') {
 
 	# Todo: Fragen: Gibt es schon eine Signer-URI?
-	my $salmon_signer_url = $mojo->endpoint('salmon-signer');
 
+	# Add to hostmeta - exactly once
+	$mojo->hook(
+	  'on_prepare_hostmeta' =>
+	    sub {
+	      my ($plugin, $c, $xrd_ref) = @_;
+	      my $salmon_signer_url = $c->endpoint('salmon-signer');
 
-	# Todo - on hook like lrdd
-
-	# Add signer link to host-meta
-	my $link = $mojo->hostmeta->add_link(
-	  'salmon-signer',
-	  { href => $salmon_signer_url }
-	);
-	$link->comment('Salmon Signer Endpoint');
-	$link->add('Title' => 'Salmon Endpoint');
+	      # Add signer link to host-meta
+	      for($xrd_ref->add_link(
+		'salmon-signer' => { href => $salmon_signer_url })) {
+		$_->comment('Salmon Signer Endpoint');
+		$_->add('Title' => 'Salmon Endpoint');
+	      };
+	    }
+	  );
 
 	$route->post->to(
 	  'cb' => sub { $plugin->_signer( @_ ); }

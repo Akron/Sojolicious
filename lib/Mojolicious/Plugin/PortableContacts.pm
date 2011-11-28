@@ -43,6 +43,7 @@ sub register {
   if (exists $param->{host}) {
     $plugin->host( $param->{host} );
   } else {
+# TODO: This is not supported anymore!
     $plugin->host( $mojo->hostmeta('host') || 'localhost' );
   };
 
@@ -61,13 +62,23 @@ sub register {
 	  scheme => $plugin->secure ? 'https' : 'http'
 	});
 
-      # Add Route to Hostmeta
-      my $poco = { rel  => $poco_ns,
-		   href => $mojo->endpoint('poco') };
-      for ($mojo->hostmeta->add('Link', $poco)) {
-	$_->comment('Portable Contacts');
-	$_->add('Title','Portable Contacts API Endpoint');
-      };
+      # Add Route to Hostmeta - exactly once
+      $mojo->hook(
+	'on_prepare_hostmeta' => sub {
+	  my ($plugin, $c, $xrd_ref) = @_;
+
+	  # The endpoint now may return the correct host
+	  my $poco = { rel  => $poco_ns,
+		       href => $mojo->endpoint('poco') };
+
+	  for ($xrd_ref->add_link($poco)) {
+	    $_->comment('Portable Contacts');
+	    $_->add('Title','Portable Contacts API Endpoint');
+	  };
+
+	}
+      );
+
 
       # Todo: Check OAuth2 and fill $c->stash->{'poco_user_id'}
 
