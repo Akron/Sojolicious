@@ -3,6 +3,7 @@
         - Added LRDD support.
         - Fundamental changes to Util::Endpoint.
         - Small improvements to Hostmeta.
+        - Bugfixes to Util::Endpoint.
 
 0.12 2011-11-09
         - Added Oro.

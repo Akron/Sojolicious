@@ -30,7 +30,7 @@ sub register {
       # 'hub' is currently not supported
       return unless $param eq 'cb';
 
-      # Set endpoint if enabled
+      # Load 'endpoint' plugin
       unless (exists $mojo->renderer->helpers->{'endpoint'}) {
 	$mojo->plugin('Util::Endpoint');
       };
@@ -183,7 +183,7 @@ sub _change_subscription {
   my %post = ( callback => $param{'callback'} );
   foreach ( qw/mode topic verify
 	       lease_seconds secret/ ) {
-    $post{ $_ } = $param{ $_ } if exists $param{ $_ };
+    $post{ $_ } = $param{ $_ } if exists $param{ $_ } && $param{ $_ };
   };
 
   # Use verify token

@@ -123,7 +123,9 @@ sub _add_clean {
   my $self = shift;
 
   # If root use first element
-  if (!$self->parent && $self->tree->[1]->[0] eq 'pi') {
+  if (!$self->parent &&
+#	$self->tree->[1]->[0] &&
+	  ($self->tree->[1]->[0] eq 'pi')) {
     $self = $self->at('*');
   };
 
@@ -506,7 +508,8 @@ sub _root_element {
   if ($root->[0] eq 'root') {
     my $i = 1;
     while ($root->[$i] &&
-	   $root->[$i]->[0] ne 'tag') {
+	     $root->[$i]->[0] &&
+	       $root->[$i]->[0] ne 'tag') {
       $i++;
     };
     $tag = $root->[$i];

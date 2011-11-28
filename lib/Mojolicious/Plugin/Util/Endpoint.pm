@@ -65,13 +65,16 @@ sub register {
 	return $c->url_for($name)->to_abs->to_string;
       };
 
+      # Todo: Directly return full path if no placeholder is in effect
+
       # Get url for route
-      my $endpoint_url = $endpoints{$name};
+      my $endpoint_url = $endpoints{$name}->clone;
 
       # Add request information
-      my $req_url = $c->req->url;
+      my $req_url = $c->req->url->to_abs;
+
       for ($endpoint_url) {
-	$_->host($req_url->host)     unless $_->host;
+	$_->host($req_url->host) unless $_->host;
 	unless ($_->scheme) {
 	  if ($_->host) {
 	    $_->scheme($req_url->scheme || 'http');
