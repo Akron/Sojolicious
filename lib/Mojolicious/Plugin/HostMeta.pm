@@ -96,20 +96,6 @@ sub register {
       my $hostmeta_clone = $plugin->_prepare_and_serve($c, $hostmeta);
       return $c->render_xrd($hostmeta_clone);
     });
-
-
-#    $mojo->routes->route('/')->bridge(
-#	sub {
-#	    my $c = shift;
-#	    my $format = shift( @{ $mojo->types->detect(
-#				       $c->req->headers->accept
-#				       )});
-#	    if ($format eq $mojo->types('xrd')) {
-#		return 1;
-#	    };
-#	    return 0;
-#	} )->redirect_to(...)
-
 };
 
 

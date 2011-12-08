@@ -20,11 +20,7 @@ sub register {
 
   # Load Webfinger if not already loaded.
   unless (exists $mojo->renderer->helpers->{'webfinger'}) {
-    $mojo->plugin('Webfinger' =>
-		    {
-		      host   => $param->{'host'},
-		      secure => $param->{'secure'}
-		    });
+    $mojo->plugin('Webfinger');
   };
 
   # Add 'magicenvelope' helper
@@ -78,12 +74,10 @@ sub register {
       # Only allowed for one single key (for the moment)
       unless (defined $mkeys->[1]) {
 	my $mkey = $mkeys->[0]->[0];
-	$xrd->add_link('magic-public-key',
-		       { href =>
-			   'data:' .
-			     'application/magic-public-key,' .
-			       $mkey->to_string
-			     })->comment('MagicKey based on MagicSignatures-00');
+	$xrd->add_link(
+	  'magic-public-key' => {
+	    href => 'data:application/magic-public-key,' . $mkey->to_string
+	  })->comment('MagicKey based on MagicSignatures-00');
       };
 
       # Based on spec-01

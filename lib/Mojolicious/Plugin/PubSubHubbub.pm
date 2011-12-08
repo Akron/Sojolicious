@@ -9,12 +9,8 @@ use constant ATOM_NS => 'http://www.w3.org/2005/Atom';
 has 'lease_seconds' => ( 30 * 24 * 60 * 60 );
 has 'hub';
 
-our @challenge_chars;
-
-BEGIN {
-  @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9 );
-};
-
+# Character set for challenge
+my @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9 );
 
 # Register plugin
 sub register {
@@ -157,32 +153,34 @@ sub _change_subscription {
   my $c      = shift;
   my %param  = @_;
 
+  # Get callback endpoint
+  # Works only if endpoints provided
+  unless ($param{callback} = $c->endpoint('pubsub-cb')) {
+    $c->app->log->warn('You have to specify a callback endpoint.');
+  };
+
   # No topic or hub url given
   if (!exists $param{topic} || $param{topic} !~ m{^https?://}i ||
       !exists $param{hub}) {
     return;
   };
 
+  my $mode = $param{mode};
+
   # delete lease seconds if no integer
   if ( exists $param{lease_seconds} &&
-	 $param{lease_seconds} !~ /^\d+$/) {
+	 ($mode eq 'unsubscribe' ||
+	    $param{lease_seconds} !~ /^\d+$/) ) {
     delete $param{lease_seconds};
-  };
+  }
 
   # Set to default
-  $param{lease_seconds} ||= $plugin->lease_seconds;
-
-  # delete lease seconds if not necessary
-  delete $param{lease_seconds} if $param{mode} eq 'unsubscribe';
-
-  # Get callback endpoint
-  # Works only if endpoints provided
-  $param{'callback'} = $c->endpoint('pubsub-cb');
+  $param{lease_seconds} ||= $plugin->lease_seconds
+    if $mode eq 'subscribe';
 
   # Render post string
-  my %post = ( callback => $param{'callback'} );
-  foreach ( qw/mode topic verify
-	       lease_seconds secret/ ) {
+  my %post = ( callback => $param{callback} );
+  foreach ( qw/mode topic verify lease_seconds secret/ ) {
     $post{ $_ } = $param{ $_ } if exists $param{ $_ } && $param{ $_ };
   };
 
@@ -192,8 +190,6 @@ sub _change_subscription {
 			  ($param{verify_token} = _challenge(12));
 
   $post{'verify'} = $_ . 'sync' foreach ('a','');
-
-  my $mode = $param{mode};
 
   my $mojo = $c->app;
 
@@ -213,7 +209,7 @@ sub _change_subscription {
 
   # No response
   unless ($res) {
-    $mojo->log->debug('Cannot ping hub - maybe no SSL support')
+    $mojo->log->debug('Cannot ping hub - maybe no SSL support installed?')
       if index($plugin->hub, 'https') == 0;
     return;
   };
@@ -254,19 +250,15 @@ sub callback {
 
   # Unsupported content type
   else {
-    $c->app->log->debug('Unsupported media type: '.$ct);
+    $mojo->log->debug('Unsupported media type: ' . $ct);
     return _render_fail($c);
   };
 
-  # Mojolicious::Plugin::XML::RSS/Atom?
   my $dom = Mojo::DOM->new;
-  $dom->xml(1);
-  $dom->parse($c->req->body);
+  $dom->xml(1)->parse($c->req->body);
 
   # Find topics in Payload
   my $topics = _find_topics($type, $dom);
-
-  $c->app->log->debug('Check in ' . $type . ': '. join(';', @$topics));
 
   # No topics to process - but technically fine
   return _render_success($c) unless $topics->[0];
@@ -277,8 +269,6 @@ sub callback {
   # Save unfiltered topics for later comparison
   my @old_topics = @$topics;
 
-  $c->app->log->debug('Send topics to hook: '.join('; ',@$topics));
-
   # Check for secret and which topics are wanted
   $mojo->plugins->emit_hook(
     'on_pubsub_acceptance' => ( $plugin,
@@ -288,46 +278,37 @@ sub callback {
 				\$secret,
 				\$x_hub_on_behalf_of ));
 
-  # Render before processing
-  # _render_success( $c => $x_hub_on_behalf_of );
-
   # No topics to process
   return _render_success( $c => $x_hub_on_behalf_of )
     unless $topics->[0];
-  # return unless $topics->[0];
 
-#  $c->on(finish =>
-#    sub {
-      $mojo->log->debug('Start parsing topics: '.join('; ',@$topics));
+# Asynchronous is hard
+#  todo: $c->on(finish =>
 
-      # Secret is needed
-      if ($secret) {
+  # Secret is needed
+  if ($secret) {
 
-	# Unable to verify secret
-	unless ( _check_signature( $c, $secret )) {
-	  $mojo->log->debug('Unable to verify secret for '.join('; ',@$topics));
-	  return _render_success( $c => $x_hub_on_behalf_of );
-	  # return
-	};
-      };
+    # Unable to verify secret
+    unless ( _check_signature( $c, $secret )) {
+      $mojo->log->debug('Unable to verify secret for ' . join('; ',@$topics));
+      return _render_success( $c => $x_hub_on_behalf_of );
+    };
+  };
 
-      # Some topics are unwanted
-      if (@$topics != @old_topics) {
+  # Some topics are unwanted
+  if (@$topics != @old_topics) {
 
-	# filter dom based on topics
-	$topics = _filter_topics($dom, $topics);
-      };
+    # filter dom based on topics
+    $topics = _filter_topics($dom, $topics);
+  };
 
-      $mojo->log->debug('Now I\'ve got the dom! Emit hook.');
-
-      $mojo->plugins->emit_hook( 'on_pubsub_content' =>
-				  ( $plugin,
-				    $c,
-				    $type,
-				    $dom ));
+  $mojo->plugins->emit_hook( 'on_pubsub_content' =>
+			       ( $plugin,
+				 $c,
+				 $type,
+				 $dom ));
 #    });
 
-#    return;
   return _render_success( $c => $x_hub_on_behalf_of );
 };
 
@@ -389,9 +370,7 @@ sub _find_topics {
 
 # Add topic to entries
 sub _add_topics {
-  my $type      = shift;
-  my $dom       = shift;
-  my $self_href = shift;
+  my ($type, $dom, $self_href) = @_;
 
   my $link = '<link rel="self" href="' . $self_href . '" />';
 
@@ -446,9 +425,12 @@ sub _filter_topics {
     sub {
       my $l = shift;
       my $href = $l->attrs('href');
+
       unless (exists $allowed{$href}) {
 	$l->parent->parent->replace('');
-      } else {
+      }
+
+      else {
 	$topics{$href} = 1;
       };
     });
