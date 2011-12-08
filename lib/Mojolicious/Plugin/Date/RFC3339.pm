@@ -18,7 +18,7 @@ my $RFC3339_RE = qr/^(\d{4})          # year
                         (?::(\d?\d)   # + hour, minutes and seconds
                          (?:\.\d*)?   # + hour, minutes, seconds and a
                         )?            #   decimal fraction of a second
-                        ([zZ]|[\-\+]\d?\d(?::\d?\d)?) # Offset
+                        ([zZ]|[\-\+]\d?\d(?::?\d?\d)?) # Offset
                        )?
                       )?
                      )?$/x;

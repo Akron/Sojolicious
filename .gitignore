@@ -13,12 +13,14 @@ lib/Mojolicious/Plugin/VCard.pm
 lib/Mojolicious/Plugin/PubSubHubbub/Hub.pm
 lib/Mojolicious/Plugin/TagHelpers/
 lib/Mojolicious/Plugin/Util/HeaderLink.pm
+lib/Mojolicious/Plugin/Util/ArbitraryBase.pm
 lib/Mojolicious/Plugin/XML/Atom/Pub.pm
 lib/Mojolicious/Plugin/XML/MagicEnvelope.pm
 lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/Atom-Pub.pm
+t/Util
 t/TagHelpers
 public
 script*

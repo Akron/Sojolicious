@@ -232,7 +232,8 @@ elemet of the given type.
 
 =head2 C<add_link>
 
-  my $type = $xrd->add_link('hcard' => { href => '/me.hcard' } );
+  my $type = $xrd->add_link('hcard' => '/me.hcard');
+  my $type = $xrd->add_link('hcard' => { href => '/me.hcard' });
 
 Adds a link to the xrd document.
 Returns a L<Mojolicious::Plugin::XML::XRD> object.

@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.13';
 
 1;
 
@@ -28,12 +28,11 @@ with each other. All plugins are application (despite the fact
 that they are Mojolicious-Plugins) and storage agnostic,
 providing event driven hooks for usage.
 
-All plugins have no requirements other than L<Mojolicious> and Perl 5.8
+All plugins have no requirements other than L<Mojolicious> and Perl 5.10.1
 (core modules).
 
-Sojolicious is in its early stages and work in progress. There are missing
-parts currently developed and existing parts reworked.
-Don't use it in current status!
+Sojolicious is work in progress. There are missing parts currently developed
+and existing parts reworked. Don't use it in its current status!
 
 =head2 Synopsis
 
@@ -44,14 +43,14 @@ Don't use it in current status!
     my $app = shift;
 
     # Load Plugins
-    $app->plugin('Webfinger' => { host => 'sojolicio.us' });
-    $app->plugin('Salmon' => { host => 'sojolicio.us',
-		               secure => 1 });
+    $app->plugin('Webfinger');
+    $app->plugin('PubSubHubbub');
+    $app->plugin('Salmon');
 
     my $r = $app->routes;
 
     # Establish webfinger url
-    $r->route('/webfinger',uri => 'q')->webfinger;
+    $r->route('/webfinger')->lrdd('q');
 
     # Esablish Salmon Endpoints:
     my $salmon = $r->route('/salmon');
@@ -64,69 +63,77 @@ Don't use it in current status!
     # Add pubsubhubbub callback url
     $r->route('/pubsub')->pubsub('cb');
 
-    $app->plugins->add_hook(
+    $app->hook(
       'on_salmon_follow' => sub {
         ... # You received a follow request
       };
     );
 
+    $app->hook(
+      'on_pubsub_content' => sub {
+        my ($plugin, $c, $type, $dom) = @_;
+        ...
+    };
   };
 
   package main;
   MySocialApp->start;
 
-=head2 Plugins
+=head2 Plugins for ...
 
 =over 2
 
-=item L<XRD|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
-
-=item L<HostMeta|http://tools.ietf.org/html/draft-hammer-hostmeta>
-
-=item L<Webfinger|http://code.google.com/p/webfinger/wiki/WebFingerProtocol>
-
-=item L<MagicSignatures|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html>
-
-=item L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
-
-=item L<PortableContacts|http://portablecontacts.net/draft-spec.html>
-
-=item L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html>
+=item L<ActivityStreams|http://activitystrea.ms/specs/atom/1.0/>
 
 =item L<Atom|https://www.ietf.org/rfc/rfc4287.txt>
 
 =item L<Atom-Threading-Extension|https://www.ietf.org/rfc/rfc4685.txt>
 
-=item L<ActivityStreams|http://activitystrea.ms/specs/atom/1.0/>
+=item L<HostMeta|http://tools.ietf.org/html/draft-hammer-hostmeta>
+
+=item L<MagicSignatures|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html>
 
 =item L<OStatus|http://ostatus.org/sites/default/files/ostatus-1.0-draft-2-specification.html>
 
-As Sojolicious is in its early stages, there is currently work on
-most of these protocols. There is currently no stable release here or on CPAN.
+=item L<PortableContacts|http://portablecontacts.net/draft-spec.html>
 
-There are plans to expand the scope to other social protocols, for example L<OExchange|http://www.oexchange.org/spec/>.
+=item L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html>
+
+=item L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
+
+=item L<XRD|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
+
+=item L<Webfinger|http://code.google.com/p/webfinger/wiki/WebFingerProtocol>
+
+As Sojolicious is in its early stages, there is currently work on
+most of these protocols. There is no stable release at GitHub or CPAN.
+
+There are plans to expand the scope to other social protocols,
+for example L<OExchange|http://www.oexchange.org/spec/>.
 
 =back
 
 =head2 Acknowledgement
 
-L<Mojolicious> is written by Sebastian Riedel.
-C<XRD> was developed by Eran Hammer-Lahav and Will Norris.
-C<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
-C<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
-C<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
-C<Salmon> was developed by John Panzer.
-C<PortableContacts> was developed by Joseph Smarr.
+C<ActivityStreams> was developed by Martin Atkins, Will Norris, Chris Messina, Monica Wilkinson, and Rob Dolin.
 C<Atom> was developed by Mark Nottingham and Robert Sayre.
 C<Atom Threading Extensions> was developed by James M. Snell.
-C<ActivityStreams> was developed by Martin Atkins, Will Norris, Chris Messina, Monica Wilkinson, and Rob Dolin.
+C<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
+C<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
+L<Mojolicious> is written by Sebastian Riedel.
 C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach Copley.
+C<PortableContacts> was developed by Joseph Smarr.
+C<PubSubHubbub> was developed by Brad Fitzpatrick, Brett Slatkin, and Martin Atkins.
+C<Salmon> was developed by John Panzer.
+C<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
+C<XRD> was developed by Eran Hammer-Lahav and Will Norris.
 
-... just to name the persons officially responsible for maintaining the code and the specifications. Thanks to all contributors of all these projects!
+... just to name the persons officially responsible for maintaining the code and the specifications.
+Thanks to all contributors of these projects as well!
 
-And thanks to a lot of other implementors for inspiring code (which is normally referenced in the sourcecode).
+And thanks to all implementors of these specifications for inspiring code (which is referenced in the sourcecode).
 
-Parts of my work are supported by the BMBF-project L<Linguistic Networks|http://project.linguistic-networks.net/>.
+Participation on conferences was supported by the BMBF-project L<Linguistic Networks|http://project.linguistic-networks.net/>.
 
 =head2 Where to learn more?
 

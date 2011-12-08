@@ -12,17 +12,19 @@ use constant WK_PATH => '/.well-known/host-meta';
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  my $helpers = $mojo->renderer->helpers;
+
   # Load Util-Endpoint if not already loaded
-  unless (exists $mojo->renderer->helpers->{'endpoint'}) {
+  unless (exists $helpers->{'endpoint'}) {
     $mojo->plugin('Util::Endpoint');
   };
 
   # Load XML if not already loaded
-  unless (exists $mojo->renderer->helpers->{'render_xrd'}) {
+  unless (exists $helpers->{'render_xrd'}) {
     $mojo->plugin('XRD');
   };
 
-  unless (exists $mojo->renderer->helpers->{'new_hostmeta'}) {
+  unless (exists $helpers->{'new_hostmeta'}) {
     $mojo->plugin('XML' => {
       new_hostmeta => ['XRD', 'HostMeta']
     });
