@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use Test::More tests => 24;
+use Test::More tests => 26;
 use Test::Mojo;
 use strict;
 use warnings;
@@ -232,11 +232,6 @@ IDENTICA
 # From Minime testsuite - seems to be wrong as well:
 ok($mkey->verify(b64url_encode($me->data), $me->signature->{value}), 'Identica Verification 2');
 
-
-
-
-
-
 # From https://code.google.com/p/salmon-protocol/source/browse/trunk/lib/python/magicsig_hjfreyer/magicsig_test.py
 
 $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'ME');
@@ -257,16 +252,25 @@ $me = Mojolicious::Plugin::MagicSignatures::Envelope->new(<<'ME');
 </me:env>
 ME
 
-#    <me:sig>RL3pTqRn7RAHoEKwtZCVDNgwHrNB0WJxFt8fq6l0HAGcIN4BLYzUC5hpGy
-#    Ssnow2ibw3bgUVeiZMU0dPfrKBFA==</me:sig>
-
 $mkey = Mojolicious::Plugin::MagicSignatures::Key->new(<<'MKEY');
 RSA.mVgY8RN6URBTstndvmUUPb4UZTdwvwmddSKE5z_jvKUEK6yk1u3rrC9yN8k6FilGj9K0eeUPe2hf4Pj-5CmHww==.AQAB.Lgy_yL3hsLBngkFdDw1Jy9TmSRMiH6yihYetQ8jy-jZXdsZXd8V5ub3kuBHHk4M39i3TduIkcrjcsiWQb77D8Q==
 MKEY
 
+is($me->sig_base,
+   'PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0nVVRGLTgnPz4KPGVudHJ5IHh'.
+   'tbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDA1L0F0b20nPgogIDxpZD50YWc6ZX'.
+   'hhbXBsZS5jb20sMjAwOTpjbXQtMC40NDc3NTcxODwvaWQ-CiAgPGF1dGhvcj48b'.
+   'mFtZT50ZXN0QGV4YW1wbGUuY29tPC9uYW1lPjx1cmk-YWNjdDp0ZXN0QGV4YW1w'.
+   'bGUuY29tPC91cmk-CiAgPC9hdXRob3I-CiAgPGNvbnRlbnQ-U2FsbW9uIHN3aW0'.
+   'gdXBzdHJlYW0hPC9jb250ZW50PgogIDx0aXRsZT5TYWxtb24gc3dpbSB1cHN0cm'.
+   'VhbSE8L3RpdGxlPgogIDx1cGRhdGVkPjIwMDktMTItMThUMjA6MDQ6MDNaPC91c'.
+   'GRhdGVkPgo8L2VudHJ5Pgo.YXBwbGljYXRpb24vYXRvbSt4bWw=.YmFzZTY0dXJ'.
+   's.UlNBLVNIQTI1Ng==', 'MagicSignature Base String');
+
 ok($mkey->verify(b64url_encode($me->data), $me->signature->{value}), 'MagicSignature');
 
-#ok($me->verify( [ [ $mkey ] ] ), 'MagicEnvelope Verification');
+is($mkey->sign(b64url_encode($me->data)),$me->signature->{value}, 'MagicSignature');
+
 
 
 __END__

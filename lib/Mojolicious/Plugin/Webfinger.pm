@@ -33,11 +33,13 @@ sub register {
       # Delete scheme if exists
       $acct =~ s/^acct://i;
 
+      return unless $acct;
+
       # Split user from domain
       my ($user, $domain) = split('@', lc $acct);
 
       # Acct is not valid
-      return unless $user =~ /^[-_\w]+$/;
+      return if !$user || $user =~ /[^-_\w]/;
 
       # Use request host if no host is given
       $domain ||= $c->req->url->host || 'localhost';

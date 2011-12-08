@@ -52,13 +52,16 @@ sub register {
     };
 
     # Code generation for ad-hoc helper
-    my $code = "sub {\n".
-      " shift;\n". # Controller or app
-      '  my $doc = ' . $space . '::' . $base . '->new( @_ );'."\n";
+    my $code = '
+sub {
+  shift; # Controller or app
+  my $doc = ' . $space . '::' . $base . '->new( @_ );';
+
     if (@helper) {
-      $code .= '  $doc->add_extension(' .
-	       join(',',map( '"'.$space . '::' . $_.'"', @helper)) .
-	       ");\n";
+      $code .= '
+  $doc->add_extension(' .
+    join(',', map( '"' . $space . '::' . $_ . '"', @helper)) .
+      ");\n";
     };
     $code .= '  return $doc;'."\n};";
 
@@ -68,7 +71,7 @@ sub register {
     };
 
     # Create helper
-    $mojo->helper($helper, eval $code );
+    $mojo->helper($helper, $code_ref );
 
   };
 
@@ -88,6 +91,7 @@ sub register {
 	my $c      = shift;
 	my $xml    = shift;
 	my $format = 'xml';
+
 	if (my $class = ref $xml) {
 	  no strict 'refs';
 	  if (defined ${ $class . '::MIME' } &&
@@ -95,6 +99,8 @@ sub register {
 	    $format = ${ $class . '::PREFIX' };
 	  };
 	};
+
+	# render XML with correct mime type
 	return $c->render_data($xml->to_pretty_xml,
 			       'format' => $format,
 			       @_);

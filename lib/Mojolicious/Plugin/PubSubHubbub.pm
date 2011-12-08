@@ -172,7 +172,7 @@ sub _change_subscription {
 	 ($mode eq 'unsubscribe' ||
 	    $param{lease_seconds} !~ /^\d+$/) ) {
     delete $param{lease_seconds};
-  }
+  };
 
   # Set to default
   $param{lease_seconds} ||= $plugin->lease_seconds

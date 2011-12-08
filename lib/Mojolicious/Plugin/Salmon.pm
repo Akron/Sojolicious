@@ -39,7 +39,7 @@ sub register {
 
       # Not a valid shortcut parameter
       unless ($param =~ /^(?:mentioned|all-replies|signer)$/) {
-	$mojo->log->debug("Unknown Salmon shortcut parameter $param");
+	$mojo->log->debug("Unknown Salmon shortcut parameter '$param'");
 	return;
       };
 
@@ -55,12 +55,13 @@ sub register {
 
       # Set salmon endpoints
       $route->endpoint(
-	'salmon-'.$param,
-	{ scheme => $plugin->secure ? 'https' : 'http',
-	  host   => $plugin->host }
-      );
+	'salmon-' . $param => {
+	  scheme => $plugin->secure ? 'https' : 'http',
+	  host   => $plugin->host
+	});
 
       # All replies route
+      # Todo: Both routes can be merged to one
       if ($param eq 'all-replies') {
 
 	# Add reply handle to webfinger
@@ -68,10 +69,11 @@ sub register {
 	  'before_serving_webfinger' => sub {
 	    my ($c, $acct, $xrd) = @_;
 
+	    # Todo: pass acct to endpoint
 	    $xrd->add_link(
-	      SALMON_REPLIES_NS,
-	      { 'href' => $c->endpoint('salmon-all-replies') }
-	    )->comment('Salmon Reply Endpoint');
+	      SALMON_REPLIES_NS => {
+		'href' => $c->endpoint('salmon-all-replies')
+	      })->comment('Salmon Reply Endpoint');
 	  });
 
 	# Handle POST requests
@@ -88,10 +90,11 @@ sub register {
 	  'before_serving_webfinger' => sub {
 	    my ($c, $acct, $xrd) = @_;
 
+	    # Todo: pass acct to endpoint
 	    $xrd->add_link(
-	      SALMON_MENTIONED_NS,
-	      { 'href' => $c->endpoint('salmon-mentioned') }
-	    )->comment('Salmon Mentioned Endpoint');
+	      SALMON_MENTIONED_NS => {
+		'href' => $c->endpoint('salmon-mentioned')
+	      })->comment('Salmon Mentioned Endpoint');
 
 	  });
 
@@ -104,7 +107,7 @@ sub register {
       # Signer route
       elsif ($param eq 'signer') {
 
-	# Todo: Fragen: Gibt es schon eine Signer-URI?
+	# Todo: Question - is there already a signer URL?
 
 	# Add to hostmeta - exactly once
 	$mojo->hook(

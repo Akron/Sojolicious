@@ -66,7 +66,10 @@ sub new {
       sub {
 	return unless $_->text;
 
-	my %sig = ( value => $_->text );
+	my $sig_text = $_->text;
+	$sig_text =~ s/[\s\t]//g;
+
+	my %sig = ( value => $sig_text );
 
 	if (exists $_->attrs->{key_id}) {
 	  $sig{key_id} = $_->attrs->{key_id};
