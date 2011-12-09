@@ -206,6 +206,7 @@ sub select {
   my @values;
   if ($_[0] && ref($_[0]) eq 'HASH') {
     my ($pairs, $values) = _get_pairs( shift(@_) );
+
     $sql .= ' WHERE ' . join(' AND ', @$pairs);
     push(@values, @$values);
   };
@@ -305,6 +306,9 @@ sub update_or_insert {
     return $up if $up && $up > 0;
   };
 
+  # Delete all element conditions
+  delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
+
   # Insert
   return $self->insert($table, { %param, %cond });
 };
@@ -321,8 +325,21 @@ sub _get_pairs {
   my (@pairs, @values);
   while (my ($key, $value) = each %{$_[0]}) {
     next unless $key =~ /^[_0-9a-zA-Z]+$/;
-    push(@pairs,  $key . ' = ?');
-    push(@values, $value);
+
+    # Element of
+    if (ref($value) && ref($value) eq 'ARRAY') {
+      push (@pairs,
+	    $key . ' IN (' .
+	    join(',', split('','?' x @$value)) .
+	    ')' );
+      push(@values, @$value);
+    }
+
+    # Equality
+    else {
+      push(@pairs,  $key . ' = ?');
+      push(@values, $value);
+    };
   };
   return (\@pairs, \@values);
 };
@@ -463,6 +480,8 @@ of values to insert.
 Updates values of an existing row of a given table.
 Expects the table name to update, a hash ref of values to update,
 and optionally a hash ref with conditions, the rows have to fulfill.
+In case of scalar values, identity is tested. In case of array refs,
+it is tested, if the field is an element of the set.
 Returns the number of rows affected.
 
 =head2 C<update_or_insert>
@@ -474,8 +493,10 @@ Updates values of an existing row of a given table,
 otherways inserts them.
 Expects the table name to update or insert, a hash ref of
 values to update or insert, and optionally a hash ref with conditions,
-the rows have to fulfill. These will be inserted as well,
-if the rows do not exist.
+the rows have to fulfill.
+In case of scalar values, identity is tested. In case of array refs,
+it is tested, if the field is an element of the set.
+Scalar condition values will be inserted, if the fields do not exist.
 
 =head2 C<select>
 
@@ -484,19 +505,17 @@ if the rows do not exist.
                  print $_[0]->{id},"\n";
                  return -1 if $_[0]->{name} eq 'Peter';
                });
-
   my $users = $oro->select(Person => [qw/id name/]);
   my $users = $oro->select(Person => { name => 'Daniel' });
   my $users = $oro->select(Person => ['id'] => { name => 'Daniel' });
-
-  my $counter = 0;
+  my $users = $oro->select(Person => ['id'] => { id => [1,2,4] });
   $oro->select('Person' =>
                ['id','age'] =>
                { name => 'Daniel' } =>
                sub {
                  my $user = shift;
                  print $user->{id},"\n";
-                 return -1 if ++$counter == 10;
+                 return -1 if $user->{name} =~ /^Da/;
                });
 
 
@@ -506,6 +525,8 @@ Expects the table name of selection and optionally an array ref
 of fields, optionally a hash ref with conditions, the rows have to fulfill,
 and optionally a callback, which is released after each row.
 If the callback returns -1, the data fetching is aborted.
+In case of scalar values, identity is tested in the condition hash ref.
+In case of array refs, it is tested, if the field is an element of the set.
 
 =head2 C<load>
 
@@ -517,6 +538,8 @@ that meets a given condition.
 Expects the table name of selection, an optional array ref of fields
 to return and a hash ref with conditions,
 the rows have to fulfill. Normally this includes the primary key.
+In case of scalar values, identity is tested. In case of array refs,
+it is tested, if the field is an element of the set.
 
 =head2 C<delete>
 
@@ -525,6 +548,8 @@ the rows have to fulfill. Normally this includes the primary key.
 Deletes rows of a given table, that meet a given condition.
 Expects the table name of selection and a hash ref with conditions,
 the rows have to fulfill.
+In case of scalar values, identity is tested. In case of array refs,
+it is tested, if the field is an element of the set.
 Returns the number of rows that were deleted.
 
 =head2 C<do>

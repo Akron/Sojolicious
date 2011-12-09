@@ -1,4 +1,4 @@
-use Test::More tests => 41;
+use Test::More tests => 48;
 use File::Temp qw/:POSIX/;
 use strict;
 use warnings;
@@ -132,6 +132,29 @@ ok($oro->update_or_insert( Content =>
 			       { 'title' => 'Noch ein Check!' }),
    'Update or Insert');
 
+ok($oro->update_or_insert( Content =>
+			     { content => 'Das ist der sechste content.' } =>
+			       { 'title' => ['Noch ein Check!', 'FooBar'] }),
+   'Update or Insert');
+
+is($oro->select('Content' =>
+		  { content => 'Das ist der sechste content.'}
+		)->[0]->{title}, 'Noch ein Check!', 'Title');
+
+ok($oro->update_or_insert( Content =>
+			     { content => 'Das ist der siebte content.' } =>
+			       { 'title' => ['HelloWorld', 'FooBar'] }),
+   'Update or Insert');
+
+ok(!$oro->select('Content' =>
+		   { content => 'Das ist der siebte content.'}
+		 )->[0]->{title}, 'Title');
+
+
+ok($oro->delete('Content' => { content => ['Das ist der siebte content.']}),
+   'Delete');
+
+
 {
   local $SIG{__WARN__} = sub {};
   ok(!$oro->update_or_insert( Content_unknown =>
@@ -168,5 +191,8 @@ ok($oro->delete('Content', { title => 'CheckBulk'}), 'Delete Table');
 
 ok($array = $oro->select('Content' => [qw/title content/]), 'Select');
 is(@$array, 3, 'Check Select');
+
+ok($array = $oro->select('Content' => ['id'] => { id => [1..4] }), 'Select');
+is('134', join('', map($_->{id}, @$array)), 'Where In');
 
 __END__
