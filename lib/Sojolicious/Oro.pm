@@ -313,6 +313,10 @@ sub update_or_insert {
   return $self->insert($table, { %param, %cond });
 };
 
+# Last insert id
+sub last_insert_id {
+  shift->dbh->sqlite_last_insert_rowid;
+};
 
 # Wrapper for dbi do
 sub do {
@@ -551,6 +555,12 @@ the rows have to fulfill.
 In case of scalar values, identity is tested. In case of array refs,
 it is tested, if the field is an element of the set.
 Returns the number of rows that were deleted.
+
+=head2 C<last_insert_id>
+
+  my $id = $oro->last_insert_id;
+
+Returns the globally last inserted id.
 
 =head2 C<do>
 

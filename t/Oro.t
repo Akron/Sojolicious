@@ -1,4 +1,4 @@
-use Test::More tests => 48;
+use Test::More tests => 50;
 use File::Temp qw/:POSIX/;
 use strict;
 use warnings;
@@ -56,6 +56,8 @@ ok($oro->insert(Name => { prename => 'Akron',
 ok($oro->update(Content =>
 		  { content => 'This is changed content.' } =>
 		    { title => 'Check!' }), 'Update');
+
+is($oro->last_insert_id, 1, 'Row id');
 
 ok(!$oro->update(Content =>
 		  { content => 'This is changed content.' } =>
@@ -153,6 +155,8 @@ ok(!$oro->select('Content' =>
 
 ok($oro->delete('Content' => { content => ['Das ist der siebte content.']}),
    'Delete');
+
+is($oro->last_insert_id, 5, 'Row id');
 
 
 {
