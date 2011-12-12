@@ -399,6 +399,8 @@ Sojolicious::Oro - Simple SQLite database accessor
 
 =head1 SYNOPSIS
 
+  use Sojolicious::Oro;
+
   my $oro = Sojolicious::Oro->new('file.sqlite');
   if ($oro->created) {
     $oro->do(
@@ -475,6 +477,7 @@ Expects the table name and a hash ref of values to insert.
 For multiple insertions in a transaction, it expects the table name
 to insert, an arrayref of the column names and arbitrary array refs
 of values to insert.
+Don't use multiple inserts inside another transaction!
 
 =head2 C<update>
 

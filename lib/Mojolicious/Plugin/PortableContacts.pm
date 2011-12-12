@@ -1,5 +1,6 @@
 package Mojolicious::Plugin::PortableContacts;
 use Mojo::Base 'Mojolicious::Plugin';
+
 use Mojolicious::Plugin::PortableContacts::Response;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
@@ -139,14 +140,24 @@ sub read {
   return _new_response($response);
 };
 
+
 # Add PortableContacts Entry
-sub create { return shift->_set('create' => @_) };
+sub create {
+  return shift->_set('create' => @_)
+};
+
 
 # Update PortableContacts Entry
-sub update { return shift->_set('update' => @_) };
+sub update {
+  return shift->_set('update' => @_)
+};
+
 
 # Delete PortableContacts Entry
-sub delete { return shift->_set('delete' => @_) };
+sub delete {
+  return shift->_set('delete' => @_)
+};
+
 
 # Change PortableContacts Entry
 sub _set {

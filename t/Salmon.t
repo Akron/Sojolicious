@@ -5,6 +5,7 @@ use warnings;
 
 $|++;
 
+use lib 'lib';
 use lib '../lib';
 
 use Mojolicious::Lite;
