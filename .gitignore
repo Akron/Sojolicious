@@ -27,6 +27,7 @@ t/Atom-Pub.t
 t/ComplexValues.t
 t/Util
 t/TagHelpers
+t-speed
 public
 script*
 MYMETA*
