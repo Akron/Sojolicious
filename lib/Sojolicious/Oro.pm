@@ -12,6 +12,8 @@ use File::Basename;
 has ['dbh', 'file'];
 has created => 0;
 
+# Todo: allow more than 500 insertions at a time
+
 # Constructor
 sub new {
   my ($class, $file, $cb) = @_;
@@ -34,13 +36,14 @@ sub new {
   };
 
   # Connect to Database
-  my $dbh = DBI->connect( "dbi:SQLite:$file",
-			  undef,
-			  undef,
-			  {
-			    PrintError => 0,
-			    RaiseError => 1,
-			  });
+  my $dbh = DBI->connect(
+    "dbi:SQLite:$file",
+    undef,
+    undef,
+    {
+      PrintError => 0,
+      RaiseError => 1,
+    });
 
   # Store database handle
   $self->dbh($dbh);
@@ -60,14 +63,6 @@ sub insert {
   my $self  = shift;
   my $table = shift;
 
-  # sql template for single and multiple insertions
-  my $_join_keys = sub {
-    return 'INSERT INTO ' . $table .
-           ' (' . join(', ', @_) . ')' .
-           ' VALUES ' .
-	   '(' . join(', ', split('', '?' x scalar @_)) . ')';
-  };
-
   # No parameters
   return unless $_[0];
 
@@ -86,7 +81,10 @@ sub insert {
     };
 
     # Create insert string
-    my $sql = $_join_keys->(@keys);
+    my $sql = 'INSERT INTO ' . $table .
+          ' (' . join(', ', @keys) . ')' .
+	  ' VALUES ' .
+	  '(' . _q(\@keys) . ')';
 
     # Prepare and execute
     my ($rv) = $self->_prepare_and_execute( $sql, \@values );
@@ -98,16 +96,23 @@ sub insert {
   # Multiple inserts
   elsif (ref($_[0]) eq 'ARRAY') {
 
+    return unless $_[1];
+
     my @keys = @{ shift(@_) };
 
-    return unless $_[0];
+    my $sql   = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) .') ';
+    my $union = ' SELECT ' . _q(\@keys). ' ';
 
-    # Join keys
-    my $sql = $_join_keys->(@keys);
+    if (@_ >= 500) {
+      warn 'You are limited to 500 insertions at a time.';
+      return;
+    };
 
-    # Start transaction
+    # Add data unions
+    $sql .= $union . ((' UNION ' . $union) x (scalar(@_) - 1));
+
+    # Get database handle
     my $dbh = $self->dbh;
-    $dbh->begin_work;
 
     # Prepare
     my $sth;
@@ -118,32 +123,21 @@ sub insert {
     # Check for errors
     if ($@) {
       warn $@;
-
-      # Roll back
-      $dbh->rollback;
       return;
     };
 
-    # Iterate through values
-    foreach my $val (@_) {
+    # Execute
+    eval {
+      $sth->execute(map( @$_,  @_ ));
+    };
 
-      # Execute
-      eval {
-	$sth->execute(@$val);
-      };
-
-      # Check for errors
-      if ($@) {
-	warn $@;
-
-	# Roll back
-	$dbh->rollback;
-	return 0;
-      };
+    # Check for errors
+    if ($@) {
+      warn $@;
+      return 0;
     };
 
     # Everything went fine
-    $dbh->commit;
     return 1;
   };
 
@@ -333,9 +327,7 @@ sub _get_pairs {
     # Element of
     if (ref($value) && ref($value) eq 'ARRAY') {
       push (@pairs,
-	    $key . ' IN (' .
-	    join(',', split('','?' x @$value)) .
-	    ')' );
+	    $key . ' IN (' . _q($value) . ')' );
       push(@values, @$value);
     }
 
@@ -351,7 +343,7 @@ sub _get_pairs {
 
 # Get filds
 sub _fields {
-  return join(', ', grep(/^[\._0-9a-zA-Z]+$/, @{ $_[0] }));
+  join(', ', grep(/^[\._0-9a-zA-Z]+$/, @{ $_[0] }));
 };
 
 sub _prepare_and_execute {
@@ -386,6 +378,12 @@ sub _prepare_and_execute {
   # Return values
   return ($rv, $sth);
 };
+
+# questionmark string
+sub _q ($) {
+  join(',', split('', '?' x scalar(@{$_[0]})));
+};
+
 
 1;
 
@@ -474,10 +472,9 @@ the database is newly created.
 Inserts a new row to a given table for single insertions.
 Expects the table name and a hash ref of values to insert.
 
-For multiple insertions in a transaction, it expects the table name
-to insert, an arrayref of the column names and arbitrary array refs
-of values to insert.
-Don't use multiple inserts inside another transaction!
+For multiple insertions in, it expects the table name
+to insert, an arrayref of the column names and at maximum
+500 array references of values to insert.
 
 =head2 C<update>
 

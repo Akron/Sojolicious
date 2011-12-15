@@ -1,4 +1,6 @@
-0.13 2011-11-28
+0.13 2011-12-15
+        - Made the multiple inserts in Sojolicious::Oro
+          independent from Transactions.
         - Half working version of MagicSignatures.
         - Added LRDD support.
         - Fundamental changes to Util::Endpoint.

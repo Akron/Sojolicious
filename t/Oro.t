@@ -1,4 +1,4 @@
-use Test::More tests => 50;
+use Test::More tests => 52;
 use File::Temp qw/:POSIX/;
 use strict;
 use warnings;
@@ -9,8 +9,6 @@ use lib '../lib';
 use_ok 'Sojolicious::Oro';
 
 my $db_file = tmpnam();
-
-diag "Created temp file $db_file";
 
 END {
   unlink $db_file;
@@ -190,6 +188,9 @@ ok($oro->insert(Content => [qw/title content/] =>
 
 ok($array = $oro->select('Content' => [qw/title content/]), 'Select');
 is(@$array, 8, 'Check Select');
+
+ok($array = $oro->load('Content' => {content => 'Das ist der achte content'}), 'Load');
+is($array->{title}, 'CheckBulk', 'Check Select');
 
 ok($oro->delete('Content', { title => 'CheckBulk'}), 'Delete Table');
 

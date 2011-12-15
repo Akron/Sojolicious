@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::PortableContacts;
 use Mojo::Base 'Mojolicious::Plugin';
 
+# Load Response and Entry objects
 use Mojolicious::Plugin::PortableContacts::Response;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
@@ -8,6 +9,7 @@ has 'host';
 has 'secure' => 0;
 
 # Default count parameter
+# Todo: itemsPerPage
 has 'count' => 0; # unlimited
 
 # Set condition regex
@@ -24,6 +26,8 @@ BEGIN {
     count        => qr/^\d+$/,
     fields       => qr/^(?:[a-zA-Z,\s]+|\@all)$/
   );
+
+  # Set PortableContacts namespace
   our $poco_ns = 'http://portablecontacts.net/spec/1.0';
 };
 
@@ -71,7 +75,7 @@ sub register {
 	  # The endpoint now may return the correct host
 
 	  for ($xrd_ref->add_link($poco_ns =>
-	      {href => $c->endpoint('poco')})) {
+	      { href => $c->endpoint('poco') })) {
 	    $_->comment('Portable Contacts');
 	    $_->add('Title','Portable Contacts API Endpoint');
 	  };
@@ -110,11 +114,12 @@ sub register {
 
   # Add 'poco' helper
   $mojo->helper('poco'        => sub { $plugin->read( @_ );   } );
-  $mojo->helper('create_poco' => sub { $plugin->create( @_ ); } );
-  $mojo->helper('update_poco' => sub { $plugin->update( @_ ); } );
-  $mojo->helper('delete_poco' => sub { $plugin->delete( @_ ); } );
+  $mojo->helper('create_poco' => sub { $plugin->_set('create' => @_ ); } );
+  $mojo->helper('update_poco' => sub { $plugin->_set('update' => @_ ); } );
+  $mojo->helper('delete_poco' => sub { $plugin->_set('delete' => @_ ); } );
   $mojo->helper('render_poco' => sub { $plugin->render( @_ ); } );
 };
+
 
 # Get PortableContacts
 sub read {
@@ -141,24 +146,6 @@ sub read {
 };
 
 
-# Add PortableContacts Entry
-sub create {
-  return shift->_set('create' => @_)
-};
-
-
-# Update PortableContacts Entry
-sub update {
-  return shift->_set('update' => @_)
-};
-
-
-# Delete PortableContacts Entry
-sub delete {
-  return shift->_set('delete' => @_)
-};
-
-
 # Change PortableContacts Entry
 sub _set {
   my $plugin  = shift;
@@ -170,9 +157,13 @@ sub _set {
 
   return unless $entry;
 
+  # Create new entry
   if ($action eq 'create') {
     delete $entry->{id};
-  } elsif (not exists $entry->{id}) {
+  }
+
+  # Unable to delete or update entry without id
+  elsif (not exists $entry->{id}) {
     $c->app->log->debug("No ID given on PoCo $action.");
     return;
   };
@@ -185,9 +176,13 @@ sub _set {
 			      $entry,
 			      \$ok);
 
+  # Everything went fine
   return $entry if $ok;
+
+  # Something went wrong
   return;
 };
+
 
 # Return response for /@me/@self or /@me/@all/{id}
 sub _single {
@@ -196,7 +191,7 @@ sub _single {
   my $id = $c->stash('poco.user_id');
 
   my $response = {entry => +{}};
-  my $status = 404;
+  my $status   = 404;
 
   if ($id) {
 
@@ -207,25 +202,29 @@ sub _single {
     };
 
     # Get results
-    $response = $plugin->read( $c =>
-				 (
-				   $plugin->_get_param(\%param),
-				   id => $id
-				 )
-			     );
+    $response = $plugin->read(
+      $c => (
+	$plugin->_get_param(\%param),
+	id => $id
+      )
+    );
+
     $status = 200 if $response->totalResults;
   };
 
   # Render poco
-  return $plugin->render($c => _new_response($response),
-			 status => $status);
+  return $plugin->render(
+    $c => _new_response($response),
+    status => $status
+  );
 };
+
 
 # Return response for /@me/@all
 sub _multiple {
   my ($plugin, $c) = @_;
 
-  # Clone parameters with values 
+  # Clone parameters with values
   my %param;
   foreach ($c->param) {
     $param{$_} = $c->param($_) if $c->param($_);
@@ -238,6 +237,7 @@ sub _multiple {
   # Render poco
   return $plugin->render($c => $response);
 };
+
 
 # Check for valid parameters
 sub _get_param {
@@ -265,33 +265,47 @@ sub _get_param {
   # Set correct count parameter
   my $count = $plugin->count;
   if (exists $new_param{count}) {
+
+    # There is a default count value
     if ($count) {
+
+      # Count is valid
       if ($count > $new_param{count}) {
 	$count =  delete $new_param{count};
-      } else {
+      }
+
+      # Count is invalid
+      else {
 	delete $new_param{count};
 	delete $new_param{startIndex};
       };
-    } else {
+    }
+
+    # No count as default
+    else {
       $count = delete $new_param{count};
     };
-  } else {
-    delete $new_param{startIndex};
   };
 
-  if ($count) {
-    $new_param{count} = $count;
-  };
+  # set new count value
+  $new_param{count} = $count if $count;
 
+  # return new parameters
   return %new_param;
 };
 
+
 # Private function for response objects
 sub _new_response {
+
+  # Object is already response object
   if (ref($_[0]) eq
 	'Mojolicious::Plugin::PortableContacts::Response') {
     return $_[0];
-  } else {
+  }
+
+  # Create new response object
+  else {
     return Mojolicious::Plugin::PortableContacts::Response->new(@_);
   };
 };
@@ -305,13 +319,24 @@ sub render {
 
   # Return value RESTful
   return $c->respond_to(
-    xml => sub { shift->render('status' => $param{status} || 200,
-			       'format' => 'xml',
-			       'data' => $response->to_xml) },
 
-    any => sub { shift->render('status' => $param{status} || 200,
-			       'format' => 'json',
-			       'data' => $response->to_json) }
+    # Render as xml
+    xml => sub {
+      shift->render(
+	'status' => $param{status} || 200,
+	'format' => 'xml',
+	'data'   => $response->to_xml
+      )
+    },
+
+    # Render as JSON
+    any => sub {
+      shift->render(
+	'status' => $param{status} || 200,
+	'format' => 'json',
+	'data'   => $response->to_json
+      )
+    }
   );
 };
 
