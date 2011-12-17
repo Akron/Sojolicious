@@ -1,5 +1,6 @@
-use Test::More tests => 52;
+use Test::More tests => 76;
 use File::Temp qw/:POSIX/;
+use Data::Dumper 'Dumper';
 use strict;
 use warnings;
 
@@ -199,5 +200,103 @@ is(@$array, 3, 'Check Select');
 
 ok($array = $oro->select('Content' => ['id'] => { id => [1..4] }), 'Select');
 is('134', join('', map($_->{id}, @$array)), 'Where In');
+
+
+my ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
+ok($rv, 'Prep and Execute');
+is($sth->fetchrow_arrayref->[0], 3, 'Prep and exec');
+
+ok($oro->dbh->{AutoCommit}, 'Transaction');
+$oro->dbh->begin_work;
+ok(!$oro->dbh->{AutoCommit}, 'Transaction');
+
+foreach my $x (1..10) {
+  $oro->insert(Content => { title => 'Transaction',
+			    content => 'Das ist der '.$x.'. Eintrag'});
+};
+
+ok(!$oro->dbh->{AutoCommit}, 'Transaction');
+$oro->dbh->commit;
+ok($oro->dbh->{AutoCommit}, 'Transaction');
+
+($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
+ok($rv, 'Prep and Execute');
+is($sth->fetchrow_arrayref->[0], 13, 'Fetch row.');
+
+
+ok($oro->dbh->{AutoCommit}, 'Transaction');
+$oro->dbh->begin_work;
+ok(!$oro->dbh->{AutoCommit}, 'Transaction');
+
+foreach my $x (1..10) {
+  $oro->insert(Content => { title => 'Transaction',
+			    content => 'Das ist der '.$x.'. Eintrag'});
+};
+
+ok(!$oro->dbh->{AutoCommit}, 'Transaction');
+$oro->dbh->rollback;
+ok($oro->dbh->{AutoCommit}, 'Transaction');
+
+($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
+ok($rv, 'Prep and Execute');
+is($sth->fetchrow_arrayref->[0], 13, 'Fetch row.');
+
+is($oro->count('Content'), 13, 'count');
+
+my $load = $oro->load('Content' => ['count(*):number']);
+is($load->{number}, 13, 'AS feature');
+
+ok($oro->transaction(
+  sub {
+    foreach (1..100) {
+      $oro->insert(Content => { title => 'Check'.$_ });
+    };
+    return 1;
+  }), 'Transaction');
+
+is($oro->count('Content'), 113, 'Count');
+
+ok(!$oro->transaction(
+  sub {
+    foreach (1..100) {
+      $oro->insert(Content => { title => 'Check'.$_ });
+      return -1 if $_ == 50;
+    };
+    return 1;
+  }), 'Transaction');
+
+is($oro->count('Content'), 113, 'Count');
+
+# Nested transactions:
+
+ok($oro->transaction(
+  sub {
+    my $val = 1;
+
+    foreach (1..100) {
+      $oro->insert(Content => { title => 'Check'.$val++ });
+    };
+
+    ok(!$oro->transaction(
+      sub {
+	foreach (1..100) {
+	  $oro->insert(Content => { title => 'Check'.$val++ });
+	  return -1 if $_ == 50;
+	};
+      }), 'Nested Transaction 1');
+
+    ok($oro->transaction(
+      sub {
+	foreach (1..100) {
+	  $oro->insert(Content => { title => 'Check'.$val++ });
+	};
+	return 1;
+      }), 'Nested Transaction 2');
+
+    return 1;
+  }), 'Transaction');
+
+is($oro->count('Content'), 313, 'Count');
+
 
 __END__

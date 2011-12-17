@@ -10,7 +10,7 @@ use File::Path;
 use File::Basename;
 
 has ['dbh', 'file'];
-has created => 0;
+has created  => 0;
 
 # Todo: allow more than 500 insertions at a time
 
@@ -54,6 +54,8 @@ sub new {
   # Release callback
   $cb->($self) if $cb && ref($cb) eq 'CODE';
 
+  $self->{savepoint} = 1;
+
   return $self;
 };
 
@@ -87,10 +89,9 @@ sub insert {
 	  '(' . _q(\@keys) . ')';
 
     # Prepare and execute
-    my ($rv) = $self->_prepare_and_execute( $sql, \@values );
+    my ($rv) = $self->prep_and_exec( $sql, \@values );
 
     return $rv;
-
   }
 
   # Multiple inserts
@@ -111,34 +112,11 @@ sub insert {
     # Add data unions
     $sql .= $union . ((' UNION ' . $union) x (scalar(@_) - 1));
 
-    # Get database handle
-    my $dbh = $self->dbh;
-
-    # Prepare
-    my $sth;
-    eval {
-      $sth = $dbh->prepare($sql);
-    };
-
-    # Check for errors
-    if ($@) {
-      warn $@;
-      return;
-    };
-
-    # Execute
-    eval {
-      $sth->execute(map( @$_,  @_ ));
-    };
-
-    # Check for errors
-    if ($@) {
-      warn $@;
-      return 0;
-    };
+    # Prepare and execute
+    my ($rv) = $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
 
     # Everything went fine
-    return 1;
+    return $rv;
   };
 
   # Unknown query
@@ -175,7 +153,7 @@ sub update {
   };
 
   # Prepare and execute
-  my ($rv) = $self->_prepare_and_execute($sql, $values);
+  my ($rv) = $self->prep_and_exec($sql, $values);
 
   # Return value
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
@@ -206,7 +184,7 @@ sub select {
   };
 
   # Prepare and execute
-  my ($rv, $sth) = $self->_prepare_and_execute($sql, \@values);
+  my ($rv, $sth) = $self->prep_and_exec($sql, \@values);
 
   return unless $sth;
 
@@ -245,17 +223,20 @@ sub load {
     $fields = _fields( shift(@_) );
   };
 
-  # No parameters
-  return unless $_[0];
-
-  my ($pairs, $values) = _get_pairs( shift(@_) );
-
   # Build sql
-  my $sql = 'SELECT ' . $fields . ' FROM ' . $table .
-            ' WHERE ' . join(' AND ', @$pairs);
+  my $sql = 'SELECT ' . $fields . ' FROM ' . $table;
+
+  # Parameters
+  my ($pairs, $values);
+  if ($_[0]) {
+    ($pairs, $values) = _get_pairs( shift(@_) );
+    $sql .= ' WHERE ' . join(' AND ', @$pairs);
+  };
+
+  $sql .= ' LIMIT 1';
 
   # Prepare and execute
-  my ($rv, $sth) = $self->_prepare_and_execute($sql, $values);
+  my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
 
   # Retrieve
   return $sth ? $sth->fetchrow_hashref : {};
@@ -277,7 +258,7 @@ sub delete {
             ' WHERE ' . join(' AND ', @$pairs);
 
   # Prepare and execute
-  my ($rv, $sth) = $self->_prepare_and_execute($sql, $values);
+  my ($rv) = $self->prep_and_exec($sql, $values);
 
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
 };
@@ -307,14 +288,127 @@ sub update_or_insert {
   return $self->insert($table, { %param, %cond });
 };
 
-# Last insert id
-sub last_insert_id {
-  shift->dbh->sqlite_last_insert_rowid;
+
+# Count results
+sub count {
+  my $self  = shift;
+  my $table = shift;
+
+  # Build sql
+  my $sql = 'SELECT count(*) as count FROM ' . $table;
+
+  my ($pairs, $values);
+  if ($_[0]) {
+    ($pairs, $values) = _get_pairs( shift(@_) );
+    $sql .= ' WHERE ' . join(' AND ', @$pairs);
+  };
+
+  # Prepare and execute
+  my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
+
+  return (!$rv || $rv ne '0E0') ? 0 : $sth->fetchrow_arrayref->[0];
 };
 
-# Wrapper for dbi do
+
+# Prepare and execute
+sub prep_and_exec {
+  my ($self, $sql, $values, $cached) = @_;
+
+  # Prepare
+  my $sth;
+  eval {
+
+    # not cached
+    unless ($cached) {
+      $sth = $self->{dbh}->prepare( $sql );
+    }
+
+    # cached
+    else {
+      $sth = $self->{dbh}->prepare_cached( $sql );
+    };
+  };
+
+  # Check for errors
+  if ($@) {
+    warn $@;
+    return;
+  };
+
+  return unless $sth;
+
+  # Execute
+  my $rv;
+  eval {
+    $rv = $sth->execute( @$values );
+  };
+
+  # Check for errors
+  if ($@) {
+    warn $@;
+    return;
+  };
+
+  # Return values
+  return ($rv, $sth);
+};
+
+
+# Wrapper for DBI do
 sub do {
-  shift->dbh->do( @_ );
+  shift->{dbh}->do(@_);
+};
+
+
+# Wrap a transaction
+sub transaction {
+  my $self = shift;
+
+  return unless ($_[0] &&
+		   ref($_[0]) eq 'CODE');
+
+  my $dbh = $self->{dbh};
+
+  # Outside transaction
+  if ($dbh->{AutoCommit}) {
+    $dbh->begin_work;
+
+    # start
+    my $rv = $_[0]->($self);
+    if (!$rv || $rv != -1) {
+      $dbh->commit;
+      return 1;
+    };
+
+    # Rollback
+    $dbh->rollback;
+    return;
+  }
+
+  # Inside transaction
+  else {
+    my $sp = 'orosp'.$self->{savepoint}++;
+
+    # start transaction
+    $self->do('SAVEPOINT '.$sp);
+
+    # start
+    my $rv = $_[0]->($self);
+    if (!$rv || $rv != -1) {
+      $self->do('RELEASE SAVEPOINT '.$sp);
+      return 1;
+    };
+
+    # rollback
+    $self->do('ROLLBACK TO SAVEPOINT '.$sp);
+    return;
+  };
+};
+
+
+# Wrapper for sqlite last_insert_row_id
+sub last_insert_id {
+  shift->{dbh}->sqlite_last_insert_rowid;
 };
 
 
@@ -341,43 +435,32 @@ sub _get_pairs {
 };
 
 
-# Get filds
+# Get fields
 sub _fields {
-  join(', ', grep(/^[\._0-9a-zA-Z]+$/, @{ $_[0] }));
+
+  # Check for valid fields
+  my @fields = grep(/^(?:[\*\.\w]+(?::[a-zA-Z]+)?|
+                      [a-zA-Z]+\([\*\.\w\,]*\)(?::[a-zA-Z]+)?)$/x,
+		    @{ $_[0] });
+  my $fields = join @fields;
+
+  # Return if no alias fields exist
+  if (index(':',$fields) < 0) {
+    return $fields;
+  };
+
+  # join with alias fields
+  join(', ',
+       map {
+	 if ($_ =~ /^(.+?):([^:]+?)$/) {
+	   $1 . ' AS ' . $2
+	 }
+	 else {
+	   $_
+	 }
+       } @fields);
 };
 
-sub _prepare_and_execute {
-  my ($self, $sql, $values) = @_;
-
-  # Prepare
-  my $sth;
-  eval {
-    $sth = $self->dbh->prepare( $sql );
-  };
-
-  # Check for errors
-  if ($@) {
-    warn $@;
-    return;
-  };
-
-  return unless $sth;
-
-  # Execute
-  my $rv;
-  eval {
-    $rv = $sth->execute( @$values );
-  };
-
-  # Check for errors
-  if ($@) {
-    warn $@;
-    return;
-  };
-
-  # Return values
-  return ($rv, $sth);
-};
 
 # questionmark string
 sub _q ($) {
@@ -513,6 +596,7 @@ Scalar condition values will be inserted, if the fields do not exist.
   my $users = $oro->select(Person => { name => 'Daniel' });
   my $users = $oro->select(Person => ['id'] => { name => 'Daniel' });
   my $users = $oro->select(Person => ['id'] => { id => [1,2,4] });
+  my $users = $oro->select(Person => ['name:displayName']);
   $oro->select('Person' =>
                ['id','age'] =>
                { name => 'Daniel' } =>
@@ -531,19 +615,22 @@ and optionally a callback, which is released after each row.
 If the callback returns -1, the data fetching is aborted.
 In case of scalar values, identity is tested in the condition hash ref.
 In case of array refs, it is tested, if the field is an element of the set.
+Fields can be column names or functions. With a colon you can define
+aliases for the field names.
 
 =head2 C<load>
 
-  my $user = $oro->load(Person, { id => 4 });
-  my $user = $oro->load(Person, ['name'], { id => 4 });
+  my $user  = $oro->load(Person, { id => 4 });
+  my $user  = $oro->load(Person, ['name'], { id => 4 });
+  my $count = $oro->load(Person, ['count(*):persons']);
 
 Returns a single hash ref of a given table,
 that meets a given condition.
 Expects the table name of selection, an optional array ref of fields
-to return and a hash ref with conditions,
-the rows have to fulfill. Normally this includes the primary key.
-In case of scalar values, identity is tested. In case of array refs,
-it is tested, if the field is an element of the set.
+to return and a hash ref with conditions, the rows have to fulfill.
+Normally this includes the primary key.
+In case of scalar values, identity is tested.
+In case of array refs, it is tested, if the field is an element of the set.
 
 =head2 C<delete>
 
@@ -556,11 +643,65 @@ In case of scalar values, identity is tested. In case of array refs,
 it is tested, if the field is an element of the set.
 Returns the number of rows that were deleted.
 
+=head2 C<count>
+
+  my $persons = $oro->count('Person');
+  my $pauls   = $oro->count('Person' => { name => 'Paul' });
+
+Returns the number of rows of a table.
+Expects the table name and a hash ref with conditions,
+the rows have to fulfill.
+
+=head2 C<prep_and_exec>
+
+  my ($rv, $sth) = $oro->('SELECT ? From Person', ['name'], 'cached');
+  if ($rv) {
+    my $row;
+    while ($row = $sth->fetchrow_hashref) {
+      print $row->{name};
+      if ($name eq 'Fry') {
+        $sth->finish;
+        last;
+      };
+    };
+  };
+
+Prepare and execute an SQL statement with all checkings.
+Returns the return value (on success true, on error false)
+and the statement handle.
+Accepts the SQL statement, parameters for binding in an array
+reference and optionally a boolean value, if the prepared
+statement should be cached.
+
+
+=head2 C<transaction>
+
+  $oro->transaction(
+    sub {
+      foreach (1..100) {
+        $oro->insert(Person => { name => 'Peter'.$_ }) or return -1;
+      };
+      $oro->delete(Person => { id => 400 });
+
+      $oro->transaction(
+        sub {
+          $oro->insert('Person' => { name => 'Fry'});
+        });
+    });
+
+Allows to wrap transactions.
+Expects an anonymous subroutine containing all actions.
+If the subroutine returns -1, the transactional data will be omitted.
+Otherwise the actions will be released.
+Transactions established with this method can be securely nested.
+
+
 =head2 C<last_insert_id>
 
   my $id = $oro->last_insert_id;
 
 Returns the globally last inserted id.
+
 
 =head2 C<do>
 

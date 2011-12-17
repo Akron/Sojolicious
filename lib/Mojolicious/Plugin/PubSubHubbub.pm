@@ -282,8 +282,7 @@ sub callback {
   return _render_success( $c => $x_hub_on_behalf_of )
     unless $topics->[0];
 
-# Asynchronous is hard
-#  todo: $c->on(finish =>
+  # Todo: Async with on(finish => ..)
 
   # Secret is needed
   if ($secret) {
@@ -307,7 +306,6 @@ sub callback {
 				 $c,
 				 $type,
 				 $dom ));
-#    });
 
   return _render_success( $c => $x_hub_on_behalf_of );
 };
@@ -471,7 +469,7 @@ sub _render_success {
 
   # Set X-Hub-On-Behalf-Of header
   if ($x_hub_on_behalf_of &&
-	$x_hub_on_behalf_of =~ /^\d+$/) {
+      $x_hub_on_behalf_of =~ /^\d+$/) {
     $c->res->headers->header('X-Hub-On-Behalf-Of' =>
 			       $x_hub_on_behalf_of);
   };
@@ -593,22 +591,22 @@ is enabled.
 
 =head1 HELPERS
 
-=head2 C<publish>
+=head2 C<pubsub_publish>
 
   # In Controllers
-  $c->publish( 'my_feed',                       # named route
-               '/feed.atom',                    # relative paths
-               'https://sojolicio.us/feed.atom' # absolute uris
-             ):
+  $c->pubsub_publish( 'my_feed',                       # named route
+                      '/feed.atom',                    # relative paths
+                      'https://sojolicio.us/feed.atom' # absolute uris
+                     ):
 
 Publish a list of feeds in terms of a notification to the hub.
 
-=head2 C<subscribe>
+=head2 C<pubsub_subscribe>
 
   # In Controllers
-  $c->subscribe(topic => 'https://sojolicio.us/feed.atom',
-                hub   => 'https://hub.sojolicio.us' );
-                lease_seconds => 123456 );
+  $c->pubsub_subscribe(topic => 'https://sojolicio.us/feed.atom',
+                       hub   => 'https://hub.sojolicio.us' );
+                       lease_seconds => 123456 );
 
 Subscribe to a topic.
 
@@ -625,11 +623,11 @@ The method returns a true value on succes and a false value
 if an error occured. If called in an array context, the
 hub's response message body is returned additionally.
 
-=head2 C<unsubscribe>
+=head2 C<pubsub_unsubscribe>
 
   # In Controllers
-  $c->unsubscribe(topic => 'https://sojolicio.us/feed.atom',
-                  hub   => 'https://hub.sojolicio.us' );
+  $c->pubsub_unsubscribe(topic => 'https://sojolicio.us/feed.atom',
+                         hub   => 'https://hub.sojolicio.us' );
 
 Unsubscribe from a topic.
 
