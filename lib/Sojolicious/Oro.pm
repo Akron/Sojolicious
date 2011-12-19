@@ -13,6 +13,7 @@ has ['dbh', 'file'];
 has created  => 0;
 
 # Todo: allow more than 500 insertions at a time
+# Todo: Make savepoints less naive
 
 # Constructor
 sub new {
@@ -265,27 +266,36 @@ sub delete {
 
 
 # Update or insert a value
-sub update_or_insert {
+sub merge {
   my $self  = shift;
   my $table = shift;
 
   my %param = %{ shift( @_ ) };
-  my %cond  = ();
+  my %cond  = $_[0] ? %{ shift( @_ ) } : ();
 
-  if ($_[0]) {
-    %cond  = %{ shift( @_ ) };
 
-    # Update
-    # Todo: return 0 if error!
-    my $up = $self->update($table, \%param, \%cond);
-    return $up if $up && $up > 0;
-  };
+  my $rv;
+  my $trans = $self->transaction(
+    sub {
+      # Update
+      $rv = $self->update($table, \%param, \%cond);
+      return 1 if $rv;
 
-  # Delete all element conditions
-  delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
+      # Delete all element conditions
+      delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
 
-  # Insert
-  return $self->insert($table, { %param, %cond });
+      # Insert
+      $rv = $self->insert($table, { %param, %cond }) or return -1;
+      return 1;
+    });
+  return $rv if ($trans && $rv && $rv > 0);
+  return;
+};
+
+# temp:
+sub update_or_insert {
+  warn 'update_or_insert is deprecated in favor of merge';
+  shift->(@_);
 };
 
 
@@ -411,7 +421,6 @@ sub last_insert_id {
   shift->{dbh}->sqlite_last_insert_rowid;
 };
 
-
 # get pairs and values
 sub _get_pairs {
   my (@pairs, @values);
@@ -454,8 +463,7 @@ sub _fields {
        map {
 	 if ($_ =~ /^(.+?):([^:]+?)$/) {
 	   $1 . ' AS ' . $2
-	 }
-	 else {
+	 } else {
 	   $_
 	 }
        } @fields);
@@ -478,6 +486,7 @@ __END__
 
 Sojolicious::Oro - Simple SQLite database accessor
 
+
 =head1 SYNOPSIS
 
   use Sojolicious::Oro;
@@ -494,6 +503,7 @@ Sojolicious::Oro - Simple SQLite database accessor
   $oro->insert(Person => { name => 'Peter'});
   my $person = $oro->load(Person => { id => 4 });
 
+
 =head1 DESCRIPTION
 
 L<Sojolicious::Oro> is a simple database accessor that provides
@@ -502,12 +512,14 @@ For now it only works with SQLite.
 
 =head1 ATTRIBUTES
 
+
 =head2 C<dbh>
 
   my $dbh = $oro->dbh;
   $oro->dbh(DBI->connect('...'));
 
 The DBI database handle.
+
 
 =head2 C<file>
 
@@ -516,6 +528,7 @@ The DBI database handle.
 
 The sqlite file of the database.
 # This attribute is EXPERIMENTAL.
+
 
 =head2 C<created>
 
@@ -526,7 +539,9 @@ The sqlite file of the database.
 If the database was created on construction of the handle,
 this attribute is true. Otherwise it's false.
 
+
 =head1 METHODS
+
 
 =head2 C<new>
 
@@ -545,6 +560,7 @@ it is created.
 Accepts an optional callback that is only released, if
 the database is newly created.
 
+
 =head2 C<insert>
 
   $oro->insert(Person => { id => 4,
@@ -555,9 +571,10 @@ the database is newly created.
 Inserts a new row to a given table for single insertions.
 Expects the table name and a hash ref of values to insert.
 
-For multiple insertions in, it expects the table name
+For multiple insertions, it expects the table name
 to insert, an arrayref of the column names and at maximum
 500 array references of values to insert.
+
 
 =head2 C<update>
 
@@ -571,19 +588,21 @@ In case of scalar values, identity is tested. In case of array refs,
 it is tested, if the field is an element of the set.
 Returns the number of rows affected.
 
-=head2 C<update_or_insert>
 
-  $oro->update_or_insert(Person =>  { name => 'Daniel' },
-                                    { id   => 4 });
+=head2 C<merge>
+
+  $oro->merge(Person =>  { name => 'Daniel' },
+                         { id   => 4 });
 
 Updates values of an existing row of a given table,
-otherways inserts them.
+otherways inserts them (so called "upsert").
 Expects the table name to update or insert, a hash ref of
 values to update or insert, and optionally a hash ref with conditions,
 the rows have to fulfill.
 In case of scalar values, identity is tested. In case of array refs,
 it is tested, if the field is an element of the set.
 Scalar condition values will be inserted, if the fields do not exist.
+
 
 =head2 C<select>
 
@@ -618,6 +637,7 @@ In case of array refs, it is tested, if the field is an element of the set.
 Fields can be column names or functions. With a colon you can define
 aliases for the field names.
 
+
 =head2 C<load>
 
   my $user  = $oro->load(Person, { id => 4 });
@@ -632,6 +652,7 @@ Normally this includes the primary key.
 In case of scalar values, identity is tested.
 In case of array refs, it is tested, if the field is an element of the set.
 
+
 =head2 C<delete>
 
   my $rows = $oro->delete(Person => { id => 4 });
@@ -643,6 +664,7 @@ In case of scalar values, identity is tested. In case of array refs,
 it is tested, if the field is an element of the set.
 Returns the number of rows that were deleted.
 
+
 =head2 C<count>
 
   my $persons = $oro->count('Person');
@@ -651,6 +673,7 @@ Returns the number of rows that were deleted.
 Returns the number of rows of a table.
 Expects the table name and a hash ref with conditions,
 the rows have to fulfill.
+
 
 =head2 C<prep_and_exec>
 
@@ -714,6 +737,7 @@ Returns the globally last inserted id.
 Executes SQL code.
 This is a Wrapper for the DBI C<do()> method.
 
+
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
@@ -722,9 +746,11 @@ L<DBD::SQLite>,
 L<File::Path>,
 L<File::Basename>.
 
+
 =head1 AVAILABILITY
 
   https://github.com/Akron/Sojolicious
+
 
 =head1 COPYRIGHT AND LICENSE
 

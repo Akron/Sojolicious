@@ -123,29 +123,29 @@ $oro->select('Name' => ['prename'] =>
 		 ok($_[0]->{prename}, 'Fields');
 	     });
 
-ok($oro->update_or_insert( Content =>
-			     { content => 'Das ist der vierte content.' } =>
-			       { 'title' => 'Check!' }), # Changes two entries!
-   'Update or Insert');
+ok($oro->update( Content =>
+		   { content => 'Das ist der vierte content.' } =>
+		     { 'title' => 'Check!' }), # Changes two entries!
+   'Merge');
 
-ok($oro->update_or_insert( Content =>
-			     { content => 'Das ist der fuenfte content.' } =>
-			       { 'title' => 'Noch ein Check!' }),
-   'Update or Insert');
+ok($oro->merge( Content =>
+		  { content => 'Das ist der fuenfte content.' } =>
+		    { 'title' => 'Noch ein Check!' }),
+   'Merge');
 
-ok($oro->update_or_insert( Content =>
-			     { content => 'Das ist der sechste content.' } =>
-			       { 'title' => ['Noch ein Check!', 'FooBar'] }),
-   'Update or Insert');
+ok($oro->merge( Content =>
+		  { content => 'Das ist der sechste content.' } =>
+		    { 'title' => ['Noch ein Check!', 'FooBar'] }),
+   'Merge');
 
 is($oro->select('Content' =>
 		  { content => 'Das ist der sechste content.'}
 		)->[0]->{title}, 'Noch ein Check!', 'Title');
 
-ok($oro->update_or_insert( Content =>
-			     { content => 'Das ist der siebte content.' } =>
-			       { 'title' => ['HelloWorld', 'FooBar'] }),
-   'Update or Insert');
+ok($oro->merge( Content =>
+		  { content => 'Das ist der siebte content.' } =>
+		    { 'title' => ['HelloWorld', 'FooBar'] }),
+   'Merge');
 
 ok(!$oro->select('Content' =>
 		   { content => 'Das ist der siebte content.'}
@@ -160,10 +160,10 @@ is($oro->last_insert_id, 5, 'Row id');
 
 {
   local $SIG{__WARN__} = sub {};
-  ok(!$oro->update_or_insert( Content_unknown =>
-				{ content => 'Das ist der fuenfte content.' } =>
-				  { 'title' => 'Noch ein Check!' }),
-     'Update or Insert');
+  ok(!$oro->merge( Content_unknown =>
+		     { content => 'Das ist der fuenfte content.' } =>
+		       { 'title' => 'Noch ein Check!' }),
+     'Merge');
 };
 
 ok($oro->insert(Content => [qw/title content/] =>

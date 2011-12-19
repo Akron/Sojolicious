@@ -6,8 +6,6 @@ lib/Sojolicious/User_todo.pm
 lib/Sojolicious/Stream.pm
 lib/Sojolicious/Model.pm
 lib/Sojolicious/Model
-lib/Sojolicious/ComplexValues.pm
-lib/Sojolicious/ComplexValues
 lib/Sojolicious/Controller
 lib/Mojolicious/public
 lib/Mojolicious/Plugin/OAuth.pm
@@ -24,10 +22,10 @@ lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/Atom-Pub.t
-t/ComplexValues.t
 t/Util
 t/TagHelpers
 t-speed
+todo.txt
 public
 script*
 MYMETA*

@@ -1,3 +1,7 @@
+0.14 2011-12-19
+        - Added Sojolicious::ComplexValues.
+        - Add Transactions to Sojolicious::Oro.
+
 0.13 2011-12-15
         - Made the multiple inserts in Sojolicious::Oro
           independent from Transactions.
