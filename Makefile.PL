@@ -9,7 +9,9 @@ WriteMakefile(
     NAME         => "Sojolicious",
     AUTHOR         => 'Nils Diewald',
     PREREQ_PM => {
-        'Mojolicious'     => 2.12
+        'Mojolicious' => 2.12,
+        'DBD::SQLite' => 1.35,
+        'DBI'         => 1.57
     }
 );
 
