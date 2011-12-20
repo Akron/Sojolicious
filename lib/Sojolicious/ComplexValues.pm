@@ -64,23 +64,17 @@ sub init_db {
       $oro->do('ANALYZE ' . $name) or return -1;
 
       # ComplexValues Indices
-      $oro->do(
-	'CREATE INDEX IF NOT EXISTS ' .
-	$pref . '_complex_1_i ' .
-	'ON ' . $name . ' (res_id, pri_key, sec_key, val)'
-      ) or return -1;
-
-      $oro->do(
-	'CREATE INDEX IF NOT EXISTS ' .
-	$pref . '_complex_2_i ' .
-        'ON ' . $name . ' (val, sec_key, pri_key, res_id)'
-      ) or return -1;
-
-      $oro->do(
-	'CREATE INDEX IF NOT EXISTS ' .
-        $pref.'_complex_3_i ' .
-	'ON '.$name.' (res_id, pri_key)'
-      ) or return -1;
+      my $counter = 1;
+      foreach ('res_id, pri_key, sec_key, val',
+	       'val, sec_key, pri_key, res_id',
+	       'res_id, pri_key'
+	     ) {
+	$oro->do(
+	  'CREATE INDEX IF NOT EXISTS ' .
+	  $pref . '_complex_' . $counter++ . '_i ' .
+	  'ON ' . $name . ' (' . $_  . ')'
+	) or return -1;
+      };
 
       foreach (qw/res_id val/) {
 	$oro->do(
@@ -166,7 +160,7 @@ Sojolicious::ComplexValues - Database accessor for complex values
     filterOp    => 'startswith',
     filterValue => 'H',
     fields      => ['name','displayName','gender'],
-    sortBy      => ['displayName'],
+    sortBy      => 'displayName',
     startIndex  => 2,
     count       => 4
   });
@@ -207,7 +201,6 @@ The L<Sojolicious::Oro> accessor handle.
 
 The table name of the complex value resource.
 
-
 =head2 C<items_per_page>
 
   print $cv->items_per_page;
@@ -215,7 +208,6 @@ The table name of the complex value resource.
 
 The default number of items per page in the response.
 Defaults to 10.
-
 
 =head1 METHODS
 
@@ -248,14 +240,15 @@ The default value is 10.
     urls => [{
       value => 'http://www.thesimpsons.com/',
       type  => 'work'
-    },{
+    },
+    {
       value => 'http://www.snpp.com/',
       type  => 'home'
     }]
   });
 
-Stores a new complex item to the database and returns the objects
-id on success. Otherwise returns undef.
+Stores a new complex item to the database and returns the object's
+id on success. Otherwise returns C<undef>.
 The complexity is not arbitrary - only the following degrees of
 complexity are valid:
 
@@ -275,13 +268,14 @@ complexity are valid:
   urls => [{
     value => 'http://www.thesimpsons.com/',
     type  => 'work'
-  },{
+  },
+  {
     value => 'http://www.snpp.com/',
     type  => 'home'
   }]
 
-A simple value 'updated' is automatically set to the current time as a
-Unix timestamp.
+A simple value 'updated' is automatically set to the current time
+as a Unix timestamp.
 
 =head2 C<read>
 
@@ -296,15 +290,15 @@ Unix timestamp.
   });
 
   my $response = { error => 'no' };
-  $cv->read({id => 4}, $response);
+  $cv->read({ id => 4 }, $response);
 
 Retrieval of entries is rather complex. The supported query language is defined
 in L<http://portablecontacts.net/draft-spec.html#query-params|PortableContacts>
 (see L<below|Filtering>).
-Expects a hash reference for querying and optionall a second hash
+Expects a hash reference for querying and optional a second hash
 with a predefined response hash reference.
 
-=head3 ID requests
+=head3 ID Requests
 
 =over 2
 
@@ -332,13 +326,14 @@ The response for a single entry has the following structure:
       urls => [{
         value => 'http://www.thesimpsons.com/',
         type  => 'work'
-      },{
+      },
+      {
         value => 'http://www.snpp.com/',
         type  => 'home'
       }]
     },
-    'startIndex' => 0,
-    'totalResults' => 1
+    startIndex   => 0,
+    totalResults => 1
   }
 
 The response for multiple entries has the following structure:
@@ -350,7 +345,8 @@ The response for multiple entries has the following structure:
       urls => [{
         value => 'http://www.thesimpsons.com/',
         type  => 'work'
-      },{
+      },
+      {
         value => 'http://www.snpp.com/',
         type  => 'home'
       }]
@@ -359,8 +355,8 @@ The response for multiple entries has the following structure:
       name => 'Lisa',
       id   => 2
     }],
-    'startIndex' => 0,
-    'totalResults' => 2
+    startIndex   => 0,
+    totalResults => 2
   }
 
 =item C<id => '-'>, C<id => '---'>
@@ -383,7 +379,7 @@ statement is returned. The response has the following structure:
     totalResults => 1
   }
 
-With the parameter C<id => '---'> all ids matching a statement
+With the parameter value C<'---'> all ids matching a statement
 are returned. The response has the following structure:
 
   {
@@ -420,7 +416,7 @@ relation given by C<filterOp>.
 
 Defines a Unix timestamp or a string according to
 L<RFC3339|http://tools.ietf.org/html/rfc3339>
-to only return items updated after this time.
+to only return items updated after this point in time.
 
 =back
 
@@ -431,12 +427,13 @@ to only return items updated after this time.
 =item C<sortBy>
 
 Defines the field name to sort the result by.
-In difference to the specification, all plural values are treated
+B<Note:> In difference to the specification, all plural values are treated
 like complex values, there is currently no support for the 'primary' field.
 
 =item C<sortOrder>
 
-Defines the order of sorting. Allowed values are C<ascending> and C<descending>.
+Defines the order of sorting.
+Allowed values are C<ascending> and C<descending>.
 
 =back
 
@@ -473,6 +470,31 @@ The default value is '@all'.
 =head2 C<update>
 
   $cv->update({
+    id => 4,
+    gender => 'undisclosed',
+    name => {
+      middleName => 'J.'
+    },
+    tags => ['-father','+worker'],
+    urls => [{
+      'type'     => 'work',
+      '+value'   => 'http://www.thesimpsons.com/index.html',
+      'value'    => 'http://www.thesimpsons.com/',
+      '-comment' => undef
+      }]
+  });
+
+Updates an entry based on the C<id> parameter.
+
+B<Note:> Updating a value with an inappropriate method can lead
+to inconsistent data. In most cases, the updated values won't
+be reachable by using this API. This method is experimental and
+may change without warning.
+
+To update the different forms of an entry, different methods are
+needed:
+
+  $cv->update({
     # Necessary identifier
     id => 4,
 
@@ -493,30 +515,24 @@ The default value is '@all'.
 
     # Update existing plural complex value
     urls => [
-    # Create plural complex value
-    {
-      '+value' => 'http://sojolicio.us/homer',
-      '+type'  => 'profile'
-    },
-    # Delete
-    {
-      '-value' => 'http://www.snpp.com/',
-    },
-    # Update
-    {
-      'type'   => 'work',
-      '+value' => 'http://www.thesimpsons.com/index.html',
-      'value'  => 'http://www.thesimpsons.com/',
-      '-comment' => undef
-    }]
+      # Create plural complex value
+      {
+        '+value' => 'http://sojolicio.us/homer',
+        '+type'  => 'profile'
+      },
+      # Delete
+      {
+        '-value' => 'http://www.snpp.com/',
+      },
+      # Update
+      {
+        'type'   => 'work',
+        '+value' => 'http://www.thesimpsons.com/index.html',
+        'value'  => 'http://www.thesimpsons.com/',
+        '-comment' => undef
+      }
+    ]
   });
-
-B<Note:> Updating a value with an inappropriate method can lead
-to inconsistent data. In most cases, the updated values won't
-be reachable by using this API. This method is experimental and
-may change without warning.
-
-Updates an entry based on the C<id> parameter.
 
 Simple and complex values will be overwritten or added,
 if the value does not exist. If the key is given but the value
@@ -594,14 +610,14 @@ the database file was just created, for example like this:
 
   my $cv = Sojolicious::ComplexValues->new(
     oro  => $oro,
-    name => 'MyComplexTable'
+    name => 'MyComplexTable' # Table name
   );
 
   if ($oro->created) {
     $cv->init_db or die 'Unable to create database!';
   };
 
-Returns true on success, otherwise false.
+Returns a true value on success, otherwise C<undef>.
 
 =head1 DEPENDENCIES
 
