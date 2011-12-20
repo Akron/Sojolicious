@@ -63,8 +63,10 @@ sub register {
       my ($c, $acct, $xrd) = @_;
 
       # Get keys
-      my $mkeys = $c->get_magickeys('acct'      => $acct,
-				    'discovery' => 0);
+      my $mkeys = $c->get_magickeys(
+	'acct'      => $acct,
+	'discovery' => 0
+      );
 
       return unless defined $mkeys->[0];
 
@@ -77,7 +79,8 @@ sub register {
 	$xrd->add_link(
 	  'magic-public-key' => {
 	    href => 'data:application/magic-public-key,' . $mkey->to_string
-	  })->comment('MagicKey based on MagicSignatures-00');
+	  }
+	)->comment('MagicKey based on MagicSignatures-00');
       };
 
       # Based on spec-01
@@ -90,10 +93,11 @@ sub register {
 	  $att_hash{'mk:key_id'} = $mkey->[1] ;
 	};
 
-	$xrd->add_property(ME_NS,
-			   \%att_hash,
-			   $mkey->[0]->to_string
-			 )->comment('MagicKey based on MagicSignatures-01');
+	$xrd->add_property(
+	  ME_NS,
+	  \%att_hash,
+	  $mkey->[0]->to_string
+	)->comment('MagicKey based on MagicSignatures-01');
       };
       return;
     });

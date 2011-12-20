@@ -92,13 +92,13 @@ sub _create_normal_value {
 sub _create_complex_value {
   my ($oro, $name, $id, $key, $value) = @_;
 
-  # Add values for multiple insert
+  # Add values for multiple inserts with sec_key
   my @values;
-  foreach my $sec_key (keys %$value) {
-    push(@values, [$id, $key, $sec_key, $value->{$sec_key}]);
+  foreach (keys %$value) {
+    push(@values, [$id, $key, $_, $value->{$_}]);
   };
 
-  # If return value is not true
+  # Insert values as multiple inserts
   $oro->insert(
     $name => [qw/res_id pri_key sec_key val/], @values
   ) or return;
@@ -144,14 +144,15 @@ sub _create_plural_hash {
   # Get obj_id for plural hash
   my $obj_id = $oro->last_insert_id;
 
-  # Prepare multiple inserts
   my @pass = ($id, $obj_id, $key);
+
+  # Prepare multiple inserts with object key
   my @values;
-  foreach my $obj_key (keys %$object) {
-    push(@values, [@pass, $obj_key, $object->{$obj_key}]);
+  foreach (keys %$object) {
+    push(@values, [@pass, $_, $object->{$_}]);
   };
 
-  # If return value is not true
+  # Insert values as multiple inserts
   $oro->insert(
     $name => [qw/res_id obj_id pri_key sec_key val/], @values
   ) or return;

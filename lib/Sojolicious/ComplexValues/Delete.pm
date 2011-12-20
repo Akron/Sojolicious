@@ -27,7 +27,7 @@ sub delete {
 
 	  # Delete resource from updated table
 	  $oro->delete(
-	    $name.'_UPDATED ' => {
+	    $name . '_UPDATED ' => {
 	      res_id  => $id
 	    }) or return -1;
 

@@ -13,9 +13,13 @@ use Sojolicious::ComplexValues::Delete;
 #       of read - deletion of all '---' res_ids.
 # Todo: Create separated tutorial document.
 # Todo: Introduce replace operation.
+# Todo: Maybe a 'unique' parameter
+# Todo: Create an ->error string object
+#       and return an error response for all actions
 
 has [qw/oro name/];
 has items_per_page => 10;
+
 
 # Constructor
 sub new {
@@ -67,8 +71,7 @@ sub init_db {
       my $counter = 1;
       foreach ('res_id, pri_key, sec_key, val',
 	       'val, sec_key, pri_key, res_id',
-	       'res_id, pri_key'
-	     ) {
+	       'res_id, pri_key') {
 	$oro->do(
 	  'CREATE INDEX IF NOT EXISTS ' .
 	  $pref . '_complex_' . $counter++ . '_i ' .
@@ -87,7 +90,7 @@ sub init_db {
       # Create Updated table with fk constraint
       $oro->do(
 	'CREATE TABLE ' . $name . '_UPDATED (
-           res_id    INTEGER,
+           res_id    INTEGER UNIQUE,
            updated   INTEGER,
            FOREIGN KEY (res_id) REFERENCES ' . $name . ' (res_id)
         )'

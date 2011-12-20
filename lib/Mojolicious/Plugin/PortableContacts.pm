@@ -9,8 +9,13 @@ has 'host';
 has 'secure' => 0;
 
 # Default count parameter
-# Todo: itemsPerPage
-has 'count' => 0; # unlimited
+# TODO: itemsPerPage
+# TODO: Make ->poco PortableContact Server as well as Client
+# TODO: Check OAuth2 and fill $c->stash->{'poco.user_id'} -> poco.user_id
+# TODO: Updates via http://www.w3.org/TR/2011/WD-contacts-api-20110616/
+
+# Unlimited Items per page requested
+has count => 0;
 
 # Set condition regex
 our (%CONDITIONS_RE, $poco_ns);
@@ -31,9 +36,6 @@ BEGIN {
   our $poco_ns = 'http://portablecontacts.net/spec/1.0';
 };
 
-# Todo:
-# Updates via http://www.w3.org/TR/2011/WD-contacts-api-20110616/
-
 # Register Plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
@@ -41,19 +43,8 @@ sub register {
   # Load Host-Meta if not already loaded.
   # This automatically loads the 'XRD' and 'Util-Endpoint' plugin.
   unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
-    $mojo->plugin('HostMeta', {'host' => $param->{'host'} });
+    $mojo->plugin('HostMeta');
   };
-
-  # Set host
-  if (exists $param->{host}) {
-    $plugin->host( $param->{host} );
-  } else {
-# TODO: This is not supported anymore!
-    $plugin->host( $mojo->hostmeta('host') || 'localhost' );
-  };
-
-  # Set secure
-  $plugin->secure( $param->{secure} );
 
   # Add 'poco' shortcut
   $mojo->routes->add_shortcut(
@@ -72,82 +63,230 @@ sub register {
 	'on_prepare_hostmeta' => sub {
 	  my ($plugin, $c, $xrd_ref) = @_;
 
-	  # The endpoint now may return the correct host
+	  # Endpoint link in XRD
+	  my $link = $xrd_ref->add_link(
+	    $poco_ns => {
+	      href => $c->endpoint('poco')
+	    });
 
-	  for ($xrd_ref->add_link($poco_ns =>
-	      { href => $c->endpoint('poco') })) {
+	  # Add comment and title to link
+	  for ($link) {
 	    $_->comment('Portable Contacts');
-	    $_->add('Title','Portable Contacts API Endpoint');
+	    $_->add('Title' => 'Portable Contacts API Endpoint');
 	  };
-
 	}
       );
 
+      # Add route /@me/@all/
+      my $me_all = $route->waypoint('/');
+      for ($me_all) {
+	$_->name('poco/@me/@all-1');
 
-      # Todo: Check OAuth2 and fill $c->stash->{'poco_user_id'}
+	# Implicit Route
+	$_->to(
+	  cb => sub {
+	    $plugin->serve( shift );
+	  });
 
-      # /@me/@all/
-      my $me_all = $route->waypoint('/')->name('poco/@me/@all-1')->to(
-	cb => sub {
-	  $plugin->_multiple( shift );
-	});
-      $me_all->route('/@me/@all')->name('poco/@me/@all-2')->to;
+	# Explicit Route
+	$_->route('/@me/@all')
+	  ->name('poco/@me/@all-2')->to;
+      };
 
-      # /@me/@all/{id}
-      $route->route('/@me/@all/:id')->name('poco/@me/@all/{id}')->to(
-	cb => sub {
-	  my $c = shift;
-	  $c->stash('poco.user_id' => $c->stash('id'));
-	  return $plugin->_single($c);
-	});
+      # Add route /@me/@all/{id}
+      my $me_id = $route->route('/@me/@all/:id');
+      for ($me_id) {
+	$_->name('poco/@me/@all/{id}');
+	$_->to(
+	  cb => sub {
+	    my $c = shift;
+	    return $plugin->serve($c => $c->stash('id'));
+	  });
+      };
 
-      # /@me/@self
+      # Add route /@me/@self
       $route->route('/@me/@self')->name('poco/@me/@self')->to(
 	cb => sub {
 	  my $c = shift;
-	  $c->stash('poco.user_id' => $c->stash('poco.me_id'));
-	  return $plugin->_single($c);
+	  return $plugin->serve($c => $c->stash('poco.user_id'));
 	});
 
       return;
     });
 
   # Add 'poco' helper
-  $mojo->helper('poco'        => sub { $plugin->read( @_ );   } );
-  $mojo->helper('create_poco' => sub { $plugin->_set('create' => @_ ); } );
-  $mojo->helper('update_poco' => sub { $plugin->_set('update' => @_ ); } );
-  $mojo->helper('delete_poco' => sub { $plugin->_set('delete' => @_ ); } );
+  $mojo->helper('poco'        => sub { $plugin->read(shift, { @_ } );   } );
   $mojo->helper('render_poco' => sub { $plugin->render( @_ ); } );
+
+  foreach my $action (qw/create update delete/) {
+    $mojo->helper(
+      $action . '_poco' => sub {
+	$plugin->modify($action => @_ );
+      });
+  };
+};
+
+
+# Serve Portable Contacts
+sub serve {
+  my ($plugin, $c, $id) = @_;
+
+  my $status   = 404;
+  my $response;
+
+  # Return single response for /@me/@self or /@me/@all/{id}
+  if ($id) {
+
+    $response = { entry => +{} };
+
+    # Get results
+    $plugin->read(
+      $c => {
+	$plugin->_get_param( %{$c->param->to_hash} ),
+	id => $id
+      }, $response );
+
+    $status = 200 if $response->totalResults;
+  }
+
+  # Return multiple response for /@me/@all
+  else {
+
+    $response = { entry => [] };
+
+    # Get results
+    $plugin->read(
+      $c => {
+	$plugin->_get_param(%{$c->param->to_hash})
+      },
+      $response
+    );
+
+    # Request successfull
+    $status = 200 if $response;
+  };
+
+  # Render poco
+  return $plugin->render(
+    $c     => _new_response($response),
+    status => $status
+  );
 };
 
 
 # Get PortableContacts
 sub read {
-  my $plugin = shift;
-  my $c = shift;
+  my ($plugin, $c, $param, $response) = @_;
 
-  # Init response object
-  my $response = { entry => (@_ > 1 ? [] : +{} ) };
-
-  # Return empty response if no parameter was set
-  return _new_response($response) unless defined $_[0];
-
-  # Accept id or param hashref
-  my $param = (@_ > 1) ? { @_ } : { id => $_[0] };
+  $response //= {};
 
   # Run 'get_poco' hook
-  $c->app->plugins->emit_hook('read_poco',
-			      $plugin,
-			      $c,
-			      $param,
-			      $response);
+  $c->app->plugins->emit_hook(
+    'read_poco' => (
+      $plugin,
+      $c,
+      $param,
+      $response
+    ));
 
   return _new_response($response);
 };
 
 
+# Render Portable Contacts
+sub render {
+  my ($plugin, $c, $response, @param) = @_;
+
+  # content negotiation
+  return $c->respond_to(
+    xml => sub {
+      $c->render(
+	data   => $response->to_xml,
+	format => 'xml',
+	@param
+      )},
+    any => sub {
+      $c->render(
+	data   => $response->to_json,
+	format => 'json',
+	@param
+      )});
+};
+
+# Filter for valid parameters
+sub _get_param {
+  my $plugin = shift;
+  my %param  = @_;
+
+  my %new_param;
+  foreach my $cond (keys %CONDITIONS_RE) {
+    if (exists $param{$cond} && !ref($param{$cond})) {
+
+      # Valid
+      if ($param{$cond} =~ $CONDITIONS_RE{$cond}) {
+	$new_param{$cond} = $param{$cond};
+      };
+    };
+  };
+
+  # Set correct count parameter
+  my $count = $plugin->count;
+
+  if (exists $new_param{count}) {
+
+    # There is a default count value
+    if ($count) {
+
+      # Count is valid
+      if ($count > $new_param{count}) {
+	$count =  delete $new_param{count};
+      }
+
+      # Count is invalid
+      else {
+	delete $new_param{count};
+	delete $new_param{startIndex};
+      };
+    }
+
+    # No count as default
+    else {
+      $count = delete $new_param{count};
+    };
+  };
+
+  # set new count value
+  $new_param{count} = $count if $count;
+
+  # return new parameters
+  return %new_param;
+};
+
+# Private function for response objects
+sub _new_response {
+
+  # Object is already response object
+  if (ref($_[0]) eq __PACKAGE__ . '::Response') {
+    return $_[0];
+  }
+
+  # Create new response object
+  else {
+    return Mojolicious::Plugin::PortableContacts::Response->new(@_);
+  };
+};
+
+
+
+
+
+
+
+
+
+
 # Change PortableContacts Entry
-sub _set {
+sub modify {
   my $plugin  = shift;
   my $action  = lc( shift(@_) );
   my $c       = shift;
@@ -181,163 +320,6 @@ sub _set {
 
   # Something went wrong
   return;
-};
-
-
-# Return response for /@me/@self or /@me/@all/{id}
-sub _single {
-  my ($plugin, $c) = @_;
-
-  my $id = $c->stash('poco.user_id');
-
-  my $response = {entry => +{}};
-  my $status   = 404;
-
-  if ($id) {
-
-    # Clone parameters with values
-    my %param;
-    foreach ($c->param) {
-      $param{$_} = $c->param($_) if $c->param($_);
-    };
-
-    # Get results
-    $response = $plugin->read(
-      $c => (
-	$plugin->_get_param(\%param),
-	id => $id
-      )
-    );
-
-    $status = 200 if $response->totalResults;
-  };
-
-  # Render poco
-  return $plugin->render(
-    $c => _new_response($response),
-    status => $status
-  );
-};
-
-
-# Return response for /@me/@all
-sub _multiple {
-  my ($plugin, $c) = @_;
-
-  # Clone parameters with values
-  my %param;
-  foreach ($c->param) {
-    $param{$_} = $c->param($_) if $c->param($_);
-  };
-
-  # Get results
-  my $response = $plugin->read( $c =>
-				  $plugin->_get_param(\%param));
-
-  # Render poco
-  return $plugin->render($c => $response);
-};
-
-
-# Check for valid parameters
-sub _get_param {
-  my $plugin = shift;
-  my %param = %{ shift(@_) };
-
-  my %new_param;
-  foreach my $cond (keys %CONDITIONS_RE) {
-    if (exists $param{$cond}) {
-
-      # Valid
-      if ($param{$cond} =~ $CONDITIONS_RE{$cond}) {
-	$new_param{$cond} = $param{$cond};
-      }
-
-      # Not valid
-      else {
-	$plugin->app->log->debug(
-	  'Not a valid PoCo parameter: '.
-	    qq{"$cond": "$param{$cond}"});
-      };
-    };
-  };
-
-  # Set correct count parameter
-  my $count = $plugin->count;
-  if (exists $new_param{count}) {
-
-    # There is a default count value
-    if ($count) {
-
-      # Count is valid
-      if ($count > $new_param{count}) {
-	$count =  delete $new_param{count};
-      }
-
-      # Count is invalid
-      else {
-	delete $new_param{count};
-	delete $new_param{startIndex};
-      };
-    }
-
-    # No count as default
-    else {
-      $count = delete $new_param{count};
-    };
-  };
-
-  # set new count value
-  $new_param{count} = $count if $count;
-
-  # return new parameters
-  return %new_param;
-};
-
-
-# Private function for response objects
-sub _new_response {
-
-  # Object is already response object
-  if (ref($_[0]) eq
-	'Mojolicious::Plugin::PortableContacts::Response') {
-    return $_[0];
-  }
-
-  # Create new response object
-  else {
-    return Mojolicious::Plugin::PortableContacts::Response->new(@_);
-  };
-};
-
-# respond to poco
-sub render {
-  my $plugin = shift;
-  my $c = shift;
-  my $response = shift;
-  my %param = @_;
-
-  # Return value RESTful
-  return $c->respond_to(
-
-    # Render as xml
-    xml => sub {
-      shift->render(
-	'status' => $param{status} || 200,
-	'format' => 'xml',
-	'data'   => $response->to_xml
-      )
-    },
-
-    # Render as JSON
-    any => sub {
-      shift->render(
-	'status' => $param{status} || 200,
-	'format' => 'json',
-	'data'   => $response->to_json
-      )
-    }
-  );
 };
 
 1;

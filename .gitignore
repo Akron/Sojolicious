@@ -6,6 +6,7 @@ lib/Sojolicious/User_todo.pm
 lib/Sojolicious/Stream.pm
 lib/Sojolicious/Model.pm
 lib/Sojolicious/Model
+lib/Sojolicious/Cache.pm
 lib/Sojolicious/Controller
 lib/Mojolicious/public
 lib/Mojolicious/Plugin/OAuth.pm
@@ -25,6 +26,7 @@ t/Atom-Pub.t
 t/Util
 t/TagHelpers
 t-speed
+t-leak
 todo.txt
 public
 script*

@@ -36,8 +36,10 @@ sub register {
       };
 
       # Set Endpoint url
-      my $endpoint_url = $mojo->url_for(
-	$name => %placeholders)->to_abs->clone;
+      my $endpoint_url =
+	$mojo->url_for(
+	  $name => %placeholders
+	)->to_abs->clone;
 
       for ($endpoint_url) {
 	$_->host($param->{host})     if exists $param->{host};
@@ -80,7 +82,7 @@ sub register {
 	    $_->scheme($req_url->scheme || 'http');
 	  };
 	};
-	$_->port($req_url->port)     unless $_->port;
+	$_->port($req_url->port) unless $_->port;
       };
 
       my $endpoint = $endpoint_url->to_abs->to_string;
@@ -91,11 +93,16 @@ sub register {
 
       # Get stash or defaults hash
       my $stash_param = ref($c) eq 'Mojolicious::Controller' ?
-	$c->stash : ref($c) eq 'Mojolicious' ? $c->defaults : {};
+	                $c->stash :
+			(
+			  ref($c) eq 'Mojolicious' ?
+			  $c->defaults : {}
+			);
 
       # Interpolate template
       pos($endpoint) = 0;
       while ($endpoint =~ /\{([^\}\?}\?]+)\??\}/g) {
+
 	# Save search position
 	# Todo: Not exact!
 	my $val = $1;
@@ -152,6 +159,8 @@ sub register {
 };
 
 1;
+
+__END__
 
 =pod
 

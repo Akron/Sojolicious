@@ -21,43 +21,34 @@ sub read {
   my $name = $self->{name};
   my $dbh  = $oro->{dbh};
 
+  # Init if no response object was given
   $response //= {};
 
   my ($id, @resource);
-  my ($total_results, $start_index) = (0, 0);
+  my ($total_results, $start_index,
+      $single, $id_request) = (0, 0, 0, 0);
 
   # Set count to default
   my $count = $self->items_per_page;
-
-  my ($single, $id_request) = (0, 0);
 
   # Single resource
   if (exists $param->{id} && $param->{id}) {
     $id = delete $param->{id};
 
     # Split string id array
-    if (index($id, ',') > 0) {
-      $id = [ split(/,/, $id) ];
-    };
+    $id = [ split(/,/, $id) ] if index($id, ',') > 0;
 
     # Single request or id request
     unless (ref($id)) {
 
       # Multiple id requests
-      if ($id eq '---') {
-	$id_request = 1;
-	$id = undef;
-      }
-
-      # Single request
-      else {
+      if ($id ne '---') {
 	$single = 1;
+      };
 
-	# Single id request
-	if ($id eq '-') {
-	  $id_request = 1;
-	  $id = undef;
-	};
+      if (index($id, '-') == 0) {
+	$id_request = 1;
+      	$id = undef;
       };
     };
   };
@@ -65,10 +56,10 @@ sub read {
   # Id request
   if (defined $id) {
 
+    # Fetch all res_ids based on ids
     my ($sql, $bind_param) = _id_sql($name, {%$param}, $id);
 
-    # warn $sql;
-
+    # Fetch all entry lines
     my $entry_lines =
       $dbh->selectall_arrayref($sql, {}, @$bind_param);
 
@@ -91,8 +82,6 @@ sub read {
     my ($sql, $bind_param) =
       _multiple_basic_sql($name, $param);
 
-    # warn $sql;
-
     # Get offset and count
     if ($param->{startIndex} && $param->{startIndex} > 0) {
       $start_index = $param->{startIndex};
@@ -110,10 +99,10 @@ sub read {
     # Todo: Check for rv
 
     # Fetch all matching ids
-    my @matches = map($_->[0],  @{$sth->fetchall_arrayref});
+    my @matches = map { $_->[0] }  @{$sth->fetchall_arrayref};
 
     # Set total results
-    $total_results = @matches;
+    $total_results = scalar @matches;
 
     # Splice the result based on the given limitations
     splice(@matches, 0, $start_index) if $start_index != 0;
@@ -131,8 +120,6 @@ sub read {
 
       ($sql, $bind_param) = _multiple_fetch_sql($name, $param, \@matches);
 
-      # warn $sql;
-
       # Prepare
       my ($rv, $sth) = $oro->prep_and_exec($sql, $bind_param, 'cached');
 
@@ -148,7 +135,7 @@ sub read {
 	my %matches;
 
 	my $i = 0;
-	$matches{$_} = $i++ foreach @matches;
+	$matches{$_} = $i++ for @matches;
 
 	my @new_resource;
 	foreach my $res (@resource) {
@@ -213,8 +200,8 @@ sub _id_sql {
   # Presentation - fields
   if (exists $param->{fields}) {
     my ($sql_w_fields, $fields) = _sql_fields($name, $param->{fields});
-    $sql .= ' AND ' . $sql_w_fields;
     push(@parameter, @$fields);
+    $sql .= ' AND ' . $sql_w_fields;
   };
 
   # Sort lines

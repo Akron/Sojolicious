@@ -15,10 +15,11 @@ sub b64url_encode ($;$) {
   return '' unless $v;
 
   utf8::encode $v if utf8::is_utf8 $v;
-#  $v = encode_base64($v, '');
   $v = b64_encode($v, '');
   $v =~ tr{+/}{-_};
   $v =~ tr{\t-\x0d }{}d;
+
+  # Trim padding or not
   $v =~ s/\=+$// unless $p;
 
   return $v;
@@ -37,7 +38,6 @@ sub b64url_decode ($) {
   };
 
   return b64_decode($v);
-#  return decode_base64($v);
 };
 
 1;
