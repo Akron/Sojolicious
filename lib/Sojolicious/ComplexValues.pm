@@ -106,18 +106,20 @@ sub init_db {
       };
 
       # Create trigger update
-      $oro->do('CREATE TRIGGER
-                  update_updated
-                AFTER UPDATE OF updated
-                ON ' . $name . '_UPDATED
-                BEGIN
-                UPDATE ' . $name . '
-                  SET val = new.updated
-                  WHERE res_id = new.res_id AND
-                        pri_key = "updated";
-                END') or return -1;
+      $oro->do(<<"TRIGGER") or return -1;
+CREATE TRIGGER
+  update_updated
+AFTER UPDATE OF updated
+ON ${name}_UPDATED
+BEGIN
+  UPDATE $name SET
+    val = new.updated
+  WHERE
+    res_id  = new.res_id AND
+    pri_key = "updated";
+END
+TRIGGER
 
-      return 1;
     });
 };
 

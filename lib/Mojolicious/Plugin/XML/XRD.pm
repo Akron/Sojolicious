@@ -6,7 +6,7 @@ our $MIME      = 'application/xrd+xml';
 our $NAMESPACE = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
 our $PREFIX    = 'xrd';
 
-# xml_mime 'application/xrd+xml';
+# Todo: Allow for JRD-to-XRD Conversion
 
 # Constructor
 sub new {
@@ -97,38 +97,39 @@ sub get_expiration {
 # Render JRD
 sub to_json {
   my $self = shift;
-  my $dom  = $self->root;
+  my $root  = $self->root->at(':root');
 
   my %object;
 
   # Serialize Subject and Expires
   foreach (qw/Subject Expires/) {
-    my $obj = $dom->at($_);
+    my $obj = $root->at($_);
     $object{lc($_)} = $obj->text if $obj;
   };
 
   # Serialize aliases
   my @aliases;
-  $dom->find('Alias')->each(
+  $root->children('Alias')->each(
     sub {
       push(@aliases, shift->text );
     });
   $object{'aliases'} = \@aliases if @aliases;
 
   # Serialize titles
-  my $titles = _to_json_titles($dom);
+  my $titles = _to_json_titles($root);
   $object{'titles'} = $titles if keys %$titles;
 
   # Serialize properties
-  my $properties = _to_json_properties($dom);
+  my $properties = _to_json_properties($root);
   $object{'properties'} = $properties if keys %$properties;
 
   # Serialize links
   my @links;
-  $dom->find('Link')->each(
+  $root->children('Link')->each(
     sub {
       my $link = shift;
       my $link_att = $link->attrs;
+
       my %link_prop;
       foreach (qw/rel template href/) {
 	if (exists $link_att->{$_}) {
@@ -142,7 +143,7 @@ sub to_json {
 
       # Serialize link properties
       my $link_properties = _to_json_properties($link);
-      $link_prop{'properties'} = $link_properties 
+      $link_prop{'properties'} = $link_properties
 	if keys %$link_properties;
 
       push(@links, \%link_prop);
@@ -156,7 +157,7 @@ sub to_json {
 sub _to_json_titles {
   my $node = shift;
   my %titles;
-  $node->find('Title')->each(
+  $node->children('Title')->each(
     sub {
       my $val  = $_->text;
       my $lang = $_->attrs->{'xml:lang'} || 'default';
@@ -170,7 +171,7 @@ sub _to_json_titles {
 sub _to_json_properties {
   my $node = shift;
   my %property;
-  $node->find('Property')->each(
+  $node->children('Property')->each(
     sub {
       my $val = $_->text;
       my $type = $_->attrs->{'type'} || 'null';

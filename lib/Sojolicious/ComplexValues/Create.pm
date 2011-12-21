@@ -15,12 +15,13 @@ sub create {
     sub {
 
       # Slow but securely returns the correct id
-      $dbh->do(
-	'INSERT INTO ' . $name . '
-          (pri_key, res_id, val)
-	  SELECT "id",
-            ifnull((SELECT MAX(res_id) FROM '.$name.'),0) + 1,
-            ifnull((SELECT MAX(res_id) FROM '.$name.'),0) + 1') or return -1;
+      $dbh->do(<<"MAX_ID") or return -1;
+INSERT INTO $name
+  (pri_key, res_id, val)
+SELECT "id",
+  ifnull((SELECT MAX(res_id) FROM $name),0) + 1,
+  ifnull((SELECT MAX(res_id) FROM $name),0) + 1
+MAX_ID
 
       $id = ($dbh->selectrow_array(
 	'SELECT res_id FROM ' . $name .

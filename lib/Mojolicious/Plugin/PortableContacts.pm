@@ -115,7 +115,7 @@ sub register {
     });
 
   # Add 'poco' helper
-  $mojo->helper('poco'        => sub { $plugin->read(shift, { @_ } );   } );
+  $mojo->helper('poco'        => sub { $plugin->read(shift, { @_, internal => 1 } );   } );
   $mojo->helper('render_poco' => sub { $plugin->render( @_ ); } );
 
   foreach my $action (qw/create update delete/) {
@@ -262,6 +262,7 @@ sub _get_param {
   return %new_param;
 };
 
+
 # Private function for response objects
 sub _new_response {
 
@@ -396,7 +397,7 @@ Query as a L<Mojolicious::Plugin::PortableContacts::Response> object.
 The minimal set of possible parameters are described
 L<http://portablecontacts.net/draft-spec.html>.
 In addition to that, user ids (as in /@me/@all/{id}) should be
-provided as C<me_id => {id}> and C<id => {id}>.
+provided as C<id => {id}>.
 
 =head2 C<create_poco>
 
@@ -450,7 +451,7 @@ for serving the PortableContacts API endpoint.
 
 =over 2
 
-=item C<get_poco>
+=item C<read_poco>
 
 This hook is run to retrieve the PortableContacts query result set
 from a data store.
@@ -458,6 +459,13 @@ The hook passes the current plugin object, the current Controller object,
 the query parameters as a hash reference and an empty
 L<Mojolicious::Plugin::PortableContacts::Response> object, expected to
 be filled with the requested result set.
+In addition to the query an C<internal> parameter with a true value is
+appended, if the hook was emitted from the helper instead of the route.
+
+
+
+todo ...
+
 
 =back
 

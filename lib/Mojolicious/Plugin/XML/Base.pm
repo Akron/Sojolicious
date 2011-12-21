@@ -3,6 +3,10 @@ use Mojo::Base 'Mojo::DOM';
 use Mojo::ByteStream 'b';
 use Mojo::Loader;
 
+# Todo: use attributes for get and add
+#       sub title : add {};
+#       sub title : get {};
+
 use constant {
   I         => '  ',
   SERIAL_NS => 'http://sojolicio.us/ns/xml-serial',

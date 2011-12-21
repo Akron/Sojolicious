@@ -6,8 +6,9 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 42;
+use Test::More tests => 44;
 use Test::Mojo;
+use Mojo::JSON;
 use Mojolicious::Lite;
 
 
@@ -118,3 +119,27 @@ is($xrd->get_property('check')->text, 2, 'before_serving_hostmeta 2');
 $xrd = $c->hostmeta;
 is($xrd->get_property('permanentcheck')->text, 1, 'on_prepare_hostmeta 3');
 is($xrd->get_property('check')->text, 3, 'before_serving_hostmeta 3');
+
+$app->hook('before_serving_hostmeta',
+	   => sub {
+	     my ($plugin, $c, $xrd_ref) = @_;
+
+	     my $link = $xrd_ref->add_link('salmon' => 'http://www.sojolicio.us/' );
+	     $link->add('Title' => 'Salmon');
+	   });
+
+$xrd = $c->hostmeta;
+is_deeply(Mojo::JSON->new->decode($xrd->to_json),
+	  {"links" => [
+	    {"rel" => "salmon",
+	     "titles" => {
+	       "default" => "Salmon"
+	     }
+	   }
+	  ],
+	   "properties" => {
+	     "permanentcheck" => "1",
+	     "check" => "4",
+	     "foo" => "bar"
+	   }
+	 }, 'json Export');
