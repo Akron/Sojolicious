@@ -25,6 +25,7 @@ lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/Atom-Pub.t
 t/Util
 t/TagHelpers
+t/PortableContacts.t
 t-speed
 t-leak
 todo.txt

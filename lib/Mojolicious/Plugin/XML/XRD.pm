@@ -322,7 +322,7 @@ Mojolicious::Plugin::XML::XRD - Extensible Resource Descriptor plugin
 
 L<Mojolicious::Plugin::XRD> is a plugin to support
 Extensible Resource Descriptor (XRD) documents rendering
-(see L<Specification|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>),
+(see L<http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html|Specification>),
 that where created using L<Mojolicious::Plugin::XML::XRD>.
 
 =head1 METHODS
@@ -372,7 +372,8 @@ This may differ to the HTTP expiration date.
 
   my $jrd = $xrd->to_json;
 
-Returns a JSON string representing a JRD document.
+Returns a JSON string representing a JRD document
+as described in L<https://tools.ietf.org/html/rfc6415|RFC6415>.
 
 =head1 MIME-TYPES
 

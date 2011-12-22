@@ -156,17 +156,4 @@ is_deeply(
   $json->decode($jrd_doc), 'JRD'
 );
 
-
 __END__
-
-render_xrd
-new with jrd
-
-"links":[
-{
-"rel":"author",
-"href":"http:\/\/blog.example.com\/author\/steve",
-"type":"text\/html"
-},
-{"rel":"author","href":"http:\/\/example.com\/author\/john"},
-{"rel":"copyright","template":"http:\/\/example.com\/copyright?id={uri}"}]

@@ -132,32 +132,38 @@ sub serve {
   my ($plugin, $c, $id) = @_;
 
   my $status   = 404;
-  my $response;
+  my $response = {
+    totalResults => 0,
+    itemsPerPage => 0
+  };
+
+  my $param = $c->param ? $c->param->to_hash : {};
 
   # Return single response for /@me/@self or /@me/@all/{id}
   if ($id) {
 
-    $response = { entry => +{} };
+    $response->{entry} = {};
+
 
     # Get results
     $plugin->read(
       $c => {
-	$plugin->_get_param( %{$c->param->to_hash} ),
+	$plugin->_get_param( %$param ),
 	id => $id
       }, $response );
 
-    $status = 200 if $response->totalResults;
+    $status = 200 if $response->{totalResults};
   }
 
   # Return multiple response for /@me/@all
   else {
 
-    $response = { entry => [] };
+    $response->{entry} = [];
 
     # Get results
     $plugin->read(
       $c => {
-	$plugin->_get_param(%{$c->param->to_hash})
+	$plugin->_get_param(%$param)
       },
       $response
     );

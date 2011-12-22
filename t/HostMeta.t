@@ -11,7 +11,6 @@ use Test::Mojo;
 use Mojo::JSON;
 use Mojolicious::Lite;
 
-
 my $hm_host = 'hostme.ta';
 
 my $t = Test::Mojo->new;

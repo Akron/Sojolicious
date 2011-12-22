@@ -232,9 +232,9 @@ Mojolicious::Plugin::HostMeta - HostMeta Plugin for Mojolicious
 
 =head1 DESCRIPTION
 
-L<Mojolicious::Plugin::HostMeta> is a plugin to support 
+L<Mojolicious::Plugin::HostMeta> is a plugin to support
 "well-known" HostMeta documents
-(see L<http://tools.ietf.org/html/draft-hammer-hostmeta|Specification>).
+(see L<https://tools.ietf.org/html/rfc6415|RFC6415>).
 
 =head1 ATTRIBUTES
 
@@ -342,7 +342,8 @@ This can be used for caching.
 =head1 DEPENDENCIES
 
 L<Mojolicious> (best with SSL support),
-L<Mojolicious::Plugin::XRD>.
+L<Mojolicious::Plugin::XRD>,
+L<Storable>.
 
 =head1 AVAILABILITY
 
