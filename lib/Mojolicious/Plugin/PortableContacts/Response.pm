@@ -87,7 +87,9 @@ sub to_json {
     };
   };
 
-  return Mojo::JSON->new->encode( \%response );
+  my $x = Mojo::JSON->new->encode( \%response );
+
+  return $x;
 };
 
 # Return XML document

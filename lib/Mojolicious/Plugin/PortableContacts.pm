@@ -5,6 +5,10 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojolicious::Plugin::PortableContacts::Response;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
+
+use Data::Dumper 'Dumper';
+
+
 has 'host';
 has 'secure' => 0;
 
@@ -142,9 +146,6 @@ sub serve {
   # Return single response for /@me/@self or /@me/@all/{id}
   if ($id) {
 
-    $response->{entry} = {};
-
-
     # Get results
     $plugin->read(
       $c => {
@@ -271,7 +272,6 @@ sub _get_param {
 
 # Private function for response objects
 sub _new_response {
-
   # Object is already response object
   if (ref($_[0]) eq __PACKAGE__ . '::Response') {
     return $_[0];

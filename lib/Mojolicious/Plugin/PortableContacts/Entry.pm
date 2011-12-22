@@ -4,28 +4,28 @@ use Mojolicious::Plugin::XML::Base;
 
 # todo - allow further valid labels
 
-my $SINGULAR_RE = qr/^(?:id|
-                        (?:preferred_user|nick|display_)?name|
-                        published|
-                        updated|
-                        birthday|
-                        anniversary|
-                        gender|
-                        note|
-                        utc_offset|
-                        connected)$/x;
-my $PLURAL_RE = qr/^(?:email|
-                       url|
-                       phone_number|
-                       im|
-                       photo|
-                       tag|
-                       relationship|
-                       organization|
-                       addresse|
-                       account)s$/x;
-my $VALID_RE = qr(^$SINGULAR_RE|$PLURAL_RE$);
-my $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
+our $SINGULAR_RE = qr/^(?:id|
+                       (?:preferredUsern|nickn|displayN)?ame|
+                       published|
+                       updated|
+                       birthday|
+                       anniversary|
+                       gender|
+                       note|
+                       utcOffset|
+                       connected)$/x;
+our $PLURAL_RE = qr/^(?:email|
+                      url|
+                      phoneNumber|
+                      im|
+                      photo|
+                      tag|
+                      relationship|
+                      organization|
+                      addresse|
+                      account)s$/x;
+our $VALID_RE = qr(^$SINGULAR_RE|$PLURAL_RE$);
+our $FORMATTED_RE = qr/^(?:formatted|streetAddress|description)$/;
 
 
 # Return XML document
