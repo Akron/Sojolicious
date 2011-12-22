@@ -4,7 +4,7 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 10;
+use Test::More tests => 12;
 use Test::Mojo;
 use Mojolicious::Lite;
 use Mojo::JSON;
@@ -71,6 +71,102 @@ is_deeply(
       properties => { bar  => 'foo' } },
     'Correct JRD');
 
+# From https://tools.ietf.org/html/draft-hammer-hostmeta-17#appendix-A
+my $jrd_doc = <<'JRD';
+{
+  "subject":"http://blog.example.com/article/id/314",
+  "expires":"2010-01-30T09:30:00Z",
+  "aliases":[
+    "http://blog.example.com/cool_new_thing",
+    "http://blog.example.com/steve/article/7"],
+
+  "properties":{
+    "http://blgx.example.net/ns/version":"1.3",
+    "http://blgx.example.net/ns/ext":null
+  },
+  "links":[
+    {
+      "rel":"author",
+      "type":"text/html",
+      "href":"http://blog.example.com/author/steve",
+      "titles":{
+        "default":"About the Author",
+        "en-us":"Author Information"
+      },
+      "properties":{
+        "http://example.com/role":"editor"
+      }
+    },
+    {
+      "rel":"author",
+      "href":"http://example.com/author/john",
+      "titles":{
+        "default":"The other author"
+      }
+    },
+    {
+      "rel":"copyright",
+      "template":"http://example.com/copyright?id={uri}"
+    }
+  ]
+}
+JRD
+
+
+
+my $xrd_doc = <<'XRD';
+<?xml version='1.0' encoding='UTF-8'?>
+<XRD xmlns='http://docs.oasis-open.org/ns/xri/xrd-1.0'
+     xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
+  <Subject>http://blog.example.com/article/id/314</Subject>
+  <Expires>2010-01-30T09:30:00Z</Expires>
+  <Alias>http://blog.example.com/cool_new_thing</Alias>
+  <Alias>http://blog.example.com/steve/article/7</Alias>
+  <Property type='http://blgx.example.net/ns/version'>1.2</Property>
+  <Property type='http://blgx.example.net/ns/version'>1.3</Property>
+  <Property type='http://blgx.example.net/ns/ext' xsi:nil='true' />
+  <Link rel='author' type='text/html'
+        href='http://blog.example.com/author/steve'>
+    <Title>About the Author</Title>
+    <Title xml:lang='en-us'>Author Information</Title>
+    <Property type='http://example.com/role'>editor</Property>
+  </Link>
+  <Link rel='author' href='http://example.com/author/john'>
+    <Title>The other guy</Title>
+    <Title>The other author</Title>
+  </Link>
+  <Link rel='copyright'
+        template='http://example.com/copyright?id={uri}' />
+</XRD>
+XRD
+
+$xrd = $app->new_xrd($xrd_doc);
+
+my $json = Mojo::JSON->new;
+
+is_deeply(
+  $json->decode($xrd->to_json),
+  $json->decode($jrd_doc), 'JRD'
+);
+
+$xrd = $app->new_xrd($jrd_doc);
+
+is_deeply(
+  $json->decode($xrd->to_json),
+  $json->decode($jrd_doc), 'JRD'
+);
+
+
 __END__
 
 render_xrd
+new with jrd
+
+"links":[
+{
+"rel":"author",
+"href":"http:\/\/blog.example.com\/author\/steve",
+"type":"text\/html"
+},
+{"rel":"author","href":"http:\/\/example.com\/author\/john"},
+{"rel":"copyright","template":"http:\/\/example.com\/copyright?id={uri}"}]

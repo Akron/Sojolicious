@@ -1,6 +1,7 @@
 package Mojolicious::Plugin::XML::XRD;
 use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 use Mojolicious::Plugin::Date::RFC3339;
+use Mojo::JSON;
 
 our $MIME      = 'application/xrd+xml';
 our $NAMESPACE = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
@@ -12,12 +13,26 @@ our $PREFIX    = 'xrd';
 sub new {
   my $class = shift;
 
-  unshift(@_, 'XRD') unless $_[0];
+  my $xrd;
 
-  my $xrd = $class->SUPER::new(@_);
+  unless ($_[0]) {
+    unshift(@_, 'XRD') ;
+    $xrd = $class->SUPER::new(@_);
+  }
 
+  # JRD
+  elsif ($_[0] =~ /^\s*\{/) {
+    $xrd = $class->SUPER::new('XRD');
+    $xrd->_to_xml($_[0]);
+  }
+
+  else {
+    $xrd = $class->SUPER::new(@_);
+  };
   # Todo: To make this work embedded,
   #        a 'register' method is needed
+
+
 
   # Add XMLSchema instance namespace
   $xrd->add_namespace(
@@ -37,6 +52,7 @@ sub add_property {
       %{ shift(@_) } : ();
 
   $hash{type} = $type;
+  $hash{'xsi:nil'} = 'true' unless @_;
 
   return $self->add('Property' => \%hash => @_ );
 };
@@ -94,6 +110,104 @@ sub get_expiration {
 };
 
 
+sub _to_xml {
+  my $xrd = shift;
+  my $jrd = Mojo::JSON->new->decode($_[0]);
+  foreach my $key (keys %$jrd) {
+    $key = lc($key);
+
+    # Properties
+    if ($key eq 'properties') {
+      _to_xml_properties($xrd, $jrd->{$key});
+    }
+
+    # Links
+    elsif ($key eq 'links') {
+      _to_xml_links($xrd, $jrd->{$key});
+    }
+
+    # Subject or Expires
+    elsif ($key ~~ ['subject','expires']) {
+      $xrd->add(ucfirst($key), $jrd->{$key});
+    }
+
+    # Aliases
+    elsif ($key eq 'aliases') {
+      $xrd->add('Alias', $_) foreach (@{$jrd->{$key}});
+    }
+
+    # Titles
+    elsif ($key eq 'titles') {
+      _to_xml_titles($xrd, $jrd->{$key});
+    };
+  };
+};
+
+
+# Convert From JSON to XML
+sub _to_xml_titles {
+  my ($node, $hash) = @_;
+  foreach my $key (keys %$hash) {
+
+    # Default
+    if ($key eq 'default') {
+      $node->add('Title', $hash->{$key});
+    }
+
+    # Language
+    else {
+      $node->add(
+	Title =>
+	  {
+	    'xml:lang' => $key
+	  } => $hash->{$key}
+	);
+    };
+  };
+};
+
+
+# Convert from JSON to XML
+sub _to_xml_links {
+  my ($node, $array) = @_;
+
+  # All link objects
+  foreach my $hash (@$array) {
+
+    # titles and properties
+    my $titles     = delete $hash->{titles};
+    my $properties = delete $hash->{properties};
+
+    # Add new link object
+    my $link = $node->add_link(delete $hash->{rel}, $hash);
+
+    # Add titles and properties
+    _to_xml_titles($link, $titles)         if $titles;
+    _to_xml_properties($link, $properties) if $properties;
+  };
+};
+
+
+# Convert from JSON to XML
+sub _to_xml_properties {
+  my ($node, $hash) = @_;
+  foreach my $key (keys %$hash) {
+
+    # Default
+    if ($key eq 'null') {
+      $node->add('Property' => {
+	%{$hash->{$key}},
+	'xsi:nil' => 'true'});
+    }
+
+    # Language
+    else {
+      $node->add_property($key => $hash->{$key});
+    };
+  };
+};
+
+
 # Render JRD
 sub to_json {
   my $self = shift;
@@ -131,7 +245,7 @@ sub to_json {
       my $link_att = $link->attrs;
 
       my %link_prop;
-      foreach (qw/rel template href/) {
+      foreach (qw/rel template href type/) {
 	if (exists $link_att->{$_}) {
 	  $link_prop{$_} = $link_att->{$_};
 	};
@@ -173,8 +287,8 @@ sub _to_json_properties {
   my %property;
   $node->children('Property')->each(
     sub {
-      my $val = $_->text;
-      my $type = $_->attrs->{'type'} || 'null';
+      my $val = $_->text || undef;
+      my $type = $_->attrs->{'type'};
       $property{$type} = $val;
     });
   return \%property;

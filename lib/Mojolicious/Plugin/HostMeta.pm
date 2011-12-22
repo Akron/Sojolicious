@@ -326,7 +326,7 @@ document.
 This hook is run before a foreign hostmeta document is retrieved.
 The hook returns the current controller object, the host name,
 and an empty string reference meant to refer to the XRD object.
-If the XRD reference is filled, the fetching will not proceed. 
+If the XRD reference is filled, the fetching will not proceed.
 This can be used for caching.
 
 =item C<after_fetching_hostmeta>
