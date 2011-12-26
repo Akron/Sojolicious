@@ -5,10 +5,6 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojolicious::Plugin::PortableContacts::Response;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
-
-use Data::Dumper 'Dumper';
-
-
 has 'host';
 has 'secure' => 0;
 
@@ -57,7 +53,7 @@ sub register {
 
       # Set endpoint
       $route->endpoint(
-	'poco' => {
+	poco => {
 	  host   => $plugin->host,
 	  scheme => $plugin->secure ? 'https' : 'http'
 	});
@@ -98,7 +94,7 @@ sub register {
       };
 
       # Add route /@me/@all/{id}
-      my $me_id = $route->route('/@me/@all/:id');
+      my $me_id = $route->route('/@me/@all/:id'); # , id => qr/^[1-9]\d*$/);
       for ($me_id) {
 	$_->name('poco/@me/@all/{id}');
 	$_->to(
@@ -112,22 +108,23 @@ sub register {
       $route->route('/@me/@self')->name('poco/@me/@self')->to(
 	cb => sub {
 	  my $c = shift;
-	  return $plugin->serve($c => $c->stash('poco.user_id'));
+	  return $plugin->serve($c => $c->stash('poco.user_id') || 0);
 	});
 
       return;
     });
 
   # Add 'poco' helper
-  $mojo->helper('poco'        => sub { $plugin->read(shift, { @_, internal => 1 } );   } );
-  $mojo->helper('render_poco' => sub { $plugin->render( @_ ); } );
+  $mojo->helper(
+    poco => sub {
+      $plugin->read(shift, { @_, internal => 1 } );
+    });
 
-  foreach my $action (qw/create update delete/) {
-    $mojo->helper(
-      $action . '_poco' => sub {
-	$plugin->modify($action => @_ );
-      });
-  };
+  # Add render_poco helper
+  $mojo->helper(
+    render_poco => sub {
+      $plugin->render( @_ );
+    });
 };
 
 
@@ -135,7 +132,10 @@ sub register {
 sub serve {
   my ($plugin, $c, $id) = @_;
 
+  # 'Not found' is default
   my $status   = 404;
+
+  # Empty response
   my $response = {
     totalResults => 0,
     itemsPerPage => 0
@@ -144,21 +144,28 @@ sub serve {
   my $param = $c->param ? $c->param->to_hash : {};
 
   # Return single response for /@me/@self or /@me/@all/{id}
-  if ($id) {
+  if (defined $id) {
 
-    # Get results
-    $plugin->read(
-      $c => {
-	$plugin->_get_param( %$param ),
-	id => $id
-      }, $response );
+    # Response is an entry hash
+    $response->{entry} = {};
 
-    $status = 200 if $response->{totalResults};
+    # id is not null
+    if ($id) {
+      # Get results
+      $plugin->read(
+	$c => {
+	  $plugin->_get_param( %$param ),
+	  id => $id
+	}, $response );
+
+      $status = 200 if $response->{totalResults};
+    };
   }
 
   # Return multiple response for /@me/@all
   else {
 
+    # Response is an entry array
     $response->{entry} = [];
 
     # Get results
@@ -220,6 +227,7 @@ sub render {
       )});
 };
 
+
 # Filter for valid parameters
 sub _get_param {
   my $plugin = shift;
@@ -272,61 +280,8 @@ sub _get_param {
 
 # Private function for response objects
 sub _new_response {
-  # Object is already response object
-  if (ref($_[0]) eq __PACKAGE__ . '::Response') {
-    return $_[0];
-  }
-
-  # Create new response object
-  else {
-    return Mojolicious::Plugin::PortableContacts::Response->new(@_);
-  };
-};
-
-
-
-
-
-
-
-
-
-
-# Change PortableContacts Entry
-sub modify {
-  my $plugin  = shift;
-  my $action  = lc( shift(@_) );
-  my $c       = shift;
-
-  # New Entry
-  my $entry = Mojolicious::Plugin::PortableContacts::Entry->new(@_);
-
-  return unless $entry;
-
-  # Create new entry
-  if ($action eq 'create') {
-    delete $entry->{id};
-  }
-
-  # Unable to delete or update entry without id
-  elsif (not exists $entry->{id}) {
-    $c->app->log->debug("No ID given on PoCo $action.");
-    return;
-  };
-
-  # Run 'x_poco' hook
-  my $ok = 0;
-  $c->app->plugins->emit_hook($action . '_poco',
-			      $plugin,
-			      $c,
-			      $entry,
-			      \$ok);
-
-  # Everything went fine
-  return $entry if $ok;
-
-  # Something went wrong
-  return;
+  index(ref($_[0]), __PACKAGE__) != 0 ?
+         Mojolicious::Plugin::PortableContacts::Response->new(@_) : $_[0];
 };
 
 1;
@@ -405,39 +360,6 @@ L<http://portablecontacts.net/draft-spec.html>.
 In addition to that, user ids (as in /@me/@all/{id}) should be
 provided as C<id => {id}>.
 
-=head2 C<create_poco>
-
-  my $entry = $c->create_poco( displayName => 'Homer',
-                               name => {
-                                 givenName => 'Homer',
-                                 familyName => 'Simpson'
-                               });
-  print $entry->{id}; # 15
-
-The helper C<create_poco> saves a new PortableContacts entry.
-Returns the new PortableContacts entry.
-
-=head2 C<update_poco>
-
-  my $entry = $c->update_poco( displayName => 'Homer J.',
-                               id => 15 );
-  print $entry->{displayName},' ',$entry->{name}->{familyName};
-  # Homer J. Simpson
-
-The helper C<update_poco> updates an existing PortableContacts entry,
-identified by the given C<id> parameter.
-Returns the updated PortableContacts entry.
-The exact behaviour (e.g., for plural values or deletion of partial data)
-is undefined and depends on the storage implementation.
-
-=head2 C<delete_poco>
-
-  my $entry = $c->delete_poco( id => 15 );
-
-The helper C<delete_poco> deletes an existing PortableContacts entry,
-identified by the given C<id> parameter.
-Returns an empty PortableContacts entry.
-
 =head1 SHORTCUTS
 
 =head2 C<poco>
@@ -467,11 +389,6 @@ L<Mojolicious::Plugin::PortableContacts::Response> object, expected to
 be filled with the requested result set.
 In addition to the query an C<internal> parameter with a true value is
 appended, if the hook was emitted from the helper instead of the route.
-
-
-
-todo ...
-
 
 =back
 

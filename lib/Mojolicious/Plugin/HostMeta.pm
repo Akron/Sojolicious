@@ -130,6 +130,8 @@ sub _get_hostmeta {
   my $secure = 'https://';
   my $host_hm = $ua->get($secure . $host_hm_path);
 
+#  unless ($host_hm->success) { ... };
+
   if (!$host_hm ||
 	!$host_hm->res->is_status_class(200)
       ) {
