@@ -12,6 +12,7 @@ lib/Mojolicious/public
 lib/Mojolicious/Plugin/OAuth.pm
 lib/Mojolicious/Plugin/XRDS.pm
 lib/Mojolicious/Plugin/INames.pm
+lib/Mojolicious/Plugin/ImageResize.pm
 lib/Mojolicious/Plugin/VCard.pm
 lib/Mojolicious/Plugin/PubSubHubbub/Hub.pm
 lib/Mojolicious/Plugin/TagHelpers/

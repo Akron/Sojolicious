@@ -1,5 +1,6 @@
 package Sojolicious::Oro;
-use Mojo::Base -base;
+use strict;
+use warnings;
 
 # Database connection
 use DBI;
@@ -9,17 +10,18 @@ use DBD::SQLite;
 use File::Path;
 use File::Basename;
 
-has ['dbh', 'file'];
-has created  => 0;
-
-# Todo: allow more than 500 insertions at a time
-# Todo: Make savepoints less naive
+# Defaults to 500 for SQLITTE_MAX_COMPOUND_SELECT
+use constant MAX_COMPOUND_SELECT => 500;
 
 # Constructor
 sub new {
   my ($class, $file, $cb) = @_;
 
-  my $self  = $class->SUPER::new;
+  # Bless object with hash
+  my $self = bless {
+    created => 0,
+    table   => '__UNKNOWN__'
+  }, $class;
 
   # Store filename
   $self->file($file);
@@ -27,9 +29,9 @@ sub new {
   die 'No database defined' unless $file;
 
   # Create path for file - based on ORLite
-  my $created = 0;
   unless (-f $file) {
-    $created = 1;
+    $self->{created} = 1;
+
     my $dir = File::Basename::dirname($file);
     unless ( -d $dir ) {
       File::Path::mkpath( $dir, { verbose => 0 } );
@@ -47,24 +49,61 @@ sub new {
     });
 
   # Store database handle
-  $self->dbh($dbh);
-
-  # Store create information
-  $self->created($created);
+  $self->{dbh} = $dbh;
 
   # Release callback
   $cb->($self) if $cb && ref($cb) eq 'CODE';
 
-  $self->{savepoint} = 1;
+  # Savepoint array
+  # First element is a counter
+  $self->{savepoint} = [1];
 
   return $self;
+};
+
+
+# New table object
+sub table {
+  my $self = shift;
+
+  my %param = (
+    table => shift
+  );
+
+  # Clone parameters
+  foreach (qw/dbh file created savepoint/) {
+    $param{$_} = $self->{$_};
+  };
+
+  # Bless object with hash
+  bless \%param, ref($self);
+};
+
+
+# Database handle
+sub dbh {
+  return $_[0]->{dbh} unless $_[1];
+  $_[0]->{dbh} = $_[1];
+};
+
+
+# File of database
+sub file {
+  return $_[0]->{file} unless $_[1];
+  $_[0]->{file} = $_[1];
+};
+
+
+# Database was just created
+sub created {
+  $_[0]->{created};
 };
 
 
 # Insert values to database
 sub insert {
   my $self  = shift;
-  my $table = shift;
+  my $table = ref($_[0]) ? $self->{table} : shift;
 
   # No parameters
   return unless $_[0];
@@ -102,22 +141,50 @@ sub insert {
 
     my @keys = @{ shift(@_) };
 
-    my $sql   = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) .') ';
+    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) .') ';
     my $union = ' SELECT ' . _q(\@keys). ' ';
 
-    if (@_ >= 500) {
-      warn 'You are limited to 500 insertions at a time.';
-      return;
+    if (scalar @_ < MAX_COMPOUND_SELECT) {
+
+      # Add data unions
+      $sql .= $union . ((' UNION ' . $union) x (scalar(@_) - 1));
+
+      # Prepare and execute
+      my ($rv) = $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
+
+      return $rv;
+    }
+
+    # More than MAX_COMPOUND_SELECT insertions
+    else {
+
+      my ($rv, @value_array);
+      my @values = @_;
+
+      # Start transaction
+      $self->transaction(
+	sub {
+	  while (@value_array = splice(@values, 0, MAX_COMPOUND_SELECT - 1)) {
+	    @value_array = grep($_, @value_array) unless @_;
+
+	    # Add data unions
+	    my $sub_sql = $sql . $union .
+	      ((' UNION ' . $union) x (scalar(@value_array) - 1));
+
+	    # Prepare and execute
+	    my ($rv_part) = $self->prep_and_exec(
+	      $sub_sql,
+	      [ map( @$_,  @value_array ) ]
+	    );
+
+	    return -1 unless $rv_part;
+	    $rv += $rv_part;
+	  };
+	}) or return;
+
+      # Everything went fine
+      return $rv;
     };
-
-    # Add data unions
-    $sql .= $union . ((' UNION ' . $union) x (scalar(@_) - 1));
-
-    # Prepare and execute
-    my ($rv) = $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
-
-    # Everything went fine
-    return $rv;
   };
 
   # Unknown query
@@ -128,7 +195,7 @@ sub insert {
 # Update existing values in the database
 sub update {
   my $self  = shift;
-  my $table = shift;
+  my $table = ref($_[0]) ? $self->{table} : shift;
 
   # No parameters
   return unless $_[0];
@@ -164,7 +231,7 @@ sub update {
 # Select from table
 sub select {
   my $self  = shift;
-  my $table = shift;
+  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
 
   # Fields to select
   my $fields = '*';
@@ -216,7 +283,7 @@ sub select {
 # Load one line
 sub load {
   my $self  = shift;
-  my $table = shift;
+  my $table = ref($_[0]) ? $self->{table} : shift;
 
   # Fields to select
   my $fields = '*';
@@ -247,16 +314,18 @@ sub load {
 # Delete entry
 sub delete {
   my $self  = shift;
-  my $table = shift;
-
-  # No parameters
-  return unless $_[0];
-
-  my ($pairs, $values) = _get_pairs( shift(@_) );
+  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
 
   # Build sql
-  my $sql = 'DELETE FROM ' . $table .
-            ' WHERE ' . join(' AND ', @$pairs);
+  my $sql = 'DELETE FROM ' . $table;
+
+  my ($pairs, $values);
+
+  # With parameters
+  if ($_[0]) {
+    ($pairs, $values) = _get_pairs( shift(@_) );
+    $sql .= ' WHERE ' . join(' AND ', @$pairs);
+  };
 
   # Prepare and execute
   my ($rv) = $self->prep_and_exec($sql, $values);
@@ -268,11 +337,10 @@ sub delete {
 # Update or insert a value
 sub merge {
   my $self  = shift;
-  my $table = shift;
+  my $table = ref($_[0]) ? $self->{table} : shift;
 
   my %param = %{ shift( @_ ) };
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
-
 
   my $rv;
   my $trans = $self->transaction(
@@ -292,17 +360,18 @@ sub merge {
   return;
 };
 
-# temp:
+
+# Temporary
 sub update_or_insert {
   warn 'update_or_insert is deprecated in favor of merge';
-  shift->(@_);
+  shift->merge(@_);
 };
 
 
 # Count results
 sub count {
   my $self  = shift;
-  my $table = shift;
+  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
 
   # Build sql
   my $sql = 'SELECT count(*) as count FROM ' . $table;
@@ -374,8 +443,9 @@ sub do {
 sub transaction {
   my $self = shift;
 
-  return unless ($_[0] &&
-		   ref($_[0]) eq 'CODE');
+  return unless (
+    $_[0] && ref($_[0]) eq 'CODE'
+  );
 
   my $dbh = $self->{dbh};
 
@@ -397,20 +467,39 @@ sub transaction {
 
   # Inside transaction
   else {
-    my $sp = 'orosp'.$self->{savepoint}++;
 
-    # start transaction
+    # Push savepoint on stack
+    my $sp_array = $self->{savepoint};
+
+    # Use PID for concurrent accesses
+    my $sp = 'orosp_' . $$ . '_' . $sp_array->[0]++;
+    push(@$sp_array, $sp);
+
+    # Start transaction
     $self->do('SAVEPOINT '.$sp);
 
-    # start
+    # Run wrap actions
     my $rv = $_[0]->($self);
+
+    # Pop savepoint from stack
+    my $last_sp = pop(@$sp_array);
+    if ($last_sp eq $sp) {
+      $sp_array->[0]--;
+    }
+
+    # Last savepoint does not match
+    else {
+      warn "Savepoint $sp is not the last savepoint on stack";
+    };
+
+    # Commit savepoint
     if (!$rv || $rv != -1) {
-      $self->do('RELEASE SAVEPOINT '.$sp);
+      $self->do("RELEASE SAVEPOINT $sp");
       return 1;
     };
 
     # rollback
-    $self->do('ROLLBACK TO SAVEPOINT '.$sp);
+    $self->do("ROLLBACK TO SAVEPOINT $sp");
     return;
   };
 };
@@ -421,7 +510,8 @@ sub last_insert_id {
   shift->{dbh}->sqlite_last_insert_rowid;
 };
 
-# get pairs and values
+
+# Get pairs and values
 sub _get_pairs {
   my (@pairs, @values);
   while (my ($key, $value) = each %{$_[0]}) {
@@ -445,7 +535,7 @@ sub _get_pairs {
 
 
 # Get fields
-sub _fields {
+sub _fields ($) {
 
   # Check for valid fields
   my @fields = grep(/^(?:[\*\.\w]+(?::[a-zA-Z]+)?|
@@ -454,7 +544,7 @@ sub _fields {
   my $fields = join @fields;
 
   # Return if no alias fields exist
-  if (index(':',$fields) < 0) {
+  if (index(':', $fields) < 0) {
     return $fields;
   };
 
@@ -470,7 +560,7 @@ sub _fields {
 };
 
 
-# questionmark string
+# Questionmark string
 sub _q ($) {
   join(',', split('', '?' x scalar(@{$_[0]})));
 };
@@ -501,8 +591,10 @@ Sojolicious::Oro - Simple SQLite database accessor
     );
   };
   $oro->insert(Person => { name => 'Peter'});
-  my $person = $oro->load(Person => { id => 4 });
+  my $john = $oro->load(Person => { id => 4 });
 
+  my $person = $oro->table('Person');
+  $john = $person->load({ id => 4 });
 
 =head1 DESCRIPTION
 
@@ -572,8 +664,8 @@ Inserts a new row to a given table for single insertions.
 Expects the table name and a hash ref of values to insert.
 
 For multiple insertions, it expects the table name
-to insert, an arrayref of the column names and at maximum
-500 array references of values to insert.
+to insert, an arrayref of the column names and an arbitrary
+long array of references of values to insert.
 
 
 =head2 C<update>
@@ -651,6 +743,8 @@ to return and a hash ref with conditions, the rows have to fulfill.
 Normally this includes the primary key.
 In case of scalar values, identity is tested.
 In case of array refs, it is tested, if the field is an element of the set.
+Fields can be column names or functions. With a colon you can define
+aliases for the field names.
 
 
 =head2 C<delete>
@@ -658,8 +752,8 @@ In case of array refs, it is tested, if the field is an element of the set.
   my $rows = $oro->delete(Person => { id => 4 });
 
 Deletes rows of a given table, that meet a given condition.
-Expects the table name of selection and a hash ref with conditions,
-the rows have to fulfill.
+Expects the table name of selection and optionally a hash ref
+with conditions, the rows have to fulfill.
 In case of scalar values, identity is tested. In case of array refs,
 it is tested, if the field is an element of the set.
 Returns the number of rows that were deleted.
@@ -674,6 +768,20 @@ Returns the number of rows of a table.
 Expects the table name and a hash ref with conditions,
 the rows have to fulfill.
 
+
+=head2 C<table>
+
+  my $person = $oro->table('Person');
+  print $person->count;
+  my $person = $person->load({ id => 2 });
+  my $persons = $person->select({ name => 'Paul' });
+  $person->insert({ name => 'Ringo' });
+  $person->delete;
+
+Returns a new C<Sojolicious::Oro> object with a predefined table
+name. Allows to omit the first table name argument for the methods
+L<insert>, L<update>, L<select>, L<merge>, L<delete>, L<load> and
+L<count>.
 
 =head2 C<prep_and_exec>
 
@@ -708,8 +816,8 @@ statement should be cached.
 
       $oro->transaction(
         sub {
-          $oro->insert('Person' => { name => 'Fry'});
-        });
+          $oro->insert('Person' => { name => 'Fry'}) or return -1;
+        }) or return -1;
     });
 
 Allows to wrap transactions.
@@ -740,7 +848,6 @@ This is a Wrapper for the DBI C<do()> method.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>,
 L<DBI>,
 L<DBD::SQLite>,
 L<File::Path>,

@@ -1,6 +1,8 @@
-0.14 2011-12-27
+0.14 2011-12-30
         - Added Sojolicious::ComplexValues.
-        - Add Transactions to Sojolicious::Oro.
+        - Added Transactions to Sojolicious::Oro.
+        - Added table method to Sojolicious::Oro and
+          improved transactions and multiple insertions.
         - Added ArbitraryBase.
 
 0.13 2011-12-15
