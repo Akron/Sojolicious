@@ -1,4 +1,4 @@
-use Test::More tests => 109;
+use Test::More tests => 110;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -468,5 +468,16 @@ while ($_ = $pager->()) {
 is_deeply(\@result,
 	  [[3,2,4],[2,4,1],[1,8,7],[8,7,6],[6,5],[5]],
 	  'Pager result 3');
+
+$pager = $content->pager(['id'], { -order => 'id' } );
+
+my $i = 1;
+@result = ();
+while ($_ = $pager->($i++)) {
+  push(@result, [ map { $_->{id} } @$_ ] );
+};
+
+is_deeply(\@result,
+	  [[1],[2,3],[4,5,6],[7,8]], 'Pager result 4');
 
 __END__

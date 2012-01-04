@@ -462,7 +462,12 @@ sub pager {
 
   # return anon subroutine
   return sub {
-    my $step = shift || $limit;
+    my $step = $limit;
+
+    # Optional step parameter
+    if ($_[0] && $_[0] =~ /^\d+$/) {
+      $step = shift;
+    };
 
     # Execute
     my $rv;
@@ -1030,6 +1035,11 @@ Accepts all parameters as described in L<select>,
 except for the optional callback.
 The C<-offset> restriction is used for an initial offset,
 the C<-limit> restriction is used for step length.
+An optional parameter to the subroutine can set the step
+length for the next request.
+If no step length parameter is given, neither by the
+C<-offset> parameter nor the parameter to the subroutine,
+the step length defaults to 10.
 The return value is identical to L<select>.
 If no rows are found, the return value is C<undef>.
 
