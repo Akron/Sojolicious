@@ -1,4 +1,4 @@
-use Test::More tests => 105;
+use Test::More tests => 109;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -407,5 +407,66 @@ is(join(',',
 		}
 	      )})), '3,2,4,1', 'Combined Order restriction');
 
+ok($content->insert(
+  ['title', 'content'] =>
+    ['Bulk 1', 'Content'],
+    ['Bulk 2', 'Content'],
+    ['Bulk 3', 'Content'],
+    ['Bulk 4', 'Content']), 'Bulk Insertion');
+
+
+my $pager = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 2
+  });
+
+my @result;
+while ($_ = $pager->()) {
+  push(@result, [ map { $_->{id} } @$_ ]);
+};
+
+is_deeply(\@result, [[3,2],[4,1],[8,7],[6,5]], 'Pager result');
+
+$pager = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 3,
+    -offset => 1
+  });
+
+@result = ();
+while ($_ = $pager->()) {
+  push(@result, [ map { $_->{id} } @$_ ]);
+};
+
+is_deeply(\@result, [[2,4,1],[8,7,6],[5]], 'Pager result 2');
+
+
+$pager = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 3
+  });
+
+my $pager2 = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 3,
+    -offset => 1
+  }
+);
+
+@result = ();
+while ($_ = $pager->()) {
+  push(@result, [ map { $_->{id} } @$_ ]);
+  if ($_ = $pager2->()) {
+    push(@result, [ map { $_->{id} } @$_ ]);
+  };
+};
+
+is_deeply(\@result,
+	  [[3,2,4],[2,4,1],[1,8,7],[8,7,6],[6,5],[5]],
+	  'Pager result 3');
 
 __END__

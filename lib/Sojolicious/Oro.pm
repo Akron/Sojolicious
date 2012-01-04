@@ -16,6 +16,9 @@ use constant MAX_COMPOUND_SELECT => 500;
 # Regex for function values
 our $FUNCTION_REGEX = qr/[a-zA-Z]+\([\*\.\w\,]*\)(?::[a-zA-Z]+)?/;
 
+# Default limit for pager
+our $PAGER_LIMIT = 10;
+
 # Constructor
 sub new {
   my ($class, $file, $cb) = @_;
@@ -408,6 +411,81 @@ sub count {
 };
 
 
+# Pager
+sub pager {
+  my $self  = shift;
+  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
+
+  # Fields to select
+  my $fields = '*';
+  if ($_[0] && ref($_[0]) eq 'ARRAY') {
+    $fields = _fields( shift(@_) );
+  };
+
+  # Create sql query
+  my $sql = 'SELECT ' . $fields . ' FROM ' . $table;
+
+  my @values;
+  my ($limit, $offset);
+  my $prep = {};
+
+  # Append condition
+  if ($_[0] && ref($_[0]) eq 'HASH') {
+    my ($pairs, $values);
+    ($pairs, $values, $prep) = _get_pairs( shift(@_) );
+
+    if (@$pairs) {
+      $sql .= ' WHERE ' . join(' AND ', @$pairs);
+      push(@values, @$values);
+    };
+  };
+
+  # Apply restrictions
+  $limit  = ($prep->{limit}  //= $PAGER_LIMIT);
+  $offset = ($prep->{offset} //= 0);
+  $sql .= _restrictions($prep, []);
+
+  # Prepare
+  my $dbh   = $self->{dbh};
+  my $sth;
+  eval {
+    $sth = $dbh->prepare( $sql );
+  };
+
+  # Check for errors
+  if ($@) {
+    warn $@ . "\nSQL: " . $sql;
+    return;
+  };
+
+  return unless $sth;
+
+  # return anon subroutine
+  return sub {
+    my $step = shift || $limit;
+
+    # Execute
+    my $rv;
+    eval {
+      $rv = $sth->execute( @values, $step, $offset );
+    };
+
+    # Check for errors
+    if ($@) {
+      warn $@ . "\nSQL: " . $sql;
+      return;
+    };
+
+    # Next step
+    $offset += $step;
+
+    # Return array ref
+    my $rows = $sth->fetchall_arrayref({});
+    return @$rows ? $rows : 0
+  };
+};
+
+
 # Prepare and execute
 sub prep_and_exec {
   my ($self, $sql, $values, $cached) = @_;
@@ -539,14 +617,15 @@ sub _get_pairs {
 
     # Preparation of the result set
     if (index($key,'-') == 0) {
+      $key = lc($key);
 
       # Limit and Offset restriction
-      if (my ($limit) = ($key =~ /^-(limit|offset)$/i)) {
-	$prep{lc($limit)} = $value if $value =~ /^\d+$/;
+      if ($key ~~ ['-limit', '-offset']) {
+	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
       }
 
       # Order restriction
-      elsif (lc($key) eq '-order') {
+      elsif ($key eq '-order') {
 	$prep{order} =
 	  join(', ',
 	       map {
@@ -619,7 +698,7 @@ sub _restrictions {
   };
 
   # Offset restriction
-  if ($prep->{offset}) {
+  if (defined $prep->{offset}) {
     $sql .= ' OFFSET ? ';
     push(@$values, $prep->{offset});
   };
@@ -693,11 +772,32 @@ The sqlite file of the database.
 =head2 C<created>
 
   if ($oro->created) {
-    # brand new
+    print "This is brand new!";
   };
 
 If the database was created on construction of the handle,
 this attribute is true. Otherwise it's false.
+In most cases, this is usefull to create tables, triggers
+and indices.
+
+  if ($oro->created) {
+    $oro->transaction(sub {
+
+      # Create table
+      $oro->do(
+        'CREATE TABLE Person (
+            id    INTEGER PRIMARY KEY,
+            name  TEXT NOT NULL,
+            age   INTEGER
+        )'
+      ) or return -1;
+
+      # Create index
+      $oro->do(
+        'CREATE INDEX age_i ON Person (age)'
+      ) or return -1;
+    });
+  };
 
 
 =head1 METHODS
@@ -774,9 +874,7 @@ Scalar condition values will be inserted, if the fields do not exist.
                  return -1 if $_[0]->{name} eq 'Peter';
                });
   my $users = $oro->select(Person => ['id', 'name']);
-  my $users = $oro->select(Person => { name => 'Daniel' });
-  my $users = $oro->select(Person => ['id'] => { name => 'Daniel' });
-  my $users = $oro->select(Person => {
+  my $users = $oro->select(Person => ['id'] => {
                              age  => 24,
                              name => ['Daniel','Sabine']
                            });
@@ -820,8 +918,8 @@ three special restriction parameters:
 Sorts the result set by field names.
 Field names can be scalars or array references of field names ordered
 by priority.
-A leading minus of the field name will order descending,
-otherwise ascending.
+A leading minus of the field name will use descending order,
+otherwise ascending order.
 
 =item C<-limit>
 
@@ -910,6 +1008,32 @@ Accepts the SQL statement, parameters for binding in an array
 reference and optionally a boolean value, if the prepared
 statement should be cached.
 
+
+=head2 C<pager>
+
+  # Construct new pager
+  my $pager = $oro->pager(Person => {
+                            -offset => 2,
+                            -limit  => 3
+                          });
+
+  # Loop over pager
+  while ($_ = $pager->()) {
+    foreach my $row (@$_) {
+      print $row->{name}, "\n";
+    };
+    print "--next page--\n";
+  };
+
+Creates an anonymous subroutine for page based looping.
+Accepts all parameters as described in L<select>,
+except for the optional callback.
+The C<-offset> restriction is used for an initial offset,
+the C<-limit> restriction is used for step length.
+The return value is identical to L<select>.
+If no rows are found, the return value is C<undef>.
+
+B<Note>: This method is experimental
 
 =head2 C<transaction>
 
