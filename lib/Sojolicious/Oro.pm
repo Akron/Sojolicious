@@ -14,7 +14,7 @@ use File::Basename;
 use constant MAX_COMPOUND_SELECT => 500;
 
 # Regex for function values
-our $FUNCTION_REGEX = qr/[a-zA-Z]+\([\*\.\w\,]*\)(?::[a-zA-Z]+)?/;
+our $FUNCTION_REGEX = qr/[a-zA-Z]+\([^\)]*\)(?::[a-zA-Z]+)?/;
 
 # Default limit for pager
 our $PAGER_LIMIT = 10;
@@ -50,8 +50,9 @@ sub new {
     undef,
     undef,
     {
-      PrintError => 0,
-      RaiseError => 1,
+      PrintError     => 0,
+      RaiseError     => 1,
+      sqlite_unicode => 1
     });
 
   # Store database handle
