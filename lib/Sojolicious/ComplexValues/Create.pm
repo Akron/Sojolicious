@@ -27,8 +27,9 @@ MAX_ID
 	'SELECT res_id FROM ' . $name .
 	  ' WHERE id = last_insert_rowid()'));
 
-      # Set update time in entry
-      $entry->{updated} = time;
+      # Set publish and update time in entry
+      $entry->{published} =
+	$entry->{updated} = time;
 
       # Store values
       my $rv = 1;

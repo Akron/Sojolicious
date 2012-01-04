@@ -10,7 +10,7 @@ use DBD::SQLite;
 use File::Path;
 use File::Basename;
 
-# Defaults to 500 for SQLITTE_MAX_COMPOUND_SELECT
+# Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
 use constant MAX_COMPOUND_SELECT => 500;
 
 # Constructor
@@ -165,6 +165,8 @@ sub insert {
       $self->transaction(
 	sub {
 	  while (@value_array = splice(@values, 0, MAX_COMPOUND_SELECT - 1)) {
+
+	    # Delete undef values
 	    @value_array = grep($_, @value_array) unless @_;
 
 	    # Add data unions
@@ -211,13 +213,14 @@ sub update {
   if ($_[0]) {
     my ($cond_pairs, $cond_values) = _get_pairs(shift(@_));
 
-    # Append condition
-    if (@$cond_pairs) {
-      $sql .= ' WHERE ' . join(' AND ', @$cond_pairs);
+    # No conditions given
+    next unless @$cond_pairs;
 
-      # Append values
-      push(@$values, @$cond_values);
-    };
+    # Append condition
+    $sql .= ' WHERE ' . join(' AND ', @$cond_pairs);
+
+    # Append values
+    push(@$values, @$cond_values);
   };
 
   # Prepare and execute
@@ -343,8 +346,9 @@ sub merge {
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
 
   my $rv;
-  my $trans = $self->transaction(
+  $self->transaction(
     sub {
+
       # Update
       $rv = $self->update($table, \%param, \%cond);
       return 1 if $rv;
@@ -354,9 +358,11 @@ sub merge {
 
       # Insert
       $rv = $self->insert($table, { %param, %cond }) or return -1;
-      return 1;
-    });
-  return $rv if ($trans && $rv && $rv > 0);
+
+    }) or return;
+
+  return $rv if $rv && $rv > 0;
+
   return;
 };
 
@@ -374,7 +380,7 @@ sub count {
   my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
 
   # Build sql
-  my $sql = 'SELECT count(*) as count FROM ' . $table;
+  my $sql = 'SELECT count(*) FROM ' . $table;
 
   my ($pairs, $values);
   if ($_[0]) {
@@ -392,6 +398,7 @@ sub count {
 # Prepare and execute
 sub prep_and_exec {
   my ($self, $sql, $values, $cached) = @_;
+  my $dbh = $self->{dbh};
 
   # Prepare
   my $sth;
@@ -399,12 +406,12 @@ sub prep_and_exec {
 
     # not cached
     unless ($cached) {
-      $sth = $self->{dbh}->prepare( $sql );
+      $sth = $dbh->prepare( $sql );
     }
 
     # cached
     else {
-      $sth = $self->{dbh}->prepare_cached( $sql );
+      $sth = $dbh->prepare_cached( $sql );
     };
   };
 
@@ -435,7 +442,7 @@ sub prep_and_exec {
 
 # Wrapper for DBI do
 sub do {
-  shift->{dbh}->do(@_);
+  shift->{dbh}->do( @_ );
 };
 
 
@@ -585,8 +592,9 @@ Sojolicious::Oro - Simple SQLite database accessor
   if ($oro->created) {
     $oro->do(
     'CREATE TABLE Person (
-            id   INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
+        id    INTEGER PRIMARY KEY,
+        name  TEXT NOT NULL,
+        age   INTEGER
      )'
     );
   };
@@ -641,8 +649,9 @@ this attribute is true. Otherwise it's false.
   $oro = Sojolicious::Oro->new('test.sqlite' => sub {
     shift->do(
       'CREATE TABLE Person (
-         id   INTEGER PRIMARY KEY,
-         name TEXT NOT NULL,
+         id    INTEGER PRIMARY KEY,
+         name  TEXT NOT NULL,
+         age   INTEGER
       )');
   })
 
@@ -656,7 +665,8 @@ the database is newly created.
 =head2 C<insert>
 
   $oro->insert(Person => { id => 4,
-                           name => 'Peter' });
+                           name => 'Peter',
+                           age => 24 });
   $oro->insert(Person => ['id', 'name'] =>
                          [ 4, 'Peter'], [5, 'Sabine']);
 
@@ -683,8 +693,8 @@ Returns the number of rows affected.
 
 =head2 C<merge>
 
-  $oro->merge(Person =>  { name => 'Daniel' },
-                         { id   => 4 });
+  $oro->merge(Person => { age  => 29 },
+                        { name => 'Daniel' });
 
 Updates values of an existing row of a given table,
 otherways inserts them (so called "upsert").
@@ -703,10 +713,13 @@ Scalar condition values will be inserted, if the fields do not exist.
                  print $_[0]->{id},"\n";
                  return -1 if $_[0]->{name} eq 'Peter';
                });
-  my $users = $oro->select(Person => [qw/id name/]);
+  my $users = $oro->select(Person => ['id', 'name']);
   my $users = $oro->select(Person => { name => 'Daniel' });
   my $users = $oro->select(Person => ['id'] => { name => 'Daniel' });
-  my $users = $oro->select(Person => ['id'] => { id => [1,2,4] });
+  my $users = $oro->select(Person => {
+                             age  => 24,
+                             name => ['Daniel','Sabine']
+                           });
   my $users = $oro->select(Person => ['name:displayName']);
   $oro->select('Person' =>
                ['id','age'] =>
@@ -780,8 +793,10 @@ the rows have to fulfill.
 
 Returns a new C<Sojolicious::Oro> object with a predefined table
 name. Allows to omit the first table name argument for the methods
-L<insert>, L<update>, L<select>, L<merge>, L<delete>, L<load> and
+L<insert>, L<update>, L<select>, L<merge>, L<delete>, L<load>, and
 L<count>.
+
+This method is EXPERIMENTAL and may change without warnings.
 
 =head2 C<prep_and_exec>
 
@@ -798,8 +813,8 @@ L<count>.
   };
 
 Prepare and execute an SQL statement with all checkings.
-Returns the return value (on success true, on error false)
-and the statement handle.
+Returns the return value (on error false, otherwise true,
+e.g. the number of modified rows) and the statement handle.
 Accepts the SQL statement, parameters for binding in an array
 reference and optionally a boolean value, if the prepared
 statement should be cached.

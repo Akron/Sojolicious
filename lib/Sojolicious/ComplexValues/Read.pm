@@ -228,11 +228,13 @@ sub _multiple_basic_sql {
   };
 
   # Simple updatedSince access
+  # Todo: with smart matching
   if ($date &&
 	!exists $param->{sortBy} &&
-	  !exists $param->{filterBy}) {
+	  !exists $param->{filterBy} &&
+	    !exists $param->{foreignConstraint}) {
 
-    my $sql = 'SELECT res_id FROM '.$name.'_UPDATED '.
+    my $sql = 'SELECT res_id FROM ' . $name . '_UPDATED '.
               'WHERE updated > ? ';
     @parameter = ($date);
     return ($sql, \@parameter);
@@ -253,7 +255,8 @@ sub _multiple_basic_sql {
 
   # Simple access
   if ($filter &&
-	!exists $param->{sortBy}) {
+	!exists $param->{sortBy} &&
+	  !exists $param->{foreignConstraint}) {
     my ($parameter, $criterion) = _sql_filter('ShowTable', $filter);
     push(@parameter, @$parameter);
     push(@criterion, @$criterion);
@@ -302,6 +305,23 @@ sub _multiple_basic_sql {
       else {
 	$sql_o .= 'ASC '
       };
+    };
+
+
+    # ForeignConstraint
+    my $fc;
+    if ($fc = $param->{foreignConstraint}) {
+
+      # Add tables
+      foreach (@{$fc->{table}}) {
+	push(@tables, $_ . ' AS ' . $_);
+      };
+
+      # Change $ notation
+      push(@criterion, map(s/\b\$\b/ShowTable.res_id/g, @{$param->{where}}));
+
+      # Push values
+      push(@parameter, @{$fc->{value}}) if $fc->{value};
     };
   };
 

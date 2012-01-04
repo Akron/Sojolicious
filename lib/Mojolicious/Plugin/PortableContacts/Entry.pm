@@ -2,7 +2,8 @@ package Mojolicious::Plugin::PortableContacts::Entry;
 use Mojo::Base -base;
 use Mojolicious::Plugin::XML::Base;
 
-# todo - allow further valid labels
+# Todo: allow further valid labels
+# Todo: Use Mojo::JSON true/false for 'connected'
 
 our $SINGULAR_RE = qr/^(?:id|
                        (?:preferredUsern|nickn|displayN)?ame|

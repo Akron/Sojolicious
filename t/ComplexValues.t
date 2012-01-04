@@ -1,6 +1,6 @@
 use Test::More tests => 131;
 use File::Temp qw/:POSIX/;
-use Data::Dumper qw(Dumper);
+#use Data::Dumper qw(Dumper);
 use strict;
 use warnings;
 
@@ -497,13 +497,3 @@ ok($entry = $cv->read({ id => $id })->{entry}, 'Akron by id');
 ok(!exists $entry->{urls}, 'URLs');
 
 __END__
-
-$cv->oro->select(
-  $cv->name => { res_id => $id },
-  sub {
-    no warnings 'uninitialized';
-    my $line = shift;
-    print join(' | ',values %$line),"\n";
-  });
-
-print Dumper $entry;

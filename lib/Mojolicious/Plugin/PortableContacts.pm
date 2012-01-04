@@ -9,10 +9,10 @@ has 'host';
 has 'secure' => 0;
 
 # Default count parameter
-# TODO: itemsPerPage
 # TODO: Make ->poco PortableContact Server as well as Client
 # TODO: Check OAuth2 and fill $c->stash->{'poco.user_id'} -> poco.user_id
 # TODO: Updates via http://www.w3.org/TR/2011/WD-contacts-api-20110616/
+# TODO: Support all error codes
 
 # Unlimited Items per page requested
 has count => 0;
