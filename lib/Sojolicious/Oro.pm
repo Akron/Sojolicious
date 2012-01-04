@@ -13,6 +13,9 @@ use File::Basename;
 # Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
 use constant MAX_COMPOUND_SELECT => 500;
 
+# Regex for function values
+our $FUNCTION_REGEX = qr/[a-zA-Z]+\([\*\.\w\,]*\)(?::[a-zA-Z]+)?/;
+
 # Constructor
 sub new {
   my ($class, $file, $cb) = @_;
@@ -214,13 +217,14 @@ sub update {
     my ($cond_pairs, $cond_values) = _get_pairs(shift(@_));
 
     # No conditions given
-    next unless @$cond_pairs;
+    if (@$cond_pairs) {
 
-    # Append condition
-    $sql .= ' WHERE ' . join(' AND ', @$cond_pairs);
+      # Append condition
+      $sql .= ' WHERE ' . join(' AND ', @$cond_pairs);
 
-    # Append values
-    push(@$values, @$cond_values);
+      # Append values
+      push(@$values, @$cond_values);
+    };
   };
 
   # Prepare and execute
@@ -247,11 +251,17 @@ sub select {
 
   # Append condition
   my @values;
-  if ($_[0] && ref($_[0]) eq 'HASH') {
-    my ($pairs, $values) = _get_pairs( shift(@_) );
 
-    $sql .= ' WHERE ' . join(' AND ', @$pairs);
-    push(@values, @$values);
+  if ($_[0] && ref($_[0]) eq 'HASH') {
+    my ($pairs, $values, $prep) = _get_pairs( shift(@_) );
+
+    if (@$pairs) {
+      $sql .= ' WHERE ' . join(' AND ', @$pairs);
+      push(@values, @$values);
+    };
+
+    # Apply restrictions
+    $sql .= _restrictions($prep, \@values) if $prep;
   };
 
   # Prepare and execute
@@ -322,12 +332,15 @@ sub delete {
   # Build sql
   my $sql = 'DELETE FROM ' . $table;
 
-  my ($pairs, $values);
+  my ($pairs, $values, $prep);
 
   # With parameters
   if ($_[0]) {
-    ($pairs, $values) = _get_pairs( shift(@_) );
+    ($pairs, $values, $prep) = _get_pairs( shift(@_) );
     $sql .= ' WHERE ' . join(' AND ', @$pairs);
+
+    # Apply restrictions
+    $sql .= _restrictions($prep, $values) if $prep;
   };
 
   # Prepare and execute
@@ -417,7 +430,7 @@ sub prep_and_exec {
 
   # Check for errors
   if ($@) {
-    warn $@;
+    warn $@ . "\nSQL: " . $sql;
     return;
   };
 
@@ -431,7 +444,7 @@ sub prep_and_exec {
 
   # Check for errors
   if ($@) {
-    warn $@;
+    warn $@ . "\nSQL: " . $sql;
     return;
   };
 
@@ -520,9 +533,32 @@ sub last_insert_id {
 
 # Get pairs and values
 sub _get_pairs {
-  my (@pairs, @values);
+  my (@pairs, @values, %prep);
   while (my ($key, $value) = each %{$_[0]}) {
-    next unless $key =~ /^[_0-9a-zA-Z]+$/;
+    next unless $key =~ /^[-_0-9a-zA-Z]+$/;
+
+    # Preparation of the result set
+    if (index($key,'-') == 0) {
+
+      # Limit and Offset restriction
+      if (my ($limit) = ($key =~ /^-(limit|offset)$/i)) {
+	$prep{lc($limit)} = $value if $value =~ /^\d+$/;
+      }
+
+      # Order restriction
+      elsif (lc($key) eq '-order') {
+	$prep{order} =
+	  join(', ',
+	       map {
+		 if (index($_,'-') == 0) {
+		   $_ = substr($_,1). ' DESC';
+		 }; $_;
+	       }
+	       grep(/^(?:[-]?[a-zA-Z\.]+|$FUNCTION_REGEX)$/o,
+		    (ref($value) ? @$value : $value)));
+      };
+      next;
+    };
 
     # Element of
     if (ref($value) && ref($value) eq 'ARRAY') {
@@ -537,7 +573,7 @@ sub _get_pairs {
       push(@values, $value);
     };
   };
-  return (\@pairs, \@values);
+  return (\@pairs, \@values, keys %prep ? \%prep : undef);
 };
 
 
@@ -545,8 +581,7 @@ sub _get_pairs {
 sub _fields ($) {
 
   # Check for valid fields
-  my @fields = grep(/^(?:[\*\.\w]+(?::[a-zA-Z]+)?|
-                      [a-zA-Z]+\([\*\.\w\,]*\)(?::[a-zA-Z]+)?)$/x,
+  my @fields = grep(/^(?:[\*\.\w]+(?::[a-zA-Z]+)?|$FUNCTION_REGEX)$/o,
 		    @{ $_[0] });
   my $fields = join @fields;
 
@@ -567,11 +602,36 @@ sub _fields ($) {
 };
 
 
+# Restrictions
+sub _restrictions {
+  my ($prep, $values) = @_;
+  my $sql = '';
+
+  # Order restriction
+  if ($prep->{order}) {
+    $sql .= ' ORDER BY ' . $prep->{order};
+  };
+
+  # Limit restriction
+  if ($prep->{limit}) {
+    $sql .= ' LIMIT ? ';
+    push(@$values, $prep->{limit});
+  };
+
+  # Offset restriction
+  if ($prep->{offset}) {
+    $sql .= ' OFFSET ? ';
+    push(@$values, $prep->{offset});
+  };
+
+  return $sql;
+};
+
+
 # Questionmark string
 sub _q ($) {
   join(',', split('', '?' x scalar(@{$_[0]})));
 };
-
 
 1;
 
@@ -649,9 +709,9 @@ this attribute is true. Otherwise it's false.
   $oro = Sojolicious::Oro->new('test.sqlite' => sub {
     shift->do(
       'CREATE TABLE Person (
-         id    INTEGER PRIMARY KEY,
-         name  TEXT NOT NULL,
-         age   INTEGER
+          id    INTEGER PRIMARY KEY,
+          name  TEXT NOT NULL,
+          age   INTEGER
       )');
   })
 
@@ -720,6 +780,7 @@ Scalar condition values will be inserted, if the fields do not exist.
                              age  => 24,
                              name => ['Daniel','Sabine']
                            });
+
   my $users = $oro->select(Person => ['name:displayName']);
   $oro->select('Person' =>
                ['id','age'] =>
@@ -734,14 +795,43 @@ Scalar condition values will be inserted, if the fields do not exist.
 Returns an array ref of hash refs of a given table,
 that meets a given condition or releases a callback in this case.
 Expects the table name of selection and optionally an array ref
-of fields, optionally a hash ref with conditions, the rows have to fulfill,
-and optionally a callback, which is released after each row.
+of fields, optionally a hash ref with conditions and restrictions,
+the rows have to fulfill, and optionally a callback,
+which is released after each row.
 If the callback returns -1, the data fetching is aborted.
-In case of scalar values, identity is tested in the condition hash ref.
+In case of scalar values, identity is tested for the condition.
 In case of array refs, it is tested, if the field is an element of the set.
 Fields can be column names or functions. With a colon you can define
 aliases for the field names.
 
+In addition to conditions, the selection can be restricted by using
+three special restriction parameters:
+
+  my $users = $oro->select(Person => {
+                             -order  => ['-age','name'],
+                             -offset => 1,
+                             -limit  => 5
+                           });
+
+=over 2
+
+=item C<-order>
+
+Sorts the result set by field names.
+Field names can be scalars or array references of field names ordered
+by priority.
+A leading minus of the field name will order descending,
+otherwise ascending.
+
+=item C<-limit>
+
+Limits the number of rows in the result set.
+
+=item C<-offset>
+
+Sets the offset of the result set.
+
+=back
 
 =head2 C<load>
 
@@ -766,9 +856,10 @@ aliases for the field names.
 
 Deletes rows of a given table, that meet a given condition.
 Expects the table name of selection and optionally a hash ref
-with conditions, the rows have to fulfill.
-In case of scalar values, identity is tested. In case of array refs,
-it is tested, if the field is an element of the set.
+with conditions and restrictions, the rows have to fulfill.
+In case of scalar values, identity is tested for the condition.
+In case of array refs, it is tested, if the field is an element of the set.
+Restrictions can be applied as with L<select>.
 Returns the number of rows that were deleted.
 
 
@@ -853,8 +944,8 @@ Returns the globally last inserted id.
 
   $oro->do(
     'CREATE TABLE Person (
-            id   INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
+        id   INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
      )');
 
 Executes SQL code.

@@ -1,4 +1,4 @@
-use Test::More tests => 95;
+use Test::More tests => 105;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -361,6 +361,51 @@ ok($name->merge(
 
 is($content->insert({ title => 'New Content 2'}), 1, 'Insert with table');
 is($content->count, 2, 'Count with Table');
+
+is($content->insert({ title => 'New Content 3'}), 1, 'Insert with table');
+
+is_deeply($content->select(
+  ['title'] => {
+    -order => '-title',
+  }), [
+    { title => 'New Content 3' },
+    { title => 'New Content 2' },
+    { title => 'New Content' }
+  ], 'Offset restriction');
+
+is_deeply($content->select(
+  ['title'] => {
+    -order => '-title',
+    -limit => 2
+  }), [
+    { title => 'New Content 3' },
+    { title => 'New Content 2' }
+  ], 'Limit restriction');
+
+is_deeply($content->select(
+  ['title'] => {
+    -order => '-title',
+    -limit => 2,
+    -offset => 1
+  }), [
+    { title => 'New Content 2' },
+    { title => 'New Content' }
+  ], 'Order restriction');
+
+ok($content->update({ content => 'abc' } => {title => 'New Content'}), 'Update');;
+ok($content->update({ content => 'cde' } => {title => 'New Content 2'}), 'Update');
+ok($content->insert({ content => 'cdf',  title => 'New Content 1'}),'Insert');;
+ok($content->update({ content => 'efg' } => {title => 'New Content 2'}),'Update');;
+ok($content->update({ content => 'efg' } => {title => 'New Content 3'}),'Update');
+
+is(join(',',
+	map($_->{id},
+	    @{$content->select(
+	      ['id'] =>
+		{
+		  -order => ['-content', '-title']
+		}
+	      )})), '3,2,4,1', 'Combined Order restriction');
 
 
 __END__
