@@ -12,7 +12,7 @@ sub delete {
   return unless $id;
 
   # Delete entry
-  return $oro->transaction(
+  return $oro->txn(
     sub {
 
       # Use id array

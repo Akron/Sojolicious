@@ -1,12 +1,15 @@
 package Sojolicious::Oro;
 use strict;
 use warnings;
+use Carp qw/carp croak/;
+
+our $VERSION = '0.01';
 
 # Database connection
 use DBI;
 use DBD::SQLite;
 
-# Find database file
+# Find and create database file
 use File::Path;
 use File::Basename;
 
@@ -32,7 +35,7 @@ sub new {
   # Store filename
   $self->file($file);
 
-  die 'No database defined' unless $file;
+  croak 'No database defined' unless $file;
 
   # Create path for file - based on ORLite
   unless (-f $file) {
@@ -44,19 +47,8 @@ sub new {
     };
   };
 
-  # Connect to Database
-  my $dbh = DBI->connect(
-    "dbi:SQLite:$file",
-    undef,
-    undef,
-    {
-      PrintError     => 0,
-      RaiseError     => 1,
-      sqlite_unicode => 1
-    });
-
-  # Store database handle
-  $self->{dbh} = $dbh;
+  # Connect to database
+  $self->_connect;
 
   # Release callback
   $cb->($self) if $cb && ref($cb) eq 'CODE';
@@ -78,7 +70,8 @@ sub table {
   );
 
   # Clone parameters
-  foreach (qw/dbh file created savepoint/) {
+  foreach (qw/dbh file created
+              savepoint pid tid/) {
     $param{$_} = $self->{$_};
   };
 
@@ -88,9 +81,25 @@ sub table {
 
 
 # Database handle
+# Based on DBIx::Connector
 sub dbh {
-  return $_[0]->{dbh} unless $_[1];
-  $_[0]->{dbh} = $_[1];
+  my $self = shift;
+
+  # Store new database handle
+  return $self->{dbh} = shift if $_[0];
+
+  # Check for thread id
+  if (defined $self->{tid} && $self->{tid} != threads->tid) {
+    return $self->_connect;
+  }
+
+  # Check for process id
+  elsif ($self->{pid} != $$) {
+    return $self->_connect;
+  };
+
+  # Return handle if active
+  return $self->{dbh}->{Active} ? $self->{dbh} : $self->_connect;
 };
 
 
@@ -132,8 +141,8 @@ sub insert {
     # Create insert string
     my $sql = 'INSERT INTO ' . $table .
           ' (' . join(', ', @keys) . ')' .
-	  ' VALUES ' .
-	  '(' . _q(\@keys) . ')';
+	  ' VALUES' .
+	  ' (' . _q(\@keys) . ')';
 
     # Prepare and execute
     my ($rv) = $self->prep_and_exec( $sql, \@values );
@@ -169,7 +178,7 @@ sub insert {
       my @values = @_;
 
       # Start transaction
-      $self->transaction(
+      $self->txn(
 	sub {
 	  while (@value_array = splice(@values, 0, MAX_COMPOUND_SELECT - 1)) {
 
@@ -323,8 +332,13 @@ sub load {
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
 
+  # No handle
+  return {} unless $sth;
+
   # Retrieve
-  return $sth ? $sth->fetchrow_hashref : {};
+  my $row = $sth->fetchrow_hashref;
+  $sth->finish;
+  return $row;
 };
 
 
@@ -363,7 +377,7 @@ sub merge {
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
 
   my $rv;
-  $self->transaction(
+  $self->txn(
     sub {
 
       # Update
@@ -386,7 +400,7 @@ sub merge {
 
 # Temporary
 sub update_or_insert {
-  warn 'update_or_insert is deprecated in favor of merge';
+  carp 'update_or_insert is deprecated in favor of merge';
   shift->merge(@_);
 };
 
@@ -408,11 +422,17 @@ sub count {
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
 
-  return (!$rv || $rv ne '0E0') ? 0 : $sth->fetchrow_arrayref->[0];
+  return 0 if !$rv || $rv ne '0E0';
+
+  my $count = $sth->fetchrow_arrayref->[0];
+  $sth->finish;
+
+  return $count;
 };
 
 
 # Pager
+# Todo: Not fork- and thread-safe
 sub pager {
   my $self  = shift;
   my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
@@ -447,7 +467,7 @@ sub pager {
   $sql .= _restrictions($prep, []);
 
   # Prepare
-  my $dbh   = $self->{dbh};
+  my $dbh   = $self->dbh;
   my $sth;
   eval {
     $sth = $dbh->prepare( $sql );
@@ -455,7 +475,7 @@ sub pager {
 
   # Check for errors
   if ($@) {
-    warn $@ . "\nSQL: " . $sql;
+    carp $@ . "\nSQL: " . $sql;
     return;
   };
 
@@ -478,7 +498,7 @@ sub pager {
 
     # Check for errors
     if ($@) {
-      warn $@ . "\nSQL: " . $sql;
+      carp $@ . "\nSQL: " . $sql;
       return;
     };
 
@@ -495,27 +515,35 @@ sub pager {
 # Prepare and execute
 sub prep_and_exec {
   my ($self, $sql, $values, $cached) = @_;
-  my $dbh = $self->{dbh};
+  my $dbh = $self->dbh;
 
   # Prepare
   my $sth;
   eval {
-
-    # not cached
-    unless ($cached) {
-      $sth = $dbh->prepare( $sql );
-    }
-
-    # cached
-    else {
-      $sth = $dbh->prepare_cached( $sql );
-    };
+    $sth =
+      $cached ? $dbh->prepare_cached( $sql ) :
+	$dbh->prepare( $sql );
   };
 
   # Check for errors
   if ($@) {
-    warn $@ . "\nSQL: " . $sql;
-    return;
+
+    # Retry with reconnect
+    # Todo: Check if warning is something with disconnection
+
+    carp $@;
+    $dbh = $self->_connect;
+
+    eval {
+      $sth =
+	$cached ? $dbh->prepare_cached( $sql ) :
+	  $dbh->prepare( $sql );
+    };
+
+    if ($@) {
+      carp $@ . "\nSQL: " . $sql;
+      return;
+    };
   };
 
   return unless $sth;
@@ -528,7 +556,7 @@ sub prep_and_exec {
 
   # Check for errors
   if ($@) {
-    warn $@ . "\nSQL: " . $sql;
+    carp $@ . "\nSQL: " . $sql;
     return;
   };
 
@@ -539,22 +567,24 @@ sub prep_and_exec {
 
 # Wrapper for DBI do
 sub do {
-  shift->{dbh}->do( @_ );
+  shift->dbh->do( @_ );
 };
 
 
 # Wrap a transaction
-sub transaction {
+sub txn {
   my $self = shift;
 
   return unless (
     $_[0] && ref($_[0]) eq 'CODE'
   );
 
-  my $dbh = $self->{dbh};
+  my $dbh = $self->dbh;
 
   # Outside transaction
   if ($dbh->{AutoCommit}) {
+
+    # Start new transaction
     $dbh->begin_work;
 
     # start
@@ -576,7 +606,14 @@ sub transaction {
     my $sp_array = $self->{savepoint};
 
     # Use PID for concurrent accesses
-    my $sp = 'orosp_' . $$ . '_' . $sp_array->[0]++;
+    my $sp = 'orosp_' . $$ . '_';
+
+    # Use TID for concurrent accesses
+    $sp .= threads->tid . '_' if $self->{tid};
+
+    $sp .= $sp_array->[0]++;
+
+    # Push new savepoint to array
     push(@$sp_array, $sp);
 
     # Start transaction
@@ -593,7 +630,7 @@ sub transaction {
 
     # Last savepoint does not match
     else {
-      warn "Savepoint $sp is not the last savepoint on stack";
+      carp "Savepoint $sp is not the last savepoint on stack";
     };
 
     # Commit savepoint
@@ -602,16 +639,72 @@ sub transaction {
       return 1;
     };
 
-    # rollback
+    # Rollback
     $self->do("ROLLBACK TO SAVEPOINT $sp");
     return;
   };
 };
 
 
+# Deprecated
+sub transaction {
+  carp 'transaction is deprecated in favor of txn';
+  shift->txn(@_);
+};
+
 # Wrapper for sqlite last_insert_row_id
 sub last_insert_id {
-  shift->{dbh}->sqlite_last_insert_rowid;
+  shift->dbh->sqlite_last_insert_rowid;
+};
+
+
+# Disconnect on destroy
+sub DESTROY {
+  my $self = shift;
+
+  # Check if table is parent
+  if ($self->{table} eq '__UNKNOWN__') {
+
+    return $self unless $self->{dbh};
+
+    # Delete cached kids
+    my $kids = $self->{dbh}->{CachedKids};
+    %$kids = () if $kids;
+
+    # Disconnect
+    $self->{dbh}->disconnect;
+    $self->{dbh} = undef;
+  };
+
+  return $self;
+};
+
+
+# Connect with database
+sub _connect {
+  my $self = shift;
+
+  # DBI Connect
+  my $dbh = DBI->connect(
+    'dbi:SQLite:' . $self->file,
+    undef,
+    undef,
+    {
+      PrintError     => 0,
+      RaiseError     => 1,
+      sqlite_unicode => 1
+    });
+
+  # Store database handle
+  $self->{dbh} = $dbh;
+
+  # Save process id
+  $self->{pid} = $$;
+
+  # Save thread id
+  $self->{tid} = threads->tid if $INC{'threads.pm'};
+
+  return $dbh;
 };
 
 
@@ -754,6 +847,7 @@ Sojolicious::Oro - Simple SQLite database accessor
 L<Sojolicious::Oro> is a simple database accessor that provides
 basic functionalities to work with really simple databases.
 For now it only works with SQLite.
+It should be fork- and thread-safe.
 
 =head1 ATTRIBUTES
 
@@ -787,7 +881,7 @@ In most cases, this is usefull to create tables, triggers
 and indices.
 
   if ($oro->created) {
-    $oro->transaction(sub {
+    $oro->txn(sub {
 
       # Create table
       $oro->do(
@@ -995,7 +1089,10 @@ This method is EXPERIMENTAL and may change without warnings.
 
 =head2 C<prep_and_exec>
 
-  my ($rv, $sth) = $oro->('SELECT ? From Person', ['name'], 'cached');
+  my ($rv, $sth) =
+    $oro->prep_and_exec('SELECT ? From Person',
+                        ['name'], 'cached');
+
   if ($rv) {
     my $row;
     while ($row = $sth->fetchrow_hashref) {
@@ -1044,18 +1141,18 @@ the step length defaults to 10.
 The return value is identical to L<select>.
 If no rows are found, the return value is C<undef>.
 
-B<Note>: This method is experimental
+This method is EXPERIMENTAL and may change without warnings.
 
-=head2 C<transaction>
+=head2 C<txn>
 
-  $oro->transaction(
+  $oro->txn(
     sub {
       foreach (1..100) {
         $oro->insert(Person => { name => 'Peter'.$_ }) or return -1;
       };
       $oro->delete(Person => { id => 400 });
 
-      $oro->transaction(
+      $oro->txn(
         sub {
           $oro->insert('Person' => { name => 'Fry'}) or return -1;
         }) or return -1;
@@ -1089,10 +1186,17 @@ This is a Wrapper for the DBI C<do()> method.
 
 =head1 DEPENDENCIES
 
+L<Carp>,
 L<DBI>,
 L<DBD::SQLite>,
 L<File::Path>,
 L<File::Basename>.
+
+
+=head1 ACKNOWLEDGEMENT
+
+Inspired by L<ORLite>, written by Adam Kennedy.
+Some code is based on L<DBIx::Connector>, written by David E. Wheeler.
 
 
 =head1 AVAILABILITY

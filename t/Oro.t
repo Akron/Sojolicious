@@ -1,4 +1,4 @@
-use Test::More tests => 110;
+use Test::More tests => 112;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -205,6 +205,8 @@ my ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
 ok($rv, 'Prep and Execute');
 is($sth->fetchrow_arrayref->[0], 3, 'Prep and exec');
 
+$sth->finish;
+
 ok($oro->dbh->{AutoCommit}, 'Transaction');
 $oro->dbh->begin_work;
 ok(!$oro->dbh->{AutoCommit}, 'Transaction');
@@ -221,7 +223,7 @@ ok($oro->dbh->{AutoCommit}, 'Transaction');
 ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
 ok($rv, 'Prep and Execute');
 is($sth->fetchrow_arrayref->[0], 13, 'Fetch row.');
-
+$sth->finish;
 
 ok($oro->dbh->{AutoCommit}, 'Transaction');
 $oro->dbh->begin_work;
@@ -239,13 +241,14 @@ ok($oro->dbh->{AutoCommit}, 'Transaction');
 ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
 ok($rv, 'Prep and Execute');
 is($sth->fetchrow_arrayref->[0], 13, 'Fetch row.');
+$sth->finish;
 
 is($oro->count('Content'), 13, 'count');
 
 my $load = $oro->load('Content' => ['count(*):number']);
 is($load->{number}, 13, 'AS feature');
 
-ok($oro->transaction(
+ok($oro->txn(
   sub {
     foreach (1..100) {
       $oro->insert(Content => { title => 'Check'.$_ });
@@ -255,7 +258,7 @@ ok($oro->transaction(
 
 is($oro->count('Content'), 113, 'Count');
 
-ok(!$oro->transaction(
+ok(!$oro->txn(
   sub {
     foreach (1..100) {
       $oro->insert(Content => { title => 'Check'.$_ });
@@ -268,7 +271,7 @@ is($oro->count('Content'), 113, 'Count');
 
 # Nested transactions:
 
-ok($oro->transaction(
+ok($oro->txn(
   sub {
     my $val = 1;
 
@@ -276,7 +279,7 @@ ok($oro->transaction(
       $oro->insert(Content => { title => 'Check'.$val++ });
     };
 
-    ok(!$oro->transaction(
+    ok(!$oro->txn(
       sub {
 	foreach (1..100) {
 	  $oro->insert(Content => { title => 'Check'.$val++ });
@@ -284,7 +287,7 @@ ok($oro->transaction(
 	};
       }), 'Nested Transaction 1');
 
-    ok($oro->transaction(
+    ok($oro->txn(
       sub {
 	foreach (1..100) {
 	  $oro->insert(Content => { title => 'Check'.$val++ });
@@ -479,5 +482,10 @@ while ($_ = $pager->($i++)) {
 
 is_deeply(\@result,
 	  [[1],[2,3],[4,5,6],[7,8]], 'Pager result 4');
+
+ok($oro->dbh->disconnect, 'Disonnect');
+
+ok($oro->insert(Content => { title => 'Test', content => 'Value'}), 'Reconnect');
+
 
 __END__

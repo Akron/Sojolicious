@@ -50,7 +50,7 @@ sub init_db {
   my $pref = lc($name);
 
   # Begin transaction
-  return $oro->transaction(
+  return $oro->txn(
     sub {
 
       # ComplexValues Table

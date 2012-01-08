@@ -13,7 +13,7 @@ sub update {
   my $id   = delete $entry->{id};
 
   # Begin transaction
-  my $trans = $oro->transaction(
+  my $trans = $oro->txn(
     sub {
 
       # Update all values

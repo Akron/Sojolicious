@@ -120,7 +120,6 @@ is($dom->find('item')->size, 1, 'Filtered topics in RDF/RSS 4');
 
 
 my $t = Test::Mojo->new;
-$t->test_server;
 my $app = $t->app;
 
 
