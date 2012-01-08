@@ -1,6 +1,7 @@
 package Sojolicious::Oro;
 use strict;
 use warnings;
+use feature 'state';
 use Carp qw/carp croak/;
 
 our $VERSION = '0.01';
@@ -14,13 +15,14 @@ use File::Path;
 use File::Basename;
 
 # Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
-use constant MAX_COMPOUND_SELECT => 500;
-
-# Regex for function values
-our $FUNCTION_REGEX = qr/[a-zA-Z]+\([^\)]*\)(?::[a-zA-Z]+)?/;
+use constant MAX_COMP_SELECT => 500;
 
 # Default limit for pager
 our $PAGER_LIMIT = 10;
+
+# Regex for function values
+our $FUNCTION_REGEX = qr/[a-zA-Z0-9]+\([^\)]*\)?/;
+our $AS_REGEX       = qr/(?::[a-zA-Z0-9]+)/;
 
 # Constructor
 sub new {
@@ -29,12 +31,14 @@ sub new {
   # Bless object with hash
   my $self = bless {
     created => 0,
+    in_txn  => 0,
     table   => '__UNKNOWN__'
   }, $class;
 
   # Store filename
   $self->file($file);
 
+  # No database defined
   croak 'No database defined' unless $file;
 
   # Create path for file - based on ORLite
@@ -48,7 +52,7 @@ sub new {
   };
 
   # Connect to database
-  $self->_connect;
+  $self->_connect or croak 'Unable to connect to database';
 
   # Release callback
   $cb->($self) if $cb && ref($cb) eq 'CODE';
@@ -66,12 +70,12 @@ sub table {
   my $self = shift;
 
   my %param = (
-    table => shift
+    table   => shift
   );
 
   # Clone parameters
-  foreach (qw/dbh file created
-              savepoint pid tid/) {
+  foreach (qw/dbh created file
+              in_txn savepoint pid tid/) {
     $param{$_} = $self->{$_};
   };
 
@@ -86,20 +90,28 @@ sub dbh {
   my $self = shift;
 
   # Store new database handle
-  return $self->{dbh} = shift if $_[0];
+  return ($self->{dbh} = shift) if $_[0];
+
+  return $self->{dbh} if $self->{in_txn};
+
+  state $c = 'Unable to connect to database';
 
   # Check for thread id
   if (defined $self->{tid} && $self->{tid} != threads->tid) {
-    return $self->_connect;
+    return $self->_connect or croak $c;
   }
 
   # Check for process id
   elsif ($self->{pid} != $$) {
-    return $self->_connect;
+    return $self->_connect or croak $c;
+  }
+
+  elsif ($self->{dbh}->{Active}) {
+    return $self->{dbh};
   };
 
   # Return handle if active
-  return $self->{dbh}->{Active} ? $self->{dbh} : $self->_connect;
+  return $self->_connect or croak $c;
 };
 
 
@@ -112,7 +124,23 @@ sub file {
 
 # Database was just created
 sub created {
-  $_[0]->{created};
+  my $self = shift;
+
+  # Creation state is 0
+  return 0 unless $self->{created};
+
+  # Check for thread id
+  if (defined $self->{tid} && $self->{tid} != threads->tid) {
+    return ($self->{created} = 0);
+  }
+
+  # Check for process id
+  elsif ($self->{pid} != $$) {
+    return ($self->{created} = 0);
+  };
+
+  # Return creation state
+  return 1;
 };
 
 
@@ -145,9 +173,7 @@ sub insert {
 	  ' (' . _q(\@keys) . ')';
 
     # Prepare and execute
-    my ($rv) = $self->prep_and_exec( $sql, \@values );
-
-    return $rv;
+    return $self->prep_and_exec( $sql, \@values );
   }
 
   # Multiple inserts
@@ -157,47 +183,47 @@ sub insert {
 
     my @keys = @{ shift(@_) };
 
-    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) .') ';
+    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) . ') ';
     my $union = ' SELECT ' . _q(\@keys). ' ';
 
-    if (scalar @_ < MAX_COMPOUND_SELECT) {
+    if (scalar @_ <= MAX_COMP_SELECT) {
 
       # Add data unions
-      $sql .= $union . ((' UNION ' . $union) x (scalar(@_) - 1));
+      $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
 
       # Prepare and execute
-      my ($rv) = $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
-
-      return $rv;
+      return $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
     }
 
-    # More than MAX_COMPOUND_SELECT insertions
+    # More than MAX_COMP_SELECT insertions
     else {
 
-      my ($rv, @value_array);
+      my ($rv, @v_array);
       my @values = @_;
 
       # Start transaction
       $self->txn(
 	sub {
-	  while (@value_array = splice(@values, 0, MAX_COMPOUND_SELECT - 1)) {
+	  while (@v_array = splice(@values, 0, MAX_COMP_SELECT - 1)) {
 
 	    # Delete undef values
-	    @value_array = grep($_, @value_array) unless @_;
+	    @v_array = grep($_, @v_array) unless @_;
 
 	    # Add data unions
 	    my $sub_sql = $sql . $union .
-	      ((' UNION ' . $union) x (scalar(@value_array) - 1));
+	      ((' UNION ' . $union) x ( scalar(@v_array) - 1 ));
 
 	    # Prepare and execute
-	    my ($rv_part) = $self->prep_and_exec(
+	    my $rv_part = $self->prep_and_exec(
 	      $sub_sql,
-	      [ map( @$_,  @value_array ) ]
+	      [ map( @$_,  @v_array ) ]
 	    );
 
+	    # Rollback transaction
 	    return -1 unless $rv_part;
 	    $rv += $rv_part;
 	  };
+
 	}) or return;
 
       # Everything went fine
@@ -223,11 +249,10 @@ sub update {
   # Nothing to update
   return unless @$pairs;
 
-  my $sql = 'UPDATE ' . $table .
-            ' SET ' . join(', ', @$pairs);
+  my $sql = 'UPDATE ' . $table . ' SET ' . join(', ', @$pairs);
 
   if ($_[0]) {
-    my ($cond_pairs, $cond_values) = _get_pairs(shift(@_));
+    my ($cond_pairs, $cond_values) = _get_pairs( shift(@_) );
 
     # No conditions given
     if (@$cond_pairs) {
@@ -241,7 +266,7 @@ sub update {
   };
 
   # Prepare and execute
-  my ($rv) = $self->prep_and_exec($sql, $values);
+  my $rv = $self->prep_and_exec($sql, $values);
 
   # Return value
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
@@ -291,18 +316,19 @@ sub select {
 
       # Finish if callback returns -1
       if ($_[0]->($row) == -1) {
-	$sth->finish;
 	last;
       };
     };
+
+    # Finish statement
+    $sth->finish;
+    return;
   }
 
   # Return array ref
   else {
     return $sth->fetchall_arrayref({});
   };
-
-  return;
 };
 
 
@@ -350,9 +376,8 @@ sub delete {
   # Build sql
   my $sql = 'DELETE FROM ' . $table;
 
-  my ($pairs, $values, $prep);
-
   # With parameters
+  my ($pairs, $values, $prep);
   if ($_[0]) {
     ($pairs, $values, $prep) = _get_pairs( shift(@_) );
     $sql .= ' WHERE ' . join(' AND ', @$pairs);
@@ -362,7 +387,7 @@ sub delete {
   };
 
   # Prepare and execute
-  my ($rv) = $self->prep_and_exec($sql, $values);
+  my $rv = $self->prep_and_exec($sql, $values);
 
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
 };
@@ -381,27 +406,21 @@ sub merge {
     sub {
 
       # Update
-      $rv = $self->update($table, \%param, \%cond);
+      $rv = $self->update($table => \%param, \%cond);
       return 1 if $rv;
 
       # Delete all element conditions
       delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
 
       # Insert
-      $rv = $self->insert($table, { %param, %cond }) or return -1;
+      $rv = $self->insert($table => { %param, %cond }) or return -1;
 
     }) or return;
 
+  # Return value is bigger than 0
   return $rv if $rv && $rv > 0;
 
   return;
-};
-
-
-# Temporary
-sub update_or_insert {
-  carp 'update_or_insert is deprecated in favor of merge';
-  shift->merge(@_);
 };
 
 
@@ -464,6 +483,7 @@ sub pager {
   # Apply restrictions
   $limit  = ($prep->{limit}  //= $PAGER_LIMIT);
   $offset = ($prep->{offset} //= 0);
+
   $sql .= _restrictions($prep, []);
 
   # Prepare
@@ -529,9 +549,6 @@ sub prep_and_exec {
   if ($@) {
 
     # Retry with reconnect
-    # Todo: Check if warning is something with disconnection
-
-    carp $@;
     $dbh = $self->_connect;
 
     eval {
@@ -561,7 +578,10 @@ sub prep_and_exec {
   };
 
   # Return values
-  return ($rv, $sth);
+  return ($rv, $sth) if wantarray;
+
+  $sth->finish;
+  return $rv;
 };
 
 
@@ -587,20 +607,26 @@ sub txn {
     # Start new transaction
     $dbh->begin_work;
 
+    $self->{in_txn} = 1;
+
     # start
     my $rv = $_[0]->($self);
     if (!$rv || $rv != -1) {
+      $self->{in_txn} = 0;
       $dbh->commit;
       return 1;
     };
 
     # Rollback
+    $self->{in_txn} = 0;
     $dbh->rollback;
     return;
   }
 
   # Inside transaction
   else {
+
+    $self->{in_txn} = 1;
 
     # Push savepoint on stack
     my $sp_array = $self->{savepoint};
@@ -646,12 +672,6 @@ sub txn {
 };
 
 
-# Deprecated
-sub transaction {
-  carp 'transaction is deprecated in favor of txn';
-  shift->txn(@_);
-};
-
 # Wrapper for sqlite last_insert_row_id
 sub last_insert_id {
   shift->dbh->sqlite_last_insert_rowid;
@@ -665,6 +685,7 @@ sub DESTROY {
   # Check if table is parent
   if ($self->{table} eq '__UNKNOWN__') {
 
+    # No database connection
     return $self unless $self->{dbh};
 
     # Delete cached kids
@@ -672,7 +693,7 @@ sub DESTROY {
     %$kids = () if $kids;
 
     # Disconnect
-    $self->{dbh}->disconnect;
+    $self->{dbh}->disconnect unless $self->{dbh}->{Kids};
     $self->{dbh} = undef;
   };
 
@@ -685,15 +706,25 @@ sub _connect {
   my $self = shift;
 
   # DBI Connect
-  my $dbh = DBI->connect(
-    'dbi:SQLite:' . $self->file,
-    undef,
-    undef,
-    {
-      PrintError     => 0,
-      RaiseError     => 1,
-      sqlite_unicode => 1
-    });
+  my $dbh;
+  eval {
+    $dbh = DBI->connect(
+      'dbi:SQLite:' . $self->file,
+      undef,
+      undef,
+      {
+	PrintError     => 0,
+	RaiseError     => 1,
+	AutoCommit     => 1,
+	sqlite_unicode => 1
+      });
+  };
+
+  # Unable to connect to database
+  if ($@) {
+    carp $@;
+    return;
+  };
 
   # Store database handle
   $self->{dbh} = $dbh;
@@ -709,37 +740,44 @@ sub _connect {
 
 
 # Get pairs and values
-sub _get_pairs {
+sub _get_pairs ($) {
   my (@pairs, @values, %prep);
-  while (my ($key, $value) = each %{$_[0]}) {
-    next unless $key =~ /^[-_0-9a-zA-Z]+$/;
 
-    # Preparation of the result set
-    if (index($key,'-') == 0) {
+  while (my ($key, $value) = each %{$_[0]}) {
+    next unless $key =~ /^-?[_0-9a-zA-Z]+$/;
+
+    # Restriction of the result set
+    if (index($key, '-') == 0) {
       $key = lc($key);
 
-      # Limit and Offset restriction
-      if ($key ~~ ['-limit', '-offset']) {
-	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
-      }
-
       # Order restriction
-      elsif ($key eq '-order') {
+      if ($key eq '-order') {
+
 	$prep{order} =
 	  join(', ',
+	       # Make descending if field has minus prefix
 	       map {
-		 if (index($_,'-') == 0) {
-		   $_ = substr($_,1). ' DESC';
+		 if (index($_, '-') == 0) {
+		   $_ = substr($_, 1) . ' DESC';
 		 }; $_;
 	       }
-	       grep(/^(?:[-]?[a-zA-Z\.]+|$FUNCTION_REGEX)$/o,
-		    (ref($value) ? @$value : $value)));
+
+	       # Grep all valid values
+	       grep(
+		 /^(?:-?[a-zA-Z\.]+|$FUNCTION_REGEX)$/o,
+		 (ref($value) ? @$value : $value)
+	       )
+	     );
+      }
+
+      # Limit and Offset restriction
+      elsif ($key ~~ ['-limit', '-offset']) {
+	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
       };
-      next;
-    };
+    }
 
     # Element of
-    if (ref($value) && ref($value) eq 'ARRAY') {
+    elsif (ref($value) && ref($value) eq 'ARRAY') {
       push (@pairs,
 	    $key . ' IN (' . _q($value) . ')' );
       push(@values, @$value);
@@ -751,6 +789,7 @@ sub _get_pairs {
       push(@values, $value);
     };
   };
+
   return (\@pairs, \@values, keys %prep ? \%prep : undef);
 };
 
@@ -759,16 +798,18 @@ sub _get_pairs {
 sub _fields ($) {
 
   # Check for valid fields
-  my @fields = grep(/^(?:[\*\.\w]+(?::[a-zA-Z]+)?|$FUNCTION_REGEX)$/o,
-		    @{ $_[0] });
-  my $fields = join @fields;
+  my @fields = grep(
+    /^(?:(?:[\*\.\w]+|$FUNCTION_REGEX))$AS_REGEX?$/o,
+    @{ $_[0] }
+  );
+  my $fields = join(', ', @fields);
 
   # Return if no alias fields exist
-  if (index(':', $fields) < 0) {
+  if (index($fields, ':') < 0) {
     return $fields;
   };
 
-  # join with alias fields
+  # Join with alias fields
   join(', ',
        map {
 	 if ($_ =~ /^(.+?):([^:]+?)$/) {
@@ -781,7 +822,7 @@ sub _fields ($) {
 
 
 # Restrictions
-sub _restrictions {
+sub _restrictions ($$) {
   my ($prep, $values) = @_;
   my $sql = '';
 
@@ -792,24 +833,39 @@ sub _restrictions {
 
   # Limit restriction
   if ($prep->{limit}) {
-    $sql .= ' LIMIT ? ';
+    $sql .= ' LIMIT ?';
     push(@$values, $prep->{limit});
   };
 
   # Offset restriction
   if (defined $prep->{offset}) {
-    $sql .= ' OFFSET ? ';
+    $sql .= ' OFFSET ?';
     push(@$values, $prep->{offset});
   };
 
-  return $sql;
+  $sql;
 };
 
 
 # Questionmark string
 sub _q ($) {
-  join(',', split('', '?' x scalar(@{$_[0]})));
+  join(', ', split('', '?' x scalar( @{$_[0]} )));
 };
+
+
+# Depecated
+sub update_or_insert {
+  carp 'update_or_insert() is deprecated in favor of merge()';
+  shift->merge(@_);
+};
+
+
+# Deprecated
+sub transaction {
+  carp 'transaction() is deprecated in favor of txn()';
+  shift->txn(@_);
+};
+
 
 1;
 
@@ -1195,7 +1251,7 @@ L<File::Basename>.
 
 =head1 ACKNOWLEDGEMENT
 
-Inspired by L<ORLite>, written by Adam Kennedy.
+Partly inspired by L<ORLite>, written by Adam Kennedy.
 Some code is based on L<DBIx::Connector>, written by David E. Wheeler.
 
 
