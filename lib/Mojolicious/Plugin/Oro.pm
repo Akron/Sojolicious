@@ -1,23 +1,27 @@
-package Mojolicious::Plugin::Oro;
+opackage Mojolicious::Plugin::Oro;
 use Mojo::Base 'Mojolicious::Plugin';
 use Carp qw/carp croak/;
 
 # Database driver
 use Sojolicious::Oro;
 
-# Hash of database handles
-our %databases;
-
 # Register Plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
+
+  # Hash of database handles
+  my $databases = $mojo->attr('oro.dbh');
+
+  unless ($databases) {
+    $mojo->attr('oro.dbh' => ( $databases = {} ));
+  };
 
   # Init databases
   foreach my $name (keys %$param) {
     my $db = $param->{$name};
 
     # Already exists
-    next if exists $databases{$name};
+    next if exists $databases->{$name};
 
     # No file name given
     croak "No file given for database '$name'" unless $db->{file};
@@ -30,7 +34,7 @@ sub register {
 
     # Initialize database
     if (exists $db->{init} && $oro->created && ref($db->{init})) {
-      $oro->txn(
+      $oro->transaction(
 	sub {
 	  # Start init callback
 	  return $db->{init}->( $oro );
@@ -38,14 +42,14 @@ sub register {
     };
 
     # Store database handle
-    $databases{$name} = $oro_handle;
+    $databases->{$name} = $oro;
   };
 
   # Add helper
   $mojo->helper(
     oro => sub {
       my ($c, $name, $table) = @_;
-      my $oro = $databases{$name};
+      my $oro = $databases->{$name};
 
       # Database unknown
       carp "Unknown database '$name'" unless $oro;
@@ -68,6 +72,22 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
 
 =head1 SYNOPSIS
 
+  $app->plugin('Oro' => {
+    Books => {
+      file => 'Database/Books.sqlite'
+    }}
+  );
+
+  $c->oro('Books')->insert(Content => { title => 'IT'});
+  print $c->oro(Books => 'Content')->count;
+
+=head1 DESCRIPTION
+
+L<Mojolicious::Plugin::Oro> is a simple plugin to work with
+L<Sojolicious::Oro>.
+
+=head1 REGISTER
+
   # Mojolicious
   $app->plugin('Oro' => {
     Books => {
@@ -83,18 +103,15 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
     }}
   );
 
-  $c->oro('Books')->insert(Content => { title => 'IT'});
-  print $c->oro(Books => 'Content')->count;
-
-=head1 DESCRIPTION
-
-L<Mojolicious::Plugin::Oro> is a simple plugin to work with
-L<Sojolicious::Oro>.
-
-=head1 REGISTER
+  # Mojolicious::Lite
+  plugin 'Oro' => {
+    Books => {
+      file => 'Database/Books.sqlite'
+    }
+  };
 
 On creation, the plugin accepts a hash of database names
-associated with a hashref, giving the filename with the
+associated with hashrefs, giving the filename with the
 parameter C<file> and an optional anonymous function with
 the parameter C<init>.
 The callback is executed on initialization, if the database
@@ -124,7 +141,7 @@ L<Sojolicious::Oro>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.
