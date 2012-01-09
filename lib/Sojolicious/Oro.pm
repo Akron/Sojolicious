@@ -776,6 +776,11 @@ sub _get_pairs ($) {
       };
     }
 
+    # NULL value
+    elsif (!defined $value) {
+      push(@pairs, $key . ' IS NULL');
+    }
+
     # Element of
     elsif (ref($value) && ref($value) eq 'ARRAY') {
       push (@pairs,
@@ -1253,7 +1258,8 @@ L<File::Basename>.
 
 Partly inspired by L<ORLite>, written by Adam Kennedy.
 Some code is based on L<DBIx::Connector>, written by David E. Wheeler.
-
+Without knowing, some of the concepts are quite similar
+to L<SQL::Abstract>, written by.
 
 =head1 AVAILABILITY
 
