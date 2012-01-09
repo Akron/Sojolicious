@@ -143,18 +143,18 @@ L<Mojolicious::Plugin::LRDD>.
 
 =head2 C<webfinger>
 
-    # In Controllers:
-    my $xrd = $self->webfinger('me');
-    my $xrd = $self->webfinger('acct:me@sojolicio.us');
+  # In Controllers:
+  my $xrd = $self->webfinger('me');
+  my $xrd = $self->webfinger('acct:me@sojolicio.us');
 
 Returns the Webfinger L<Mojolicious::Plugin::XRD> document.
 
 =head2 C<parse_acct>
 
-    # In Controllers:
-    my ($user, $domain, $norm) =
-        $self->parse_acct('acct:me@sojolicious');
-    my $norm = $self->parse_acct('me');
+  # In Controllers:
+  my ($user, $domain, $norm) =
+      $self->parse_acct('acct:me@sojolicious');
+  my $norm = $self->parse_acct('me');
 
 Returns the user, the domain part of an acct scheme and
 the normative writing. It accepts short writings like 'acct:me'
