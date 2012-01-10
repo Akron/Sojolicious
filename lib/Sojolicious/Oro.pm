@@ -1,6 +1,7 @@
 package Sojolicious::Oro;
 use strict;
 use warnings;
+
 use feature 'state';
 use Carp qw/carp croak/;
 
@@ -74,8 +75,8 @@ sub table {
   );
 
   # Clone parameters
-  foreach (qw/dbh created file
-              in_txn savepoint pid tid/) {
+  foreach (qw/dbh created file in_txn
+              savepoint pid tid/) {
     $param{$_} = $self->{$_};
   };
 

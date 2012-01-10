@@ -1,4 +1,4 @@
-opackage Mojolicious::Plugin::Oro;
+package Mojolicious::Plugin::Oro;
 use Mojo::Base 'Mojolicious::Plugin';
 use Carp qw/carp croak/;
 
@@ -10,10 +10,15 @@ sub register {
   my ($plugin, $mojo, $param) = @_;
 
   # Hash of database handles
-  my $databases = $mojo->attr('oro.dbh');
+  my $databases = $mojo->attr('oro_handles');
 
   unless ($databases) {
-    $mojo->attr('oro.dbh' => ( $databases = {} ));
+    $databases = {};
+    $mojo->attr(
+      oro_handles => sub {
+	return $databases;
+      }
+    );
   };
 
   # Init databases
@@ -33,8 +38,12 @@ sub register {
     croak "Unable to create database handle '$name'" unless $oro;
 
     # Initialize database
-    if (exists $db->{init} && $oro->created && ref($db->{init})) {
-      $oro->transaction(
+    if (exists $db->{init} &&
+	  $oro->created &&
+	    ref($db->{init})) {
+
+      # Start transaction
+      $oro->txn(
 	sub {
 	  # Start init callback
 	  return $db->{init}->( $oro );
@@ -114,9 +123,9 @@ On creation, the plugin accepts a hash of database names
 associated with hashrefs, giving the filename with the
 parameter C<file> and an optional anonymous function with
 the parameter C<init>.
-The callback is executed on initialization, if the database
+The callback is executed on initialization if the database
 is newly created. The first argument passed to the callback
-is the C<Oro> handle.
+is the associated C<Sojolicious::Oro> handle.
 
 =head1 HELPERS
 

@@ -1,14 +1,18 @@
-use Test::More tests => 95;
-use File::Temp qw/:POSIX/;
-use Data::Dumper 'Dumper';
+#!/usr/bin/env perl
 use strict;
 use warnings;
 
 $|++;
 
 use lib '../lib';
+
+use Test::More tests => 4;
+
 use Test::Mojo;
 use Mojolicious::Lite;
+
+use File::Temp qw/:POSIX/;
+use Data::Dumper 'Dumper';
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
@@ -19,7 +23,7 @@ END {
   unlink $db_file;
 };
 
-$app->plugin('Oro' => {
+$app->plugin('oro' => {
   'Books' => {
     file => $db_file,
     init => sub {
@@ -37,6 +41,8 @@ my $c = Mojolicious::Controller->new;
 $c->app($app);
 
 my $books = $c->oro('Books');
+ok($books, 'Oro handle');
+
 if ($books->created) {
   ok($books->txn(
     sub {
