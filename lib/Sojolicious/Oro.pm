@@ -751,7 +751,7 @@ sub _get_pairs ($) {
       $key = lc($key);
 
       # Order restriction
-      if ($key eq '-order') {
+      if ($key =~ /^-order(?:_by)?$/i) {
 
 	$prep{order} =
 	  join(', ',
@@ -927,7 +927,8 @@ The DBI database handle.
   $oro->file('myfile.sqlite');
 
 The sqlite file of the database.
-# This attribute is EXPERIMENTAL.
+
+This attribute is EXPERIMENTAL and may change without warnings.
 
 
 =head2 C<created>
@@ -938,7 +939,7 @@ The sqlite file of the database.
 
 If the database was created on construction of the handle,
 this attribute is true. Otherwise it's false.
-In most cases, this is usefull to create tables, triggers
+In most cases, this is useful to create tables, triggers
 and indices.
 
   if ($oro->created) {
@@ -1215,7 +1216,7 @@ This method is EXPERIMENTAL and may change without warnings.
 
       $oro->txn(
         sub {
-          $oro->insert('Person' => { name => 'Fry'}) or return -1;
+          $oro->insert('Person' => { name => 'Fry' }) or return -1;
         }) or return -1;
     });
 
@@ -1242,7 +1243,7 @@ Returns the globally last inserted id.
      )');
 
 Executes SQL code.
-This is a Wrapper for the DBI C<do()> method.
+This is a Wrapper for the DBI C<do()> method (but fork- and thread-safe).
 
 
 =head1 DEPENDENCIES
@@ -1258,8 +1259,8 @@ L<File::Basename>.
 
 Partly inspired by L<ORLite>, written by Adam Kennedy.
 Some code is based on L<DBIx::Connector>, written by David E. Wheeler.
-Without knowing, some of the concepts are quite similar
-to L<SQL::Abstract>, written by.
+Without me knowing (it's a shame!), some of the concepts are quite similar
+to L<SQL::Abstract>, written by Nathan Wiger et al.
 
 =head1 AVAILABILITY
 
