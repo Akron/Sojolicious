@@ -1,17 +1,28 @@
 package Sojolicious::Oro;
 use strict;
 use warnings;
+use feature 'state';
+use Carp qw/carp croak/;
+
+our $VERSION = '0.01';
 
 # Database connection
 use DBI;
 use DBD::SQLite;
 
-# Find database file
+# Find and create database file
 use File::Path;
 use File::Basename;
 
 # Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
-use constant MAX_COMPOUND_SELECT => 500;
+use constant MAX_COMP_SELECT => 500;
+
+# Default limit for pager
+our $PAGER_LIMIT = 10;
+
+# Regex for function values
+our $FUNCTION_REGEX = qr/[a-zA-Z0-9]+\([^\)]*\)?/;
+our $AS_REGEX       = qr/(?::[a-zA-Z0-9]+)/;
 
 # Constructor
 sub new {
@@ -20,13 +31,15 @@ sub new {
   # Bless object with hash
   my $self = bless {
     created => 0,
+    in_txn  => 0,
     table   => '__UNKNOWN__'
   }, $class;
 
   # Store filename
   $self->file($file);
 
-  die 'No database defined' unless $file;
+  # No database defined
+  croak 'No database defined' unless $file;
 
   # Create path for file - based on ORLite
   unless (-f $file) {
@@ -38,18 +51,8 @@ sub new {
     };
   };
 
-  # Connect to Database
-  my $dbh = DBI->connect(
-    "dbi:SQLite:$file",
-    undef,
-    undef,
-    {
-      PrintError => 0,
-      RaiseError => 1,
-    });
-
-  # Store database handle
-  $self->{dbh} = $dbh;
+  # Connect to database
+  $self->_connect or croak 'Unable to connect to database';
 
   # Release callback
   $cb->($self) if $cb && ref($cb) eq 'CODE';
@@ -67,11 +70,12 @@ sub table {
   my $self = shift;
 
   my %param = (
-    table => shift
+    table   => shift
   );
 
   # Clone parameters
-  foreach (qw/dbh file created savepoint/) {
+  foreach (qw/dbh created file
+              in_txn savepoint pid tid/) {
     $param{$_} = $self->{$_};
   };
 
@@ -81,9 +85,33 @@ sub table {
 
 
 # Database handle
+# Based on DBIx::Connector
 sub dbh {
-  return $_[0]->{dbh} unless $_[1];
-  $_[0]->{dbh} = $_[1];
+  my $self = shift;
+
+  # Store new database handle
+  return ($self->{dbh} = shift) if $_[0];
+
+  return $self->{dbh} if $self->{in_txn};
+
+  state $c = 'Unable to connect to database';
+
+  # Check for thread id
+  if (defined $self->{tid} && $self->{tid} != threads->tid) {
+    return $self->_connect or croak $c;
+  }
+
+  # Check for process id
+  elsif ($self->{pid} != $$) {
+    return $self->_connect or croak $c;
+  }
+
+  elsif ($self->{dbh}->{Active}) {
+    return $self->{dbh};
+  };
+
+  # Return handle if active
+  return $self->_connect or croak $c;
 };
 
 
@@ -96,7 +124,23 @@ sub file {
 
 # Database was just created
 sub created {
-  $_[0]->{created};
+  my $self = shift;
+
+  # Creation state is 0
+  return 0 unless $self->{created};
+
+  # Check for thread id
+  if (defined $self->{tid} && $self->{tid} != threads->tid) {
+    return ($self->{created} = 0);
+  }
+
+  # Check for process id
+  elsif ($self->{pid} != $$) {
+    return ($self->{created} = 0);
+  };
+
+  # Return creation state
+  return 1;
 };
 
 
@@ -125,13 +169,11 @@ sub insert {
     # Create insert string
     my $sql = 'INSERT INTO ' . $table .
           ' (' . join(', ', @keys) . ')' .
-	  ' VALUES ' .
-	  '(' . _q(\@keys) . ')';
+	  ' VALUES' .
+	  ' (' . _q(\@keys) . ')';
 
     # Prepare and execute
-    my ($rv) = $self->prep_and_exec( $sql, \@values );
-
-    return $rv;
+    return $self->prep_and_exec( $sql, \@values );
   }
 
   # Multiple inserts
@@ -141,47 +183,47 @@ sub insert {
 
     my @keys = @{ shift(@_) };
 
-    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) .') ';
+    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) . ') ';
     my $union = ' SELECT ' . _q(\@keys). ' ';
 
-    if (scalar @_ < MAX_COMPOUND_SELECT) {
+    if (scalar @_ <= MAX_COMP_SELECT) {
 
       # Add data unions
-      $sql .= $union . ((' UNION ' . $union) x (scalar(@_) - 1));
+      $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
 
       # Prepare and execute
-      my ($rv) = $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
-
-      return $rv;
+      return $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
     }
 
-    # More than MAX_COMPOUND_SELECT insertions
+    # More than MAX_COMP_SELECT insertions
     else {
 
-      my ($rv, @value_array);
+      my ($rv, @v_array);
       my @values = @_;
 
       # Start transaction
-      $self->transaction(
+      $self->txn(
 	sub {
-	  while (@value_array = splice(@values, 0, MAX_COMPOUND_SELECT - 1)) {
+	  while (@v_array = splice(@values, 0, MAX_COMP_SELECT - 1)) {
 
 	    # Delete undef values
-	    @value_array = grep($_, @value_array) unless @_;
+	    @v_array = grep($_, @v_array) unless @_;
 
 	    # Add data unions
 	    my $sub_sql = $sql . $union .
-	      ((' UNION ' . $union) x (scalar(@value_array) - 1));
+	      ((' UNION ' . $union) x ( scalar(@v_array) - 1 ));
 
 	    # Prepare and execute
-	    my ($rv_part) = $self->prep_and_exec(
+	    my $rv_part = $self->prep_and_exec(
 	      $sub_sql,
-	      [ map( @$_,  @value_array ) ]
+	      [ map( @$_,  @v_array ) ]
 	    );
 
+	    # Rollback transaction
 	    return -1 unless $rv_part;
 	    $rv += $rv_part;
 	  };
+
 	}) or return;
 
       # Everything went fine
@@ -207,24 +249,24 @@ sub update {
   # Nothing to update
   return unless @$pairs;
 
-  my $sql = 'UPDATE ' . $table .
-            ' SET ' . join(', ', @$pairs);
+  my $sql = 'UPDATE ' . $table . ' SET ' . join(', ', @$pairs);
 
   if ($_[0]) {
-    my ($cond_pairs, $cond_values) = _get_pairs(shift(@_));
+    my ($cond_pairs, $cond_values) = _get_pairs( shift(@_) );
 
     # No conditions given
-    next unless @$cond_pairs;
+    if (@$cond_pairs) {
 
-    # Append condition
-    $sql .= ' WHERE ' . join(' AND ', @$cond_pairs);
+      # Append condition
+      $sql .= ' WHERE ' . join(' AND ', @$cond_pairs);
 
-    # Append values
-    push(@$values, @$cond_values);
+      # Append values
+      push(@$values, @$cond_values);
+    };
   };
 
   # Prepare and execute
-  my ($rv) = $self->prep_and_exec($sql, $values);
+  my $rv = $self->prep_and_exec($sql, $values);
 
   # Return value
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
@@ -247,11 +289,17 @@ sub select {
 
   # Append condition
   my @values;
-  if ($_[0] && ref($_[0]) eq 'HASH') {
-    my ($pairs, $values) = _get_pairs( shift(@_) );
 
-    $sql .= ' WHERE ' . join(' AND ', @$pairs);
-    push(@values, @$values);
+  if ($_[0] && ref($_[0]) eq 'HASH') {
+    my ($pairs, $values, $prep) = _get_pairs( shift(@_) );
+
+    if (@$pairs) {
+      $sql .= ' WHERE ' . join(' AND ', @$pairs);
+      push(@values, @$values);
+    };
+
+    # Apply restrictions
+    $sql .= _restrictions($prep, \@values) if $prep;
   };
 
   # Prepare and execute
@@ -268,18 +316,19 @@ sub select {
 
       # Finish if callback returns -1
       if ($_[0]->($row) == -1) {
-	$sth->finish;
 	last;
       };
     };
+
+    # Finish statement
+    $sth->finish;
+    return;
   }
 
   # Return array ref
   else {
     return $sth->fetchall_arrayref({});
   };
-
-  return;
 };
 
 
@@ -309,8 +358,13 @@ sub load {
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
 
+  # No handle
+  return {} unless $sth;
+
   # Retrieve
-  return $sth ? $sth->fetchrow_hashref : {};
+  my $row = $sth->fetchrow_hashref;
+  $sth->finish;
+  return $row;
 };
 
 
@@ -322,16 +376,18 @@ sub delete {
   # Build sql
   my $sql = 'DELETE FROM ' . $table;
 
-  my ($pairs, $values);
-
   # With parameters
+  my ($pairs, $values, $prep);
   if ($_[0]) {
-    ($pairs, $values) = _get_pairs( shift(@_) );
+    ($pairs, $values, $prep) = _get_pairs( shift(@_) );
     $sql .= ' WHERE ' . join(' AND ', @$pairs);
+
+    # Apply restrictions
+    $sql .= _restrictions($prep, $values) if $prep;
   };
 
   # Prepare and execute
-  my ($rv) = $self->prep_and_exec($sql, $values);
+  my $rv = $self->prep_and_exec($sql, $values);
 
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
 };
@@ -346,31 +402,25 @@ sub merge {
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
 
   my $rv;
-  $self->transaction(
+  $self->txn(
     sub {
 
       # Update
-      $rv = $self->update($table, \%param, \%cond);
+      $rv = $self->update($table => \%param, \%cond);
       return 1 if $rv;
 
       # Delete all element conditions
       delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
 
       # Insert
-      $rv = $self->insert($table, { %param, %cond }) or return -1;
+      $rv = $self->insert($table => { %param, %cond }) or return -1;
 
     }) or return;
 
+  # Return value is bigger than 0
   return $rv if $rv && $rv > 0;
 
   return;
-};
-
-
-# Temporary
-sub update_or_insert {
-  warn 'update_or_insert is deprecated in favor of merge';
-  shift->merge(@_);
 };
 
 
@@ -391,34 +441,126 @@ sub count {
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
 
-  return (!$rv || $rv ne '0E0') ? 0 : $sth->fetchrow_arrayref->[0];
+  return 0 if !$rv || $rv ne '0E0';
+
+  my $count = $sth->fetchrow_arrayref->[0];
+  $sth->finish;
+
+  return $count;
+};
+
+
+# Pager
+# Todo: Not fork- and thread-safe
+sub pager {
+  my $self  = shift;
+  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
+
+  # Fields to select
+  my $fields = '*';
+  if ($_[0] && ref($_[0]) eq 'ARRAY') {
+    $fields = _fields( shift(@_) );
+  };
+
+  # Create sql query
+  my $sql = 'SELECT ' . $fields . ' FROM ' . $table;
+
+  my @values;
+  my ($limit, $offset);
+  my $prep = {};
+
+  # Append condition
+  if ($_[0] && ref($_[0]) eq 'HASH') {
+    my ($pairs, $values);
+    ($pairs, $values, $prep) = _get_pairs( shift(@_) );
+
+    if (@$pairs) {
+      $sql .= ' WHERE ' . join(' AND ', @$pairs);
+      push(@values, @$values);
+    };
+  };
+
+  # Apply restrictions
+  $limit  = ($prep->{limit}  //= $PAGER_LIMIT);
+  $offset = ($prep->{offset} //= 0);
+
+  $sql .= _restrictions($prep, []);
+
+  # Prepare
+  my $dbh   = $self->dbh;
+  my $sth;
+  eval {
+    $sth = $dbh->prepare( $sql );
+  };
+
+  # Check for errors
+  if ($@) {
+    carp $@ . "\nSQL: " . $sql;
+    return;
+  };
+
+  return unless $sth;
+
+  # return anon subroutine
+  return sub {
+    my $step = $limit;
+
+    # Optional step parameter
+    if ($_[0] && $_[0] =~ /^\d+$/) {
+      $step = shift;
+    };
+
+    # Execute
+    my $rv;
+    eval {
+      $rv = $sth->execute( @values, $step, $offset );
+    };
+
+    # Check for errors
+    if ($@) {
+      carp $@ . "\nSQL: " . $sql;
+      return;
+    };
+
+    # Next step
+    $offset += $step;
+
+    # Return array ref
+    my $rows = $sth->fetchall_arrayref({});
+    return @$rows ? $rows : 0
+  };
 };
 
 
 # Prepare and execute
 sub prep_and_exec {
   my ($self, $sql, $values, $cached) = @_;
-  my $dbh = $self->{dbh};
+  my $dbh = $self->dbh;
 
   # Prepare
   my $sth;
   eval {
-
-    # not cached
-    unless ($cached) {
-      $sth = $dbh->prepare( $sql );
-    }
-
-    # cached
-    else {
-      $sth = $dbh->prepare_cached( $sql );
-    };
+    $sth =
+      $cached ? $dbh->prepare_cached( $sql ) :
+	$dbh->prepare( $sql );
   };
 
   # Check for errors
   if ($@) {
-    warn $@;
-    return;
+
+    # Retry with reconnect
+    $dbh = $self->_connect;
+
+    eval {
+      $sth =
+	$cached ? $dbh->prepare_cached( $sql ) :
+	  $dbh->prepare( $sql );
+    };
+
+    if ($@) {
+      carp $@ . "\nSQL: " . $sql;
+      return;
+    };
   };
 
   return unless $sth;
@@ -431,43 +573,52 @@ sub prep_and_exec {
 
   # Check for errors
   if ($@) {
-    warn $@;
+    carp $@ . "\nSQL: " . $sql;
     return;
   };
 
   # Return values
-  return ($rv, $sth);
+  return ($rv, $sth) if wantarray;
+
+  $sth->finish;
+  return $rv;
 };
 
 
 # Wrapper for DBI do
 sub do {
-  shift->{dbh}->do( @_ );
+  shift->dbh->do( @_ );
 };
 
 
 # Wrap a transaction
-sub transaction {
+sub txn {
   my $self = shift;
 
   return unless (
     $_[0] && ref($_[0]) eq 'CODE'
   );
 
-  my $dbh = $self->{dbh};
+  my $dbh = $self->dbh;
 
   # Outside transaction
   if ($dbh->{AutoCommit}) {
+
+    # Start new transaction
     $dbh->begin_work;
+
+    $self->{in_txn} = 1;
 
     # start
     my $rv = $_[0]->($self);
     if (!$rv || $rv != -1) {
+      $self->{in_txn} = 0;
       $dbh->commit;
       return 1;
     };
 
     # Rollback
+    $self->{in_txn} = 0;
     $dbh->rollback;
     return;
   }
@@ -475,11 +626,20 @@ sub transaction {
   # Inside transaction
   else {
 
+    $self->{in_txn} = 1;
+
     # Push savepoint on stack
     my $sp_array = $self->{savepoint};
 
     # Use PID for concurrent accesses
-    my $sp = 'orosp_' . $$ . '_' . $sp_array->[0]++;
+    my $sp = 'orosp_' . $$ . '_';
+
+    # Use TID for concurrent accesses
+    $sp .= threads->tid . '_' if $self->{tid};
+
+    $sp .= $sp_array->[0]++;
+
+    # Push new savepoint to array
     push(@$sp_array, $sp);
 
     # Start transaction
@@ -496,7 +656,7 @@ sub transaction {
 
     # Last savepoint does not match
     else {
-      warn "Savepoint $sp is not the last savepoint on stack";
+      carp "Savepoint $sp is not the last savepoint on stack";
     };
 
     # Commit savepoint
@@ -505,7 +665,7 @@ sub transaction {
       return 1;
     };
 
-    # rollback
+    # Rollback
     $self->do("ROLLBACK TO SAVEPOINT $sp");
     return;
   };
@@ -514,18 +674,115 @@ sub transaction {
 
 # Wrapper for sqlite last_insert_row_id
 sub last_insert_id {
-  shift->{dbh}->sqlite_last_insert_rowid;
+  shift->dbh->sqlite_last_insert_rowid;
+};
+
+
+# Disconnect on destroy
+sub DESTROY {
+  my $self = shift;
+
+  # Check if table is parent
+  if ($self->{table} eq '__UNKNOWN__') {
+
+    # No database connection
+    return $self unless $self->{dbh};
+
+    # Delete cached kids
+    my $kids = $self->{dbh}->{CachedKids};
+    %$kids = () if $kids;
+
+    # Disconnect
+    $self->{dbh}->disconnect unless $self->{dbh}->{Kids};
+    $self->{dbh} = undef;
+  };
+
+  return $self;
+};
+
+
+# Connect with database
+sub _connect {
+  my $self = shift;
+
+  # DBI Connect
+  my $dbh;
+  eval {
+    $dbh = DBI->connect(
+      'dbi:SQLite:' . $self->file,
+      undef,
+      undef,
+      {
+	PrintError     => 0,
+	RaiseError     => 1,
+	AutoCommit     => 1,
+	sqlite_unicode => 1
+      });
+  };
+
+  # Unable to connect to database
+  if ($@) {
+    carp $@;
+    return;
+  };
+
+  # Store database handle
+  $self->{dbh} = $dbh;
+
+  # Save process id
+  $self->{pid} = $$;
+
+  # Save thread id
+  $self->{tid} = threads->tid if $INC{'threads.pm'};
+
+  return $dbh;
 };
 
 
 # Get pairs and values
-sub _get_pairs {
-  my (@pairs, @values);
+sub _get_pairs ($) {
+  my (@pairs, @values, %prep);
+
   while (my ($key, $value) = each %{$_[0]}) {
-    next unless $key =~ /^[_0-9a-zA-Z]+$/;
+    next unless $key =~ /^-?[_0-9a-zA-Z]+$/;
+
+    # Restriction of the result set
+    if (index($key, '-') == 0) {
+      $key = lc($key);
+
+      # Order restriction
+      if ($key =~ /^-order(?:_by)?$/i) {
+
+	$prep{order} =
+	  join(', ',
+	       # Make descending if field has minus prefix
+	       map {
+		 if (index($_, '-') == 0) {
+		   $_ = substr($_, 1) . ' DESC';
+		 }; $_;
+	       }
+
+	       # Grep all valid values
+	       grep(
+		 /^(?:-?[a-zA-Z\.]+|$FUNCTION_REGEX)$/o,
+		 (ref($value) ? @$value : $value)
+	       )
+	     );
+      }
+
+      # Limit and Offset restriction
+      elsif ($key ~~ ['-limit', '-offset']) {
+	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
+      };
+    }
+
+    # NULL value
+    elsif (!defined $value) {
+      push(@pairs, $key . ' IS NULL');
+    }
 
     # Element of
-    if (ref($value) && ref($value) eq 'ARRAY') {
+    elsif (ref($value) && ref($value) eq 'ARRAY') {
       push (@pairs,
 	    $key . ' IN (' . _q($value) . ')' );
       push(@values, @$value);
@@ -537,7 +794,8 @@ sub _get_pairs {
       push(@values, $value);
     };
   };
-  return (\@pairs, \@values);
+
+  return (\@pairs, \@values, keys %prep ? \%prep : undef);
 };
 
 
@@ -545,17 +803,18 @@ sub _get_pairs {
 sub _fields ($) {
 
   # Check for valid fields
-  my @fields = grep(/^(?:[\*\.\w]+(?::[a-zA-Z]+)?|
-                      [a-zA-Z]+\([\*\.\w\,]*\)(?::[a-zA-Z]+)?)$/x,
-		    @{ $_[0] });
-  my $fields = join @fields;
+  my @fields = grep(
+    /^(?:(?:[\*\.\w]+|$FUNCTION_REGEX))$AS_REGEX?$/o,
+    @{ $_[0] }
+  );
+  my $fields = join(', ', @fields);
 
   # Return if no alias fields exist
-  if (index(':', $fields) < 0) {
+  if (index($fields, ':') < 0) {
     return $fields;
   };
 
-  # join with alias fields
+  # Join with alias fields
   join(', ',
        map {
 	 if ($_ =~ /^(.+?):([^:]+?)$/) {
@@ -567,9 +826,49 @@ sub _fields ($) {
 };
 
 
+# Restrictions
+sub _restrictions ($$) {
+  my ($prep, $values) = @_;
+  my $sql = '';
+
+  # Order restriction
+  if ($prep->{order}) {
+    $sql .= ' ORDER BY ' . $prep->{order};
+  };
+
+  # Limit restriction
+  if ($prep->{limit}) {
+    $sql .= ' LIMIT ?';
+    push(@$values, $prep->{limit});
+  };
+
+  # Offset restriction
+  if (defined $prep->{offset}) {
+    $sql .= ' OFFSET ?';
+    push(@$values, $prep->{offset});
+  };
+
+  $sql;
+};
+
+
 # Questionmark string
 sub _q ($) {
-  join(',', split('', '?' x scalar(@{$_[0]})));
+  join(', ', split('', '?' x scalar( @{$_[0]} )));
+};
+
+
+# Depecated
+sub update_or_insert {
+  carp 'update_or_insert() is deprecated in favor of merge()';
+  shift->merge(@_);
+};
+
+
+# Deprecated
+sub transaction {
+  carp 'transaction() is deprecated in favor of txn()';
+  shift->txn(@_);
 };
 
 
@@ -609,6 +908,7 @@ Sojolicious::Oro - Simple SQLite database accessor
 L<Sojolicious::Oro> is a simple database accessor that provides
 basic functionalities to work with really simple databases.
 For now it only works with SQLite.
+It should be fork- and thread-safe.
 
 =head1 ATTRIBUTES
 
@@ -627,17 +927,39 @@ The DBI database handle.
   $oro->file('myfile.sqlite');
 
 The sqlite file of the database.
-# This attribute is EXPERIMENTAL.
+
+This attribute is EXPERIMENTAL and may change without warnings.
 
 
 =head2 C<created>
 
   if ($oro->created) {
-    # brand new
+    print "This is brand new!";
   };
 
 If the database was created on construction of the handle,
 this attribute is true. Otherwise it's false.
+In most cases, this is useful to create tables, triggers
+and indices.
+
+  if ($oro->created) {
+    $oro->txn(sub {
+
+      # Create table
+      $oro->do(
+        'CREATE TABLE Person (
+            id    INTEGER PRIMARY KEY,
+            name  TEXT NOT NULL,
+            age   INTEGER
+        )'
+      ) or return -1;
+
+      # Create index
+      $oro->do(
+        'CREATE INDEX age_i ON Person (age)'
+      ) or return -1;
+    });
+  };
 
 
 =head1 METHODS
@@ -649,9 +971,9 @@ this attribute is true. Otherwise it's false.
   $oro = Sojolicious::Oro->new('test.sqlite' => sub {
     shift->do(
       'CREATE TABLE Person (
-         id    INTEGER PRIMARY KEY,
-         name  TEXT NOT NULL,
-         age   INTEGER
+          id    INTEGER PRIMARY KEY,
+          name  TEXT NOT NULL,
+          age   INTEGER
       )');
   })
 
@@ -714,12 +1036,11 @@ Scalar condition values will be inserted, if the fields do not exist.
                  return -1 if $_[0]->{name} eq 'Peter';
                });
   my $users = $oro->select(Person => ['id', 'name']);
-  my $users = $oro->select(Person => { name => 'Daniel' });
-  my $users = $oro->select(Person => ['id'] => { name => 'Daniel' });
-  my $users = $oro->select(Person => {
+  my $users = $oro->select(Person => ['id'] => {
                              age  => 24,
                              name => ['Daniel','Sabine']
                            });
+
   my $users = $oro->select(Person => ['name:displayName']);
   $oro->select('Person' =>
                ['id','age'] =>
@@ -734,14 +1055,43 @@ Scalar condition values will be inserted, if the fields do not exist.
 Returns an array ref of hash refs of a given table,
 that meets a given condition or releases a callback in this case.
 Expects the table name of selection and optionally an array ref
-of fields, optionally a hash ref with conditions, the rows have to fulfill,
-and optionally a callback, which is released after each row.
+of fields, optionally a hash ref with conditions and restrictions,
+the rows have to fulfill, and optionally a callback,
+which is released after each row.
 If the callback returns -1, the data fetching is aborted.
-In case of scalar values, identity is tested in the condition hash ref.
+In case of scalar values, identity is tested for the condition.
 In case of array refs, it is tested, if the field is an element of the set.
 Fields can be column names or functions. With a colon you can define
 aliases for the field names.
 
+In addition to conditions, the selection can be restricted by using
+three special restriction parameters:
+
+  my $users = $oro->select(Person => {
+                             -order  => ['-age','name'],
+                             -offset => 1,
+                             -limit  => 5
+                           });
+
+=over 2
+
+=item C<-order>
+
+Sorts the result set by field names.
+Field names can be scalars or array references of field names ordered
+by priority.
+A leading minus of the field name will use descending order,
+otherwise ascending order.
+
+=item C<-limit>
+
+Limits the number of rows in the result set.
+
+=item C<-offset>
+
+Sets the offset of the result set.
+
+=back
 
 =head2 C<load>
 
@@ -766,9 +1116,10 @@ aliases for the field names.
 
 Deletes rows of a given table, that meet a given condition.
 Expects the table name of selection and optionally a hash ref
-with conditions, the rows have to fulfill.
-In case of scalar values, identity is tested. In case of array refs,
-it is tested, if the field is an element of the set.
+with conditions and restrictions, the rows have to fulfill.
+In case of scalar values, identity is tested for the condition.
+In case of array refs, it is tested, if the field is an element of the set.
+Restrictions can be applied as with L<select>.
 Returns the number of rows that were deleted.
 
 
@@ -800,7 +1151,10 @@ This method is EXPERIMENTAL and may change without warnings.
 
 =head2 C<prep_and_exec>
 
-  my ($rv, $sth) = $oro->('SELECT ? From Person', ['name'], 'cached');
+  my ($rv, $sth) =
+    $oro->prep_and_exec('SELECT ? From Person',
+                        ['name'], 'cached');
+
   if ($rv) {
     my $row;
     while ($row = $sth->fetchrow_hashref) {
@@ -820,18 +1174,49 @@ reference and optionally a boolean value, if the prepared
 statement should be cached.
 
 
-=head2 C<transaction>
+=head2 C<pager>
 
-  $oro->transaction(
+  # Construct new pager
+  my $pager = $oro->pager(Person => {
+                            -offset => 2,
+                            -limit  => 3
+                          });
+
+  # Loop over pager
+  while ($_ = $pager->()) {
+    foreach my $row (@$_) {
+      print $row->{name}, "\n";
+    };
+    print "--next page--\n";
+  };
+
+Creates an anonymous subroutine for page based looping.
+Accepts all parameters as described in L<select>,
+except for the optional callback.
+The C<-offset> restriction is used for an initial offset,
+the C<-limit> restriction is used for step length.
+An optional parameter to the subroutine can set the step
+length for the next request.
+If no step length parameter is given, neither by the
+C<-offset> parameter nor the parameter to the subroutine,
+the step length defaults to 10.
+The return value is identical to L<select>.
+If no rows are found, the return value is C<undef>.
+
+This method is EXPERIMENTAL and may change without warnings.
+
+=head2 C<txn>
+
+  $oro->txn(
     sub {
       foreach (1..100) {
         $oro->insert(Person => { name => 'Peter'.$_ }) or return -1;
       };
       $oro->delete(Person => { id => 400 });
 
-      $oro->transaction(
+      $oro->txn(
         sub {
-          $oro->insert('Person' => { name => 'Fry'}) or return -1;
+          $oro->insert('Person' => { name => 'Fry' }) or return -1;
         }) or return -1;
     });
 
@@ -853,21 +1238,29 @@ Returns the globally last inserted id.
 
   $oro->do(
     'CREATE TABLE Person (
-            id   INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
+        id   INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
      )');
 
 Executes SQL code.
-This is a Wrapper for the DBI C<do()> method.
+This is a Wrapper for the DBI C<do()> method (but fork- and thread-safe).
 
 
 =head1 DEPENDENCIES
 
+L<Carp>,
 L<DBI>,
 L<DBD::SQLite>,
 L<File::Path>,
 L<File::Basename>.
 
+
+=head1 ACKNOWLEDGEMENT
+
+Partly inspired by L<ORLite>, written by Adam Kennedy.
+Some code is based on L<DBIx::Connector>, written by David E. Wheeler.
+Without me knowing (it's a shame!), some of the concepts are quite similar
+to L<SQL::Abstract>, written by Nathan Wiger et al.
 
 =head1 AVAILABILITY
 

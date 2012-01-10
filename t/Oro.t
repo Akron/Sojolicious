@@ -1,4 +1,4 @@
-use Test::More tests => 95;
+use Test::More tests => 112;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -205,6 +205,8 @@ my ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
 ok($rv, 'Prep and Execute');
 is($sth->fetchrow_arrayref->[0], 3, 'Prep and exec');
 
+$sth->finish;
+
 ok($oro->dbh->{AutoCommit}, 'Transaction');
 $oro->dbh->begin_work;
 ok(!$oro->dbh->{AutoCommit}, 'Transaction');
@@ -221,7 +223,7 @@ ok($oro->dbh->{AutoCommit}, 'Transaction');
 ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
 ok($rv, 'Prep and Execute');
 is($sth->fetchrow_arrayref->[0], 13, 'Fetch row.');
-
+$sth->finish;
 
 ok($oro->dbh->{AutoCommit}, 'Transaction');
 $oro->dbh->begin_work;
@@ -239,13 +241,14 @@ ok($oro->dbh->{AutoCommit}, 'Transaction');
 ($rv, $sth) = $oro->prep_and_exec('SELECT count("*") as count FROM Content');
 ok($rv, 'Prep and Execute');
 is($sth->fetchrow_arrayref->[0], 13, 'Fetch row.');
+$sth->finish;
 
 is($oro->count('Content'), 13, 'count');
 
 my $load = $oro->load('Content' => ['count(*):number']);
 is($load->{number}, 13, 'AS feature');
 
-ok($oro->transaction(
+ok($oro->txn(
   sub {
     foreach (1..100) {
       $oro->insert(Content => { title => 'Check'.$_ });
@@ -255,7 +258,7 @@ ok($oro->transaction(
 
 is($oro->count('Content'), 113, 'Count');
 
-ok(!$oro->transaction(
+ok(!$oro->txn(
   sub {
     foreach (1..100) {
       $oro->insert(Content => { title => 'Check'.$_ });
@@ -268,7 +271,7 @@ is($oro->count('Content'), 113, 'Count');
 
 # Nested transactions:
 
-ok($oro->transaction(
+ok($oro->txn(
   sub {
     my $val = 1;
 
@@ -276,7 +279,7 @@ ok($oro->transaction(
       $oro->insert(Content => { title => 'Check'.$val++ });
     };
 
-    ok(!$oro->transaction(
+    ok(!$oro->txn(
       sub {
 	foreach (1..100) {
 	  $oro->insert(Content => { title => 'Check'.$val++ });
@@ -284,7 +287,7 @@ ok($oro->transaction(
 	};
       }), 'Nested Transaction 1');
 
-    ok($oro->transaction(
+    ok($oro->txn(
       sub {
 	foreach (1..100) {
 	  $oro->insert(Content => { title => 'Check'.$val++ });
@@ -361,6 +364,128 @@ ok($name->merge(
 
 is($content->insert({ title => 'New Content 2'}), 1, 'Insert with table');
 is($content->count, 2, 'Count with Table');
+
+is($content->insert({ title => 'New Content 3'}), 1, 'Insert with table');
+
+is_deeply($content->select(
+  ['title'] => {
+    -order => '-title',
+  }), [
+    { title => 'New Content 3' },
+    { title => 'New Content 2' },
+    { title => 'New Content' }
+  ], 'Offset restriction');
+
+is_deeply($content->select(
+  ['title'] => {
+    -order => '-title',
+    -limit => 2
+  }), [
+    { title => 'New Content 3' },
+    { title => 'New Content 2' }
+  ], 'Limit restriction');
+
+is_deeply($content->select(
+  ['title'] => {
+    -order => '-title',
+    -limit => 2,
+    -offset => 1
+  }), [
+    { title => 'New Content 2' },
+    { title => 'New Content' }
+  ], 'Order restriction');
+
+ok($content->update({ content => 'abc' } => {title => 'New Content'}), 'Update');;
+ok($content->update({ content => 'cde' } => {title => 'New Content 2'}), 'Update');
+ok($content->insert({ content => 'cdf',  title => 'New Content 1'}),'Insert');;
+ok($content->update({ content => 'efg' } => {title => 'New Content 2'}),'Update');;
+ok($content->update({ content => 'efg' } => {title => 'New Content 3'}),'Update');
+
+is(join(',',
+	map($_->{id},
+	    @{$content->select(
+	      ['id'] =>
+		{
+		  -order => ['-content', '-title']
+		}
+	      )})), '3,2,4,1', 'Combined Order restriction');
+
+ok($content->insert(
+  ['title', 'content'] =>
+    ['Bulk 1', 'Content'],
+    ['Bulk 2', 'Content'],
+    ['Bulk 3', 'Content'],
+    ['Bulk 4', 'Content']), 'Bulk Insertion');
+
+
+my $pager = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 2
+  });
+
+my @result;
+while ($_ = $pager->()) {
+  push(@result, [ map { $_->{id} } @$_ ]);
+};
+
+is_deeply(\@result, [[3,2],[4,1],[8,7],[6,5]], 'Pager result');
+
+$pager = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 3,
+    -offset => 1
+  });
+
+@result = ();
+while ($_ = $pager->()) {
+  push(@result, [ map { $_->{id} } @$_ ]);
+};
+
+is_deeply(\@result, [[2,4,1],[8,7,6],[5]], 'Pager result 2');
+
+
+$pager = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 3
+  });
+
+my $pager2 = $content->pager(
+  ['id'] => {
+    -order => ['-content', '-title'],
+    -limit => 3,
+    -offset => 1
+  }
+);
+
+@result = ();
+while ($_ = $pager->()) {
+  push(@result, [ map { $_->{id} } @$_ ]);
+  if ($_ = $pager2->()) {
+    push(@result, [ map { $_->{id} } @$_ ]);
+  };
+};
+
+is_deeply(\@result,
+	  [[3,2,4],[2,4,1],[1,8,7],[8,7,6],[6,5],[5]],
+	  'Pager result 3');
+
+$pager = $content->pager(['id'], { -order => 'id' } );
+
+my $i = 1;
+@result = ();
+while ($_ = $pager->($i++)) {
+  push(@result, [ map { $_->{id} } @$_ ] );
+};
+
+is_deeply(\@result,
+	  [[1],[2,3],[4,5,6],[7,8]], 'Pager result 4');
+
+ok($oro->dbh->disconnect, 'Disonnect');
+
+ok($oro->insert(Content => { title => 'Test', content => 'Value'}), 'Reconnect');
 
 
 __END__

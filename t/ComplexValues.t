@@ -250,7 +250,7 @@ is_deeply($response->{id}, [1,3], 'IDs');
 # Transaction
 
 my $oro = $cv->oro;
-ok($oro->transaction(
+ok($oro->txn(
   sub {
 
     my ($top, $bottom) = (0,0);

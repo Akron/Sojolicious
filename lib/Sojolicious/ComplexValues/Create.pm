@@ -11,7 +11,7 @@ sub create {
 
   # Begin transaction
   my $id;
-  my $trans = $oro->transaction(
+  my $trans = $oro->txn(
     sub {
 
       # Slow but securely returns the correct id
