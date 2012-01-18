@@ -23,11 +23,11 @@ sub register {
       $c->respond_to(
 	json => sub { $c->render(
 	  data   => $xrd->to_json,
-	  format => 'json'
+	  format => 'jrd'
 	)},
 	jrd => sub { $c->render(
 	  data   => $xrd->to_json,
-	  format => 'json'
+	  format => 'jrd'
 	)},
 	any  => sub { $c->render(
 	  data   => $xrd->to_pretty_xml,

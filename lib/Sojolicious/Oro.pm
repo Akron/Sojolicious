@@ -4,8 +4,9 @@ use warnings;
 
 use feature 'state';
 use Carp qw/carp croak/;
+use Data::Dumper 'Dumper'; # temp
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # Database connection
 use DBI;
@@ -32,8 +33,7 @@ sub new {
   # Bless object with hash
   my $self = bless {
     created => 0,
-    in_txn  => 0,
-    table   => '__UNKNOWN__'
+    in_txn  => 0
   }, $class;
 
   # Store filename
@@ -65,14 +65,20 @@ sub new {
   return $self;
 };
 
-
 # New table object
 sub table {
   my $self = shift;
 
-  my %param = (
-    table   => shift
-  );
+  my %param;
+  # Joined table
+  if (ref($_[0])) {
+    $param{table} = [ _join_tables( shift(@_) ) ];
+  }
+
+  # Table name
+  else {
+    $param{table} = shift;
+  };
 
   # Clone parameters
   foreach (qw/dbh created file in_txn
@@ -148,7 +154,8 @@ sub created {
 # Insert values to database
 sub insert {
   my $self  = shift;
-  my $table = ref($_[0]) ? $self->{table} : shift;
+
+  my $table = $self->_table_name(\@_) or return;
 
   # No parameters
   return unless $_[0];
@@ -240,7 +247,8 @@ sub insert {
 # Update existing values in the database
 sub update {
   my $self  = shift;
-  my $table = ref($_[0]) ? $self->{table} : shift;
+
+  my $table = $self->_table_name(\@_) or return;
 
   # No parameters
   return unless $_[0];
@@ -277,27 +285,40 @@ sub update {
 # Select from table
 sub select {
   my $self  = shift;
-  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
+
+  # Init arrays
+  my ($tables, $fields, $join_pairs) = $self->_table_obj(\@_);
+  my @pairs = @$join_pairs;
 
   # Fields to select
-  my $fields = '*';
   if ($_[0] && ref($_[0]) eq 'ARRAY') {
-    $fields = _fields( shift(@_) );
+
+    # Not allowed for join selects
+    return if $fields->[0];
+    $fields = [ _fields( shift(@_) ) ];
   };
 
+  # Default
+  $fields->[0] ||= '*';
+
   # Create sql query
-  my $sql = 'SELECT ' . $fields . ' FROM ' . $table;
+  my $sql = 'SELECT ' . join(', ', @$fields) . ' ' .
+            'FROM '   . join(', ', @$tables);
 
   # Append condition
   my @values;
 
-  if ($_[0] && ref($_[0]) eq 'HASH') {
-    my ($pairs, $values, $prep) = _get_pairs( shift(@_) );
+  my $cond;
+  if ($_[0] && ref($_[0]) eq 'HASH' || @$join_pairs) {
 
-    if (@$pairs) {
-      $sql .= ' WHERE ' . join(' AND ', @$pairs);
+    my ($pairs, $values, $prep);
+    if ($_[0] && ref($_[0]) eq 'HASH') {
+      ($pairs, $values, $prep) = _get_pairs( shift(@_) );
       push(@values, @$values);
+      push(@pairs, @$pairs) if $pairs->[0];
     };
+
+    $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
 
     # Apply restrictions
     $sql .= _restrictions($prep, \@values) if $prep;
@@ -336,43 +357,31 @@ sub select {
 # Load one line
 sub load {
   my $self  = shift;
-  my $table = ref($_[0]) ? $self->{table} : shift;
+  my @param = @_;
 
-  # Fields to select
-  my $fields = '*';
-  if ($_[0] && ref($_[0]) && ref($_[0]) eq 'ARRAY') {
-    $fields = _fields( shift(@_) );
+  # Has a condition
+  if ($param[-1] && ref($param[-1]) && ref($param[-1]) eq 'HASH') {
+    $param[-1]->{-limit} = 1;
+  }
+
+  # Has no condition yet
+  else {
+    push(@param, { -limit => 1 });
   };
 
-  # Build sql
-  my $sql = 'SELECT ' . $fields . ' FROM ' . $table;
+  my $row = $self->select(@param);
 
-  # Parameters
-  my ($pairs, $values);
-  if ($_[0]) {
-    ($pairs, $values) = _get_pairs( shift(@_) );
-    $sql .= ' WHERE ' . join(' AND ', @$pairs);
-  };
+  return {} unless $row;
 
-  $sql .= ' LIMIT 1';
-
-  # Prepare and execute
-  my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
-
-  # No handle
-  return {} unless $sth;
-
-  # Retrieve
-  my $row = $sth->fetchrow_hashref;
-  $sth->finish;
-  return $row;
+  return $row->[0];
 };
 
 
 # Delete entry
 sub delete {
   my $self  = shift;
-  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
+
+  my $table = $self->_table_name(\@_) or return;
 
   # Build sql
   my $sql = 'DELETE FROM ' . $table;
@@ -397,24 +406,30 @@ sub delete {
 # Update or insert a value
 sub merge {
   my $self  = shift;
-  my $table = ref($_[0]) ? $self->{table} : shift;
+
+  my $table = $self->_table_name(\@_) or return;
 
   my %param = %{ shift( @_ ) };
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
+
+  my @param = ( \%param, \%cond );
+  unshift(@param, $table) unless $self->{table};
 
   my $rv;
   $self->txn(
     sub {
 
       # Update
-      $rv = $self->update($table => \%param, \%cond);
+      $rv = $self->update( @param );
       return 1 if $rv;
 
       # Delete all element conditions
       delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
 
       # Insert
-      $rv = $self->insert($table => { %param, %cond }) or return -1;
+      @param = ({ %param, %cond });
+      unshift(@param, $table) unless $self->{table};
+      $rv = $self->insert(@param) or return -1;
 
     }) or return;
 
@@ -428,16 +443,25 @@ sub merge {
 # Count results
 sub count {
   my $self  = shift;
-  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
+
+  # Init arrays
+  my ($tables, $fields, $join_pairs) = $self->_table_obj(\@_);
+  my @pairs = @$join_pairs;
 
   # Build sql
-  my $sql = 'SELECT count(*) FROM ' . $table;
+  my $sql = 'SELECT ' . join(', ', 'count(*)', @$fields) .
+            ' FROM ' . join(', ', @$tables);
 
   my ($pairs, $values);
-  if ($_[0]) {
-    ($pairs, $values) = _get_pairs( shift(@_) );
-    $sql .= ' WHERE ' . join(' AND ', @$pairs);
+  if ($_[0] || @$join_pairs) {
+    if ($_[0]) {
+      ($pairs, $values) = _get_pairs( shift(@_) );
+      push(@pairs, @$pairs) if $pairs->[0];
+    };
+    $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
   };
+
+  $sql .= ' LIMIT 1';
 
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
@@ -452,10 +476,11 @@ sub count {
 
 
 # Pager
-# Todo: Not fork- and thread-safe
+# TODO: Not fork- and thread-safe
 sub pager {
   my $self  = shift;
-  my $table = !$_[0] || ref($_[0]) ? $self->{table} : shift;
+
+  my $table = $self->_table_name(\@_) or return;
 
   # Fields to select
   my $fields = '*';
@@ -578,9 +603,10 @@ sub prep_and_exec {
     return;
   };
 
-  # Return values
+  # Return value and statement
   return ($rv, $sth) if wantarray;
 
+  # Return value
   $sth->finish;
   return $rv;
 };
@@ -684,7 +710,7 @@ sub DESTROY {
   my $self = shift;
 
   # Check if table is parent
-  if ($self->{table} eq '__UNKNOWN__') {
+  unless (exists $self->{table}) {
 
     # No database connection
     return $self unless $self->{dbh};
@@ -739,6 +765,112 @@ sub _connect {
   return $dbh;
 };
 
+
+# Get table name
+sub _table_name {
+  my $self = shift;
+
+  # Table name
+  my $table;
+  unless (exists $self->{table}) {
+    return shift(@{$_[0]}) unless ref($_[0]->[0]);
+  }
+
+  # Table object
+  else {
+    # Join table object not allowed
+    return $self->{table} unless ref($self->{table});
+  };
+
+  return;
+};
+
+
+# Get table object
+sub _table_obj {
+  my $self = shift;
+
+  my $tables;
+  my ($fields, $pairs) = ([], []);
+
+  # Not a table object
+  unless (exists $self->{table}) {
+
+    my $table = shift( @{ shift(@_) } );
+
+    # Table name as a string
+    unless (ref($table)) {
+      $tables = [ $table ];
+    }
+
+    # Join tables
+    else {
+      return _join_tables( $table );
+    };
+  }
+
+  # A table object
+  else {
+
+    # joined table
+    if (ref($self->{table})) {
+      return @{ $self->{table} };
+    }
+
+    # Table name
+    else {
+      $tables = [ $self->{table} ];
+    };
+  };
+
+  return ($tables, $fields, $pairs);
+};
+
+
+# Join tables
+sub _join_tables ($$$$) {
+  my @join   = @{ shift() };
+
+  my (@tables, @fields, @pairs);
+  my %marker;
+
+  # Parse table array
+  while (@join) {
+
+    # Table name
+    my $table = shift(@join);
+    push(@tables, $table);
+
+    my $ref;
+    if ($ref = ref($join[0])) {
+
+      # Field array
+      if ($ref eq 'ARRAY') {
+	push(@fields,
+	     _fields([ map { $table . '.' . $_ } @{ shift(@join) } ]));
+      };
+
+      # Marker hash reference
+      if (ref($join[0]) && ref($join[0]) eq 'HASH') {
+	my $hash = shift(@join);
+	while (my ($key, $value) = each %$hash) {
+	  my $array = ($marker{$value} //= []);
+	  push(@$array, $table . '.' . $key);
+	};
+      };
+    };
+  };
+
+  # Create condition pairs based on markers
+  foreach my $fields (values %marker) {
+    my $field = shift(@$fields);
+    foreach (@$fields) {
+      push(@pairs, $field . ' = ' . $_ );
+    };
+  };
+
+  return (\@tables, \@fields, \@pairs);
+};
 
 # Get pairs and values
 sub _get_pairs ($) {
@@ -811,7 +943,7 @@ sub _fields ($) {
   my $fields = join(', ', @fields);
 
   # Return if no alias fields exist
-  if (index($fields, ':') < 0) {
+  if (index($fields, ':') < 0 && index($fields, '.') < 0) {
     return $fields;
   };
 
@@ -820,6 +952,10 @@ sub _fields ($) {
        map {
 	 if ($_ =~ /^(.+?):([^:]+?)$/) {
 	   $1 . ' AS ' . $2
+	 } elsif ($_ =~ /^(?:.+?)\.(?:[^\.]+?)$/) {
+	   my $alias = $_;
+	   $alias =~ s/[\$\@\#\.\s]/_/g;
+	   $_ . ' AS ' . lc $alias;
 	 } else {
 	   $_
 	 }
@@ -1065,6 +1201,8 @@ In case of array refs, it is tested, if the field is an element of the set.
 Fields can be column names or functions. With a colon you can define
 aliases for the field names.
 
+=head3 Restrictions
+
 In addition to conditions, the selection can be restricted by using
 three special restriction parameters:
 
@@ -1093,6 +1231,37 @@ Limits the number of rows in the result set.
 Sets the offset of the result set.
 
 =back
+
+=head3 Joined Tables
+
+Instead of preparing a select on only one table, it's possible to
+use any number of tables and perform a simple join:
+
+  $oro->select(
+    [
+      Person =>    ['name:author', 'age:age'] => { id => 1 },
+      Book =>      ['title'] => { author_id => 1, publisher_id => 2 },
+      Publisher => ['name:publisher', 'id:pub_id'] => { id => 2 }
+    ] => { author => 'Akron' }
+  );
+
+Join-Selects accept an array reference with a sequences of
+table names, field array references and optional hash references
+containing markers for the join.
+Fields can only be column names, functions are not allowed.
+With a colon you can define aliases for the field names.
+As a fieldname without an alias will have the corresponding
+table name as a prefix, aliases as 'age:age' are useful.
+The join marker hash reference has field names as keys
+(no aliases!) and numerical markers as values.
+Fields with identical markers will have identical content.
+
+A following array reference of fields is not allowed.
+After the join table array reference, the optional hash
+reference with conditions and restrictions and an optional
+callback follow immediately.
+
+Joins are EXPERIMENTAL and may change without warnings.
 
 =head2 C<load>
 
@@ -1143,17 +1312,28 @@ the rows have to fulfill.
   $person->insert({ name => 'Ringo' });
   $person->delete;
 
+  my $books = $oro->select(
+    [
+      Person =>    ['name:author', 'age:age'] => { id => 1 },
+      Book =>      ['title'] => { author_id => 1, publisher_id => 2 },
+      Publisher => ['name:publisher', 'id:pub_id'] => { id => 2 }
+    ]
+  );
+  $books->select({ author => 'Akron' });
+  print $books->count;
+
 Returns a new C<Sojolicious::Oro> object with a predefined table
-name. Allows to omit the first table name argument for the methods
-L<insert>, L<update>, L<select>, L<merge>, L<delete>, L<load>, and
-L<count>.
+or a joined table. Allows to omit the first table argument for the methods
+L<select>, L<load>, L<count> and in case of non-joined-tables for L<insert>,
+L<update>, L<merge>, and L<delete>.
+C<table> in conjunction with a joined table can be seen as an "ad hoc view".
 
 This method is EXPERIMENTAL and may change without warnings.
 
 =head2 C<prep_and_exec>
 
   my ($rv, $sth) =
-    $oro->prep_and_exec('SELECT ? From Person',
+    $oro->prep_and_exec('SELECT ? FROM Person',
                         ['name'], 'cached');
 
   if ($rv) {
@@ -1169,7 +1349,8 @@ This method is EXPERIMENTAL and may change without warnings.
 
 Prepare and execute an SQL statement with all checkings.
 Returns the return value (on error false, otherwise true,
-e.g. the number of modified rows) and the statement handle.
+e.g. the number of modified rows) and - in an array context -
+the statement handle.
 Accepts the SQL statement, parameters for binding in an array
 reference and optionally a boolean value, if the prepared
 statement should be cached.
@@ -1270,7 +1451,7 @@ to L<SQL::Abstract>, written by Nathan Wiger et al.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

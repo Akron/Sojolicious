@@ -1,4 +1,4 @@
-use Test::More tests => 112;
+use Test::More tests => 129;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -32,7 +32,16 @@ if ($oro->created) {
     'CREATE TABLE Content (
        id            INTEGER PRIMARY KEY,
        content       TEXT,
-       title         TEXT
+       title         TEXT,
+       author_id     INTEGER
+     )'
+  );
+  $oro->do(
+    'CREATE TABLE Book (
+       id        INTEGER PRIMARY KEY,
+       title     TEXT,
+       year      INTEGER,
+       author_id INTEGER
      )'
   );
 };
@@ -76,7 +85,7 @@ ok(!$oro->update(Content =>
 my $row;
 ok($row = $oro->load(Content => { title => 'Check!' }), 'Load');
 
-is ($row->{content}, 'This is changed content.', 'load');
+is ($row->{content}, 'This is changed content.', 'Load');
 
 ok($oro->insert(Content =>
 		  { title => 'Another check!',
@@ -486,6 +495,80 @@ is_deeply(\@result,
 ok($oro->dbh->disconnect, 'Disonnect');
 
 ok($oro->insert(Content => { title => 'Test', content => 'Value'}), 'Reconnect');
+
+
+# Joins:
+ok($oro->delete('Content'), 'Truncate');
+ok($oro->delete('Name'), 'Truncate');
+
+my %author;
+
+$oro->txn(
+  sub {
+    $oro->insert(Name => { prename => 'Akron' });
+    $author{akron} = $oro->last_insert_id;
+
+    $oro->insert(Name => { prename => 'Fry' });
+    $author{fry} = $oro->last_insert_id;
+
+    $oro->insert(Name => { prename => 'Leela' });
+    $author{leela} = $oro->last_insert_id;
+
+    foreach (qw/Akron Fry Leela/) {
+      my $id = $author{lc($_)};
+      ok($oro->insert(Content => ['title', 'content', 'author_id'] =>
+	  [$_.' 1', 'Content', $id],
+          [$_.' 2', 'Content', $id],
+          [$_.' 3', 'Content', $id],
+          [$_.' 4', 'Content', $id]), 'Bulk Insertion');
+    };
+
+    foreach (qw/Akron Fry Leela/) {
+      my $id = $author{lc($_)};
+      ok($oro->insert(Book => ['title', 'year', 'author_id'] =>
+	  [$_."'s Book 1", 14, $id],
+          [$_."'s Book 2", 20, $id],
+          [$_."'s Book 3", 19, $id],
+          [$_."'s Book 4", 8, $id]), 'Bulk Insertion');
+    };
+
+  });
+
+my $found = $oro->select([
+  Name => ['prename:author'] => { id => 1 },
+  Content => ['title'] => { author_id => 1 }
+] => { author => 'Fry'} );
+
+is(@$found, 4, 'Joins');
+
+ok($found = $oro->select([
+  Name => ['prename:author'] => { id => 1 },
+  Book => ['title:title','year:year'] => { author_id => 1 }
+] => { author => 'Fry' } ), 'Joins');
+
+my $year;
+$year += $_->{year} foreach @$found;
+
+is($year, 61, 'Joins');
+
+ok($found = $oro->select([
+  Name => { id => 1 },
+  Book => ['title:title'] => { author_id => 1 }
+] => { prename => 'Fry' } ), 'Joins');
+
+is(@$found, 4, 'Joins');
+
+my $books = $oro->table([
+  Name => { id => 1 },
+  Book => ['title:title'] => { author_id => 1 }
+]);
+
+ok($found = $books->select({ prename => 'Leela'}), 'Joins with table');
+is(@$found, 4, 'Joins');
+
+is($books->count({ prename => 'Leela' }), 4, 'Joins with count');
+ok($books->load({ prename => 'Leela' })->{title}, 'Joins with load');
+
 
 
 __END__
