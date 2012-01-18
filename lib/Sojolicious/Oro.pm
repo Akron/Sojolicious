@@ -4,7 +4,6 @@ use warnings;
 
 use feature 'state';
 use Carp qw/carp croak/;
-use Data::Dumper 'Dumper'; # temp
 
 our $VERSION = '0.02';
 
@@ -18,9 +17,6 @@ use File::Basename;
 
 # Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
 use constant MAX_COMP_SELECT => 500;
-
-# Default limit for pager
-our $PAGER_LIMIT = 10;
 
 # Regex for function values
 our $FUNCTION_REGEX = qr/[a-zA-Z0-9]+\([^\)]*\)?/;
@@ -472,89 +468,6 @@ sub count {
   $sth->finish;
 
   return $count;
-};
-
-
-# Pager
-# TODO: Not fork- and thread-safe
-sub pager {
-  my $self  = shift;
-
-  my $table = $self->_table_name(\@_) or return;
-
-  # Fields to select
-  my $fields = '*';
-  if ($_[0] && ref($_[0]) eq 'ARRAY') {
-    $fields = _fields( shift(@_) );
-  };
-
-  # Create sql query
-  my $sql = 'SELECT ' . $fields . ' FROM ' . $table;
-
-  my @values;
-  my ($limit, $offset);
-  my $prep = {};
-
-  # Append condition
-  if ($_[0] && ref($_[0]) eq 'HASH') {
-    my ($pairs, $values);
-    ($pairs, $values, $prep) = _get_pairs( shift(@_) );
-
-    if (@$pairs) {
-      $sql .= ' WHERE ' . join(' AND ', @$pairs);
-      push(@values, @$values);
-    };
-  };
-
-  # Apply restrictions
-  $limit  = ($prep->{limit}  //= $PAGER_LIMIT);
-  $offset = ($prep->{offset} //= 0);
-
-  $sql .= _restrictions($prep, []);
-
-  # Prepare
-  my $dbh   = $self->dbh;
-  my $sth;
-  eval {
-    $sth = $dbh->prepare( $sql );
-  };
-
-  # Check for errors
-  if ($@) {
-    carp $@ . "\nSQL: " . $sql;
-    return;
-  };
-
-  return unless $sth;
-
-  # return anon subroutine
-  return sub {
-    my $step = $limit;
-
-    # Optional step parameter
-    if ($_[0] && $_[0] =~ /^\d+$/) {
-      $step = shift;
-    };
-
-    # Execute
-    my $rv;
-    eval {
-      $rv = $sth->execute( @values, $step, $offset );
-    };
-
-    # Check for errors
-    if ($@) {
-      carp $@ . "\nSQL: " . $sql;
-      return;
-    };
-
-    # Next step
-    $offset += $step;
-
-    # Return array ref
-    my $rows = $sth->fetchall_arrayref({});
-    return @$rows ? $rows : 0
-  };
 };
 
 
@@ -1251,7 +1164,7 @@ containing markers for the join.
 Fields can only be column names, functions are not allowed.
 With a colon you can define aliases for the field names.
 As a fieldname without an alias will have the corresponding
-table name as a prefix, aliases as 'age:age' are useful.
+table name as a prefix, aliases like 'age:age' are useful.
 The join marker hash reference has field names as keys
 (no aliases!) and numerical markers as values.
 Fields with identical markers will have identical content.
@@ -1312,7 +1225,7 @@ the rows have to fulfill.
   $person->insert({ name => 'Ringo' });
   $person->delete;
 
-  my $books = $oro->select(
+  my $books = $oro->table(
     [
       Person =>    ['name:author', 'age:age'] => { id => 1 },
       Book =>      ['title'] => { author_id => 1, publisher_id => 2 },
@@ -1355,37 +1268,6 @@ Accepts the SQL statement, parameters for binding in an array
 reference and optionally a boolean value, if the prepared
 statement should be cached.
 
-
-=head2 C<pager>
-
-  # Construct new pager
-  my $pager = $oro->pager(Person => {
-                            -offset => 2,
-                            -limit  => 3
-                          });
-
-  # Loop over pager
-  while ($_ = $pager->()) {
-    foreach my $row (@$_) {
-      print $row->{name}, "\n";
-    };
-    print "--next page--\n";
-  };
-
-Creates an anonymous subroutine for page based looping.
-Accepts all parameters as described in L<select>,
-except for the optional callback.
-The C<-offset> restriction is used for an initial offset,
-the C<-limit> restriction is used for step length.
-An optional parameter to the subroutine can set the step
-length for the next request.
-If no step length parameter is given, neither by the
-C<-offset> parameter nor the parameter to the subroutine,
-the step length defaults to 10.
-The return value is identical to L<select>.
-If no rows are found, the return value is C<undef>.
-
-This method is EXPERIMENTAL and may change without warnings.
 
 =head2 C<txn>
 

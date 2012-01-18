@@ -1,4 +1,4 @@
-use Test::More tests => 129;
+use Test::More tests => 125;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -41,9 +41,11 @@ if ($oro->created) {
        id        INTEGER PRIMARY KEY,
        title     TEXT,
        year      INTEGER,
-       author_id INTEGER
+       author_id INTEGER,
+       FOREIGN KEY (author_id) REFERENCES Name(id)
      )'
   );
+  $oro->do('CREATE INDEX i ON Book(author_id);');
 };
 
 ok($oro->insert(Content => { title => 'Check!',
@@ -425,72 +427,6 @@ ok($content->insert(
     ['Bulk 2', 'Content'],
     ['Bulk 3', 'Content'],
     ['Bulk 4', 'Content']), 'Bulk Insertion');
-
-
-my $pager = $content->pager(
-  ['id'] => {
-    -order => ['-content', '-title'],
-    -limit => 2
-  });
-
-my @result;
-while ($_ = $pager->()) {
-  push(@result, [ map { $_->{id} } @$_ ]);
-};
-
-is_deeply(\@result, [[3,2],[4,1],[8,7],[6,5]], 'Pager result');
-
-$pager = $content->pager(
-  ['id'] => {
-    -order => ['-content', '-title'],
-    -limit => 3,
-    -offset => 1
-  });
-
-@result = ();
-while ($_ = $pager->()) {
-  push(@result, [ map { $_->{id} } @$_ ]);
-};
-
-is_deeply(\@result, [[2,4,1],[8,7,6],[5]], 'Pager result 2');
-
-
-$pager = $content->pager(
-  ['id'] => {
-    -order => ['-content', '-title'],
-    -limit => 3
-  });
-
-my $pager2 = $content->pager(
-  ['id'] => {
-    -order => ['-content', '-title'],
-    -limit => 3,
-    -offset => 1
-  }
-);
-
-@result = ();
-while ($_ = $pager->()) {
-  push(@result, [ map { $_->{id} } @$_ ]);
-  if ($_ = $pager2->()) {
-    push(@result, [ map { $_->{id} } @$_ ]);
-  };
-};
-
-is_deeply(\@result,
-	  [[3,2,4],[2,4,1],[1,8,7],[8,7,6],[6,5],[5]],
-	  'Pager result 3');
-
-$pager = $content->pager(['id'], { -order => 'id' } );
-
-my $i = 1;
-@result = ();
-while ($_ = $pager->($i++)) {
-  push(@result, [ map { $_->{id} } @$_ ] );
-};
-
-is_deeply(\@result,
-	  [[1],[2,3],[4,5,6],[7,8]], 'Pager result 4');
 
 ok($oro->dbh->disconnect, 'Disonnect');
 
