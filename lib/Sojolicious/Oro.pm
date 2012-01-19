@@ -151,6 +151,7 @@ sub created {
 sub insert {
   my $self  = shift;
 
+  # Get table name
   my $table = $self->_table_name(\@_) or return;
 
   # No parameters
@@ -244,18 +245,22 @@ sub insert {
 sub update {
   my $self  = shift;
 
+  # Get table name
   my $table = $self->_table_name(\@_) or return;
 
   # No parameters
   return unless $_[0];
 
+  # Get pairs
   my ($pairs, $values) = _get_pairs( shift(@_) );
 
   # Nothing to update
   return unless @$pairs;
 
+  # Generate sql
   my $sql = 'UPDATE ' . $table . ' SET ' . join(', ', @$pairs);
 
+  # Condition
   if ($_[0]) {
     my ($cond_pairs, $cond_values) = _get_pairs( shift(@_) );
 
@@ -282,8 +287,9 @@ sub update {
 sub select {
   my $self  = shift;
 
-  # Init arrays
+  # Get table object
   my ($tables, $fields, $join_pairs) = $self->_table_obj(\@_);
+
   my @pairs = @$join_pairs;
 
   # Fields to select
@@ -291,6 +297,7 @@ sub select {
 
     # Not allowed for join selects
     return if $fields->[0];
+
     $fields = [ _fields( shift(@_) ) ];
   };
 
@@ -305,15 +312,19 @@ sub select {
   my @values;
 
   my $cond;
-  if ($_[0] && ref($_[0]) eq 'HASH' || @$join_pairs) {
+  if (($_[0] && ref($_[0]) eq 'HASH') || @$join_pairs) {
 
+    # Condition
     my ($pairs, $values, $prep);
     if ($_[0] && ref($_[0]) eq 'HASH') {
       ($pairs, $values, $prep) = _get_pairs( shift(@_) );
       push(@values, @$values);
+
+      # Add to pairs
       push(@pairs, @$pairs) if $pairs->[0];
     };
 
+    # Add where clause
     $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
 
     # Apply restrictions
@@ -333,9 +344,7 @@ sub select {
     while ($row = $sth->fetchrow_hashref) {
 
       # Finish if callback returns -1
-      if ($_[0]->($row) == -1) {
-	last;
-      };
+      last if $_[0]->($row) == -1;
     };
 
     # Finish statement
@@ -356,7 +365,9 @@ sub load {
   my @param = @_;
 
   # Has a condition
-  if ($param[-1] && ref($param[-1]) && ref($param[-1]) eq 'HASH') {
+  if ($param[-1] &&
+	ref($param[-1]) &&
+	  ref($param[-1]) eq 'HASH') {
     $param[-1]->{-limit} = 1;
   }
 
@@ -365,10 +376,13 @@ sub load {
     push(@param, { -limit => 1 });
   };
 
+  # Select with limit
   my $row = $self->select(@param);
 
+  # Not found
   return {} unless $row;
 
+  # Return row
   return $row->[0];
 };
 
@@ -377,14 +391,17 @@ sub load {
 sub delete {
   my $self  = shift;
 
+  # Get table name
   my $table = $self->_table_name(\@_) or return;
 
   # Build sql
   my $sql = 'DELETE FROM ' . $table;
 
-  # With parameters
+  # Condition
   my ($pairs, $values, $prep);
   if ($_[0]) {
+
+    # Add condition
     ($pairs, $values, $prep) = _get_pairs( shift(@_) );
     $sql .= ' WHERE ' . join(' AND ', @$pairs);
 
@@ -403,11 +420,13 @@ sub delete {
 sub merge {
   my $self  = shift;
 
+  # Get table name
   my $table = $self->_table_name(\@_) or return;
 
   my %param = %{ shift( @_ ) };
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
 
+  # Prefix with table if necessary
   my @param = ( \%param, \%cond );
   unshift(@param, $table) unless $self->{table};
 
@@ -423,7 +442,7 @@ sub merge {
       delete $cond{$_} foreach grep( ref( $cond{$_} ), keys %cond);
 
       # Insert
-      @param = ({ %param, %cond });
+      @param = ( { %param, %cond } );
       unshift(@param, $table) unless $self->{table};
       $rv = $self->insert(@param) or return -1;
 
@@ -446,27 +465,28 @@ sub count {
 
   # Build sql
   my $sql = 'SELECT ' . join(', ', 'count(*)', @$fields) .
-            ' FROM ' . join(', ', @$tables);
+            ' FROM '  . join(', ', @$tables);
 
+  # Get conditions
   my ($pairs, $values);
-  if ($_[0] || @$join_pairs) {
-    if ($_[0]) {
-      ($pairs, $values) = _get_pairs( shift(@_) );
-      push(@pairs, @$pairs) if $pairs->[0];
-    };
-    $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
+  if ($_[0]) {
+    ($pairs, $values) = _get_pairs( shift(@_) );
+    push(@pairs, @$pairs) if $pairs->[0];
   };
 
+  # Add where clause
+  $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
   $sql .= ' LIMIT 1';
 
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
 
+  # Return value is empty
   return 0 if !$rv || $rv ne '0E0';
 
+  # Return count
   my $count = $sth->fetchrow_arrayref->[0];
   $sth->finish;
-
   return $count;
 };
 
@@ -583,7 +603,7 @@ sub txn {
     push(@$sp_array, $sp);
 
     # Start transaction
-    $self->do('SAVEPOINT '.$sp);
+    $self->do('SAVEPOINT ' . $sp);
 
     # Run wrap actions
     my $rv = $_[0]->($self);
@@ -686,13 +706,13 @@ sub _table_name {
   # Table name
   my $table;
   unless (exists $self->{table}) {
-    return shift(@{$_[0]}) unless ref($_[0]->[0]);
+    return shift(@{$_[0]}) unless ref $_[0]->[0];
   }
 
   # Table object
   else {
     # Join table object not allowed
-    return $self->{table} unless ref($self->{table});
+    return $self->{table} unless ref $self->{table};
   };
 
   return;
@@ -712,7 +732,7 @@ sub _table_obj {
     my $table = shift( @{ shift(@_) } );
 
     # Table name as a string
-    unless (ref($table)) {
+    unless (ref $table) {
       $tables = [ $table ];
     }
 
@@ -726,7 +746,7 @@ sub _table_obj {
   else {
 
     # joined table
-    if (ref($self->{table})) {
+    if (ref $self->{table}) {
       return @{ $self->{table} };
     }
 
@@ -741,8 +761,8 @@ sub _table_obj {
 
 
 # Join tables
-sub _join_tables ($$$$) {
-  my @join   = @{ shift() };
+sub _join_tables {
+  my @join   = @{ shift @_ };
 
   my (@tables, @fields, @pairs);
   my %marker;
@@ -751,7 +771,7 @@ sub _join_tables ($$$$) {
   while (@join) {
 
     # Table name
-    my $table = shift(@join);
+    my $table = shift @join;
     push(@tables, $table);
 
     my $ref;
@@ -760,12 +780,14 @@ sub _join_tables ($$$$) {
       # Field array
       if ($ref eq 'ARRAY') {
 	push(@fields,
-	     _fields([ map { $table . '.' . $_ } @{ shift(@join) } ]));
+	     _fields([ map { $table . '.' . $_ } @{ shift @join } ]));
       };
 
       # Marker hash reference
-      if (ref($join[0]) && ref($join[0]) eq 'HASH') {
-	my $hash = shift(@join);
+      if (ref $join[0] && ref $join[0] eq 'HASH') {
+	my $hash = shift @join;
+
+	# Add database fields to marker hash
 	while (my ($key, $value) = each %$hash) {
 	  my $array = ($marker{$value} //= []);
 	  push(@$array, $table . '.' . $key);
@@ -782,8 +804,10 @@ sub _join_tables ($$$$) {
     };
   };
 
+  # Return join initialised values
   return (\@tables, \@fields, \@pairs);
 };
+
 
 # Get pairs and values
 sub _get_pairs ($) {
@@ -920,7 +944,6 @@ sub transaction {
   carp 'transaction() is deprecated in favor of txn()';
   shift->txn(@_);
 };
-
 
 1;
 
@@ -1218,6 +1241,7 @@ the rows have to fulfill.
 
 =head2 C<table>
 
+  # Table names
   my $person = $oro->table('Person');
   print $person->count;
   my $person = $person->load({ id => 2 });
@@ -1225,6 +1249,7 @@ the rows have to fulfill.
   $person->insert({ name => 'Ringo' });
   $person->delete;
 
+  # Joined tables
   my $books = $oro->table(
     [
       Person =>    ['name:author', 'age:age'] => { id => 1 },
@@ -1237,17 +1262,17 @@ the rows have to fulfill.
 
 Returns a new C<Sojolicious::Oro> object with a predefined table
 or a joined table. Allows to omit the first table argument for the methods
-L<select>, L<load>, L<count> and in case of non-joined-tables for L<insert>,
-L<update>, L<merge>, and L<delete>.
+L<select>, L<load>, L<count> and - in case of non-joined-tables -
+for L<insert>, L<update>, L<merge>, and L<delete>.
 C<table> in conjunction with a joined table can be seen as an "ad hoc view".
 
 This method is EXPERIMENTAL and may change without warnings.
 
 =head2 C<prep_and_exec>
 
-  my ($rv, $sth) =
-    $oro->prep_and_exec('SELECT ? FROM Person',
-                        ['name'], 'cached');
+  my ($rv, $sth) = $oro->prep_and_exec(
+    'SELECT ? FROM Person', ['name'], 'cached'
+  );
 
   if ($rv) {
     my $row;
@@ -1261,7 +1286,7 @@ This method is EXPERIMENTAL and may change without warnings.
   };
 
 Prepare and execute an SQL statement with all checkings.
-Returns the return value (on error false, otherwise true,
+Returns the return value (on error C<false>, otherwise C<true>,
 e.g. the number of modified rows) and - in an array context -
 the statement handle.
 Accepts the SQL statement, parameters for binding in an array
@@ -1325,6 +1350,7 @@ Partly inspired by L<ORLite>, written by Adam Kennedy.
 Some code is based on L<DBIx::Connector>, written by David E. Wheeler.
 Without me knowing (it's a shame!), some of the concepts are quite similar
 to L<SQL::Abstract>, written by Nathan Wiger et al.
+
 
 =head1 AVAILABILITY
 
