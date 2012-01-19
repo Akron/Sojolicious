@@ -304,9 +304,10 @@ sub select {
   # Default
   $fields->[0] ||= '*';
 
+
   # Create sql query
-  my $sql = 'SELECT ' . join(', ', @$fields) . ' ' .
-            'FROM '   . join(', ', @$tables);
+  my $sql = join(', ', @$fields) . ' ' .
+    'FROM '   . join(', ', @$tables);
 
   # Append condition
   my @values;
@@ -327,12 +328,17 @@ sub select {
     # Add where clause
     $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
 
-    # Apply restrictions
-    $sql .= _restrictions($prep, \@values) if $prep;
+    # Add distinct information
+    if ($prep) {
+      $sql = 'DISTINCT ' . $sql if delete $prep->{'distinct'};
+
+      # Apply restrictions
+      $sql .= _restrictions($prep, \@values);
+    };
   };
 
   # Prepare and execute
-  my ($rv, $sth) = $self->prep_and_exec($sql, \@values);
+  my ($rv, $sth) = $self->prep_and_exec('SELECT ' . $sql, \@values);
 
   return unless $sth;
 
@@ -841,7 +847,7 @@ sub _get_pairs ($) {
       }
 
       # Limit and Offset restriction
-      elsif ($key ~~ ['-limit', '-offset']) {
+      elsif ($key ~~ ['-limit', '-offset', '-distinct']) {
 	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
       };
     }
@@ -1143,9 +1149,10 @@ In addition to conditions, the selection can be restricted by using
 three special restriction parameters:
 
   my $users = $oro->select(Person => {
-                             -order  => ['-age','name'],
-                             -offset => 1,
-                             -limit  => 5
+                             -order    => ['-age','name'],
+                             -offset   => 1,
+                             -limit    => 5,
+                             -distinct => 1
                            });
 
 =over 2
@@ -1165,6 +1172,10 @@ Limits the number of rows in the result set.
 =item C<-offset>
 
 Sets the offset of the result set.
+
+=item C<-distinct>
+
+Boolean value. If set to true, only distinct values are returned.
 
 =back
 

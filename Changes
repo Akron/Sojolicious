@@ -4,6 +4,7 @@
         - Added restrictions to Sojolicious::Oro.
         - Added Simple Joins to Sojolicious::Oro.
 	- Removed Pager support from Sojolicious::Oro.
+	- Added distinct restriction to Sojolicious::Oro.
 
 0.14 2011-12-30
         - Added Sojolicious::ComplexValues.

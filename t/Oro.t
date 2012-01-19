@@ -1,4 +1,4 @@
-use Test::More tests => 125;
+use Test::More tests => 127;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -470,6 +470,12 @@ $oro->txn(
 
   });
 
+# distinct
+is(@ { $oro->select('Book' => ['author_id']) }, 12, 'Books');
+is(@ { $oro->select('Book' => ['author_id'] => {
+  -distinct => 1
+})}, 3, 'Distinct Books');
+
 my $found = $oro->select([
   Name => ['prename:author'] => { id => 1 },
   Content => ['title'] => { author_id => 1 }
@@ -504,7 +510,5 @@ is(@$found, 4, 'Joins');
 
 is($books->count({ prename => 'Leela' }), 4, 'Joins with count');
 ok($books->load({ prename => 'Leela' })->{title}, 'Joins with load');
-
-
 
 __END__
