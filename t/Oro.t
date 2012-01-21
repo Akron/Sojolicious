@@ -435,7 +435,7 @@ ok($oro->insert(Content => { title => 'Test', content => 'Value'}), 'Reconnect')
 
 # Joins:
 ok($oro->delete('Content'), 'Truncate');
-ok($oro->delete('Name'), 'Truncate');
+ok($oro->delete('Name' => { -secure => 1 }), 'Truncate securely');
 
 my %author;
 

@@ -257,8 +257,14 @@ sub update {
   # Nothing to update
   return unless @$pairs;
 
+  # No arrays allowed
+  return if $pairs ~~ / IN \([^\(]+?\)$/;
+
+  # Set undef to null
+  my @pairs = map { $_ =~ s/ IS NULL$/= NULL/; $_ } @$pairs;
+
   # Generate sql
-  my $sql = 'UPDATE ' . $table . ' SET ' . join(', ', @$pairs);
+  my $sql = 'UPDATE ' . $table . ' SET ' . join(', ', @pairs);
 
   # Condition
   if ($_[0]) {
@@ -404,20 +410,51 @@ sub delete {
   my $sql = 'DELETE FROM ' . $table;
 
   # Condition
-  my ($pairs, $values, $prep);
+  my ($pairs, $values, $prep, $secure);
   if ($_[0]) {
 
     # Add condition
     ($pairs, $values, $prep) = _get_pairs( shift(@_) );
-    $sql .= ' WHERE ' . join(' AND ', @$pairs);
+
+    if ($prep) {
+      $secure = 1 if delete $prep->{secure};
+      $prep = undef unless keys %$prep;
+    };
+
+    $sql .= ' WHERE ' . join(' AND ', @$pairs) if @$pairs || $prep;
 
     # Apply restrictions
     $sql .= _restrictions($prep, $values) if $prep;
   };
 
-  # Prepare and execute
-  my $rv = $self->prep_and_exec($sql, $values);
+  my $rv;
 
+  # Delete
+  unless ($secure) {
+    # Prepare and execute
+    $rv = $self->prep_and_exec($sql, $values);
+  }
+
+  # Delete securely
+  else {
+    my $sec_value;
+
+    # Retrieve secure delete pragma
+    my ($rv2, $sth) = $self->prep_and_exec('PRAGMA secure_delete');
+    $sec_value = $sth->fetchrow_array if $rv2;
+    $sth->finish;
+
+    # Set secure_delete pragma
+    $self->do('PRAGMA secure_delete = ON') unless $sec_value;
+
+    # Prepare and execute
+    $rv = $self->prep_and_exec($sql, $values);
+
+    # Reset secure_delete pragma
+    $self->do('PRAGMA secure_delete = OFF') unless $sec_value;
+  }
+
+  # Return value
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
 };
 
@@ -847,7 +884,7 @@ sub _get_pairs ($) {
       }
 
       # Limit and Offset restriction
-      elsif ($key ~~ ['-limit', '-offset', '-distinct']) {
+      elsif ($key ~~ ['-limit', '-offset', '-distinct', '-secure']) {
 	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
       };
     }
@@ -1238,6 +1275,20 @@ In case of scalar values, identity is tested for the condition.
 In case of array refs, it is tested, if the field is an element of the set.
 Restrictions can be applied as with L<select>.
 Returns the number of rows that were deleted.
+
+=head3 Security
+
+In addition to conditions, the deletion can have further parameters.
+
+  $oro->delete(Person => { id => 4, -secure => 1});
+
+=over 2
+
+=item C<-secure>
+
+Forces a secure deletion by overwriting all data with '0'.
+
+=back
 
 
 =head2 C<count>
