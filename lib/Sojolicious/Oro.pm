@@ -5,7 +5,7 @@ use warnings;
 use feature 'state';
 use Carp qw/carp croak/;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 # Database connection
 use DBI;
@@ -188,6 +188,24 @@ sub insert {
 
     my @keys = @{ shift(@_) };
 
+    # Default values
+    my @default = ();
+
+    # Check if keys are defaults
+    my $i = 0;
+    my @default_keys;
+    while ($keys[$i]) {
+      $i++, next unless (ref $keys[$i]);
+
+      my ($key, $value) = @{ splice( @keys, $i, 1) };
+      push(@default_keys, $key);
+      push(@default, $value);
+      $i++;
+    };
+
+    # Unshift default keys to front
+    unshift(@keys, @default_keys);
+
     my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) . ') ';
     my $union = ' SELECT ' . _q(\@keys). ' ';
 
@@ -196,8 +214,8 @@ sub insert {
       # Add data unions
       $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
 
-      # Prepare and execute
-      return $self->prep_and_exec($sql, [ map( @$_,  @_ ) ]);
+      # Prepare and execute with prepended defaults
+      return $self->prep_and_exec($sql, [ map { (@default, @$_); }  @_ ]);
     }
 
     # More than MAX_COMP_SELECT insertions
@@ -221,7 +239,7 @@ sub insert {
 	    # Prepare and execute
 	    my $rv_part = $self->prep_and_exec(
 	      $sub_sql,
-	      [ map( @$_,  @v_array ) ]
+	      [ map { (@default, @$_); }  @v_array ]
 	    );
 
 	    # Rollback transaction
@@ -1017,13 +1035,14 @@ Sojolicious::Oro - Simple SQLite database accessor
   my $john = $oro->load(Person => { id => 4 });
 
   my $person = $oro->table('Person');
-  $john = $person->load({ id => 4 });
+  my $peters = $person->select({ name => 'Peter' });
 
 =head1 DESCRIPTION
 
 L<Sojolicious::Oro> is a simple database accessor that provides
-basic functionalities to work with really simple databases.
-For now it only works with SQLite.
+basic functionalities to work with simple databases in a web
+environment.
+For now it is limited to SQLite.
 It should be fork- and thread-safe.
 
 =head1 ATTRIBUTES
@@ -1077,6 +1096,8 @@ and indices.
     });
   };
 
+This attribute is EXPERIMENTAL and may change without warnings.
+
 
 =head1 METHODS
 
@@ -1097,7 +1118,8 @@ Creates a new sqlite database accessor object on the
 given filename. If the database does not already exist,
 it is created.
 Accepts an optional callback that is only released, if
-the database is newly created.
+the database is newly created. The first parameter of
+the callback function is the Oro-object.
 
 
 =head2 C<insert>
@@ -1113,7 +1135,18 @@ Expects the table name and a hash ref of values to insert.
 
 For multiple insertions, it expects the table name
 to insert, an arrayref of the column names and an arbitrary
-long array of references of values to insert.
+long array of array references of values to insert.
+
+  $oro->insert(Person => ['prename', [surname => 'Meier']] =>
+                         map { [$_] } qw/Peter Sabine Frank/);
+
+For multiple insertions with defaults, the arrayref for column
+names can contain array references with a column name and the
+default value. This value is inserted for each inserted entry
+and especially usefull for n:m relation tables.
+
+Multiple insertions with defaults are EXPERIMENTAL and may
+change without warnings.
 
 
 =head2 C<update>
@@ -1289,6 +1322,8 @@ In addition to conditions, the deletion can have further parameters.
 Forces a secure deletion by overwriting all data with '0'.
 
 =back
+
+The security parameter is EXPERIMENTAL and may change without warnings.
 
 
 =head2 C<count>

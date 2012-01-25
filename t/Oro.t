@@ -1,4 +1,4 @@
-use Test::More tests => 127;
+use Test::More tests => 134;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -48,6 +48,8 @@ if ($oro->created) {
   $oro->do('CREATE INDEX i ON Book(author_id);');
 };
 
+
+# Insert:
 ok($oro->insert(Content => { title => 'Check!',
 			     content => 'This is content.'}), 'Insert');
 {
@@ -63,6 +65,8 @@ ok($oro->insert(Name => { prename => 'Akron',
   ok(!$oro->insert(Name => { surname => 'Rodriguez'}), 'Insert');
 };
 
+
+# Update:
 ok($oro->update(Content =>
 		  { content => 'This is changed content.' } =>
 		    { title => 'Check!' }), 'Update');
@@ -84,6 +88,8 @@ ok(!$oro->update(Content =>
 		       { title => 'Check not existent!' }), 'Update');
 };
 
+
+# Load:
 my $row;
 ok($row = $oro->load(Content => { title => 'Check!' }), 'Load');
 
@@ -167,7 +173,6 @@ ok($oro->delete('Content' => { content => ['Das ist der siebte content.']}),
    'Delete');
 
 is($oro->last_insert_id, 5, 'Row id');
-
 
 {
   local $SIG{__WARN__} = sub {};
@@ -510,5 +515,20 @@ is(@$found, 4, 'Joins');
 
 is($books->count({ prename => 'Leela' }), 4, 'Joins with count');
 ok($books->load({ prename => 'Leela' })->{title}, 'Joins with load');
+
+
+# Insert with default
+ok($oro->delete('Name'), 'Truncate');
+ok($oro->insert(Name =>
+		  ['prename', [surname => 'Meier']] =>
+		    map { [$_] } qw/Sabine Peter Michael Frank/ ),
+   'Insert with default');
+
+my $meiers = $oro->select('Name');
+is((@$meiers), 4, 'Default inserted');
+is($meiers->[0]->{surname}, 'Meier', 'Default inserted');
+is($meiers->[1]->{surname}, 'Meier', 'Default inserted');
+is($meiers->[2]->{surname}, 'Meier', 'Default inserted');
+is($meiers->[3]->{surname}, 'Meier', 'Default inserted');
 
 __END__
