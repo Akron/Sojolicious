@@ -1,4 +1,4 @@
-0.15 2012-01-25
+0.15 2012-01-27
         - Added Mojolicious::Plugin::Oro.
         - Made Sojolicious::Oro thread- and fork-safe.
         - Added restrictions to Sojolicious::Oro.
@@ -7,6 +7,8 @@
 	- Added distinct restriction to Sojolicious::Oro.
 	- Added multiple insertions with default to
 	  Sojolicious::Oro.
+	- Multiple bugfixes to Sojolicious::Oro,
+          Sojolicious::ComplexValues, and M::P::Oro.
 
 0.14 2011-12-30
         - Added Sojolicious::ComplexValues.

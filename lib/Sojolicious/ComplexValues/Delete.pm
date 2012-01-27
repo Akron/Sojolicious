@@ -23,7 +23,7 @@ sub delete {
 
 	# Leave id for max id and uniqueness
 	if ($oro->insert(
-	  $name => ['res_id'] => map([$_], @$id))) {
+	  $name => ['res_id'] => map { [$_] } @$id)) {
 
 	  # Delete resource from updated table
 	  $oro->delete(

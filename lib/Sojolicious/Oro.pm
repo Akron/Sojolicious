@@ -4,8 +4,9 @@ use warnings;
 
 use feature 'state';
 use Carp qw/carp croak/;
+our @CARP_NOT;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 # Database connection
 use DBI;
@@ -152,7 +153,7 @@ sub insert {
   my $self  = shift;
 
   # Get table name
-  my $table = $self->_table_name(\@_) or return;
+  my $table = _table_name($self, \@_) or return;
 
   # No parameters
   return unless $_[0];
@@ -178,7 +179,7 @@ sub insert {
 	  ' (' . _q(\@keys) . ')';
 
     # Prepare and execute
-    return $self->prep_and_exec( $sql, \@values );
+    return scalar $self->prep_and_exec( $sql, \@values );
   }
 
   # Multiple inserts
@@ -195,12 +196,12 @@ sub insert {
     my $i = 0;
     my @default_keys;
     while ($keys[$i]) {
-      $i++, next unless (ref $keys[$i]);
+
+      $i++, next unless ref $keys[$i];
 
       my ($key, $value) = @{ splice( @keys, $i, 1) };
       push(@default_keys, $key);
       push(@default, $value);
-      $i++;
     };
 
     # Unshift default keys to front
@@ -264,7 +265,7 @@ sub update {
   my $self  = shift;
 
   # Get table name
-  my $table = $self->_table_name(\@_) or return;
+  my $table = _table_name($self, \@_) or return;
 
   # No parameters
   return unless $_[0];
@@ -312,7 +313,7 @@ sub select {
   my $self  = shift;
 
   # Get table object
-  my ($tables, $fields, $join_pairs) = $self->_table_obj(\@_);
+  my ($tables, $fields, $join_pairs) = _table_obj($self, \@_);
 
   my @pairs = @$join_pairs;
 
@@ -422,7 +423,7 @@ sub delete {
   my $self  = shift;
 
   # Get table name
-  my $table = $self->_table_name(\@_) or return;
+  my $table = _table_name($self, \@_) or return;
 
   # Build sql
   my $sql = 'DELETE FROM ' . $table;
@@ -482,7 +483,7 @@ sub merge {
   my $self  = shift;
 
   # Get table name
-  my $table = $self->_table_name(\@_) or return;
+  my $table = _table_name($self, \@_) or return;
 
   my %param = %{ shift( @_ ) };
   my %cond  = $_[0] ? %{ shift( @_ ) } : ();
@@ -521,7 +522,7 @@ sub count {
   my $self  = shift;
 
   # Init arrays
-  my ($tables, $fields, $join_pairs) = $self->_table_obj(\@_);
+  my ($tables, $fields, $join_pairs) = _table_obj($self, \@_);
   my @pairs = @$join_pairs;
 
   # Build sql
@@ -578,7 +579,7 @@ sub prep_and_exec {
     };
 
     if ($@) {
-      carp $@ . "\nSQL: " . $sql;
+      carp $@ . '... in "' . $sql . '"';
       return;
     };
   };
@@ -593,7 +594,7 @@ sub prep_and_exec {
 
   # Check for errors
   if ($@) {
-    carp $@ . "\nSQL: " . $sql;
+    carp $@ . '... in "' . $sql . '"';
     return;
   };
 

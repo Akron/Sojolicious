@@ -6,7 +6,7 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 4;
+use Test::More tests => 13;
 
 use Test::Mojo;
 use Mojolicious::Lite;
@@ -24,7 +24,7 @@ END {
 };
 
 $app->plugin('oro' => {
-  'Books' => {
+  Books => {
     file => $db_file,
     init => sub {
       my $oro = shift;
@@ -60,3 +60,15 @@ if ($books->created) {
 ok($c->oro('Books')->insert(Author => { name => 'Akron', age => 24 }), 'Insert');
 ok($c->oro(Books => 'Author')->insert( { name => 'Peter', age => 26 }), 'Insert');
 
+is($c->oro(Books => 'Author')->count, 2, 'Count');
+is($c->oro('Books')->count('Author'), 2, 'Count');
+
+ok($c->oro('Books')->insert(Content => { title => 'Misery' }), 'Insert');
+ok($c->oro(Books => 'Content')->insert({ title => 'She' }), 'Insert');
+ok($c->oro(Books => 'Content')->insert({ title => 'It' }), 'Insert');
+
+is($c->oro(Books => 'Content')->count, 3, 'Count');
+is($c->oro('Books')->count('Content'), 3, 'Count');
+
+is($c->oro(Books => 'Author')->count, 2, 'Count');
+is($c->oro('Books')->count('Author'), 2, 'Count');

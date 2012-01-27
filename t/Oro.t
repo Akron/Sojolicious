@@ -1,4 +1,4 @@
-use Test::More tests => 134;
+use Test::More tests => 143;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -530,5 +530,24 @@ is($meiers->[0]->{surname}, 'Meier', 'Default inserted');
 is($meiers->[1]->{surname}, 'Meier', 'Default inserted');
 is($meiers->[2]->{surname}, 'Meier', 'Default inserted');
 is($meiers->[3]->{surname}, 'Meier', 'Default inserted');
+
+ok($oro->delete('Book'), 'Truncate');
+ok($oro->insert(Book =>
+		  ['title',
+		   [year => 2012],
+		   [author_id => 4]
+		 ] =>
+		   map { [$_] } qw/Misery Carrie It/ ),
+   'Insert with default');
+
+my $king = $oro->select('Book');
+is((@$king), 3, 'Default inserted');
+is($king->[0]->{year}, 2012, 'Default inserted');
+ok($king->[0]->{title}, 'Default inserted');
+is($king->[1]->{year}, 2012, 'Default inserted');
+ok($king->[1]->{title}, 'Default inserted');
+is($king->[2]->{year}, 2012, 'Default inserted');
+ok($king->[2]->{title}, 'Default inserted');
+
 
 __END__

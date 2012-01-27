@@ -57,11 +57,14 @@ sub read {
   if (defined $id) {
 
     # Fetch all res_ids based on ids
-    my ($sql, $bind_param) = _id_sql($name, {%$param}, $id);
+    my ($sql, $bind_param) = _id_sql($name, { %$param }, $id);
 
     # Fetch all entry lines
-    my $entry_lines =
-      $dbh->selectall_arrayref($sql, {}, @$bind_param);
+    my ($rv, $sth) = $oro->prep_and_exec($sql, $bind_param);
+
+    return unless $rv;
+
+    my $entry_lines = $sth->fetchall_arrayref;
 
     # Single entry
     if ($single) {
@@ -228,11 +231,7 @@ sub _multiple_basic_sql {
   };
 
   # Simple updatedSince access
-  # Todo: with smart matching
-  if ($date &&
-	!exists $param->{sortBy} &&
-	  !exists $param->{filterBy} &&
-	    !exists $param->{foreignConstraint}) {
+  if ($date && not $param ~~ [qw/sortBy filterBy foreignConstraint/]) {
 
     my $sql = 'SELECT res_id FROM ' . $name . '_UPDATED '.
               'WHERE updated > ? ';
@@ -254,9 +253,7 @@ sub _multiple_basic_sql {
   };
 
   # Simple access
-  if ($filter &&
-	!exists $param->{sortBy} &&
-	  !exists $param->{foreignConstraint}) {
+  if ($filter && not $param ~~ [qw/sortBy foreignConstraint/]) {
     my ($parameter, $criterion) = _sql_filter('ShowTable', $filter);
     push(@parameter, @$parameter);
     push(@criterion, @$criterion);
@@ -446,7 +443,7 @@ sub _sql_filter {
 
 
   # Equals, contains, startswith
-  if ($op =~ /^(?:equals|contains|startswith)$/oi) {
+  if (lc($op) ~~ [qw/equals contains startswith/]) {
     if (defined $value) {
 
       # Equals

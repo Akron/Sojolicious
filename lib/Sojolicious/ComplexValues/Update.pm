@@ -206,12 +206,12 @@ sub _update_plural_hash {
       # +Create
       if ($1) {
 	if ($1 eq '+') {
-	  $insert{$sub_key} = $object->{'+'.$sub_key};
+	  $insert{$sub_key} = $object->{'+' . $sub_key};
 	}
 
 	# -Delete
 	else {
-	  $delete{$sub_key} = $object->{'-'.$sub_key};
+	  $delete{$sub_key} = $object->{'-' . $sub_key};
 	};
       }
 
@@ -261,7 +261,8 @@ sub _update_plural_hash {
 	  @pass,
 	  \%insert,
 	  \%delete,
-	  \%neutral);
+	  \%neutral
+	);
     };
   };
 

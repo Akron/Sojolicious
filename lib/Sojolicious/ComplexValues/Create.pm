@@ -23,16 +23,20 @@ SELECT "id",
   ifnull((SELECT MAX(res_id) FROM $name),0) + 1
 MAX_ID
 
-      $id = ($dbh->selectrow_array(
+      my ($rv, $sth) = $oro->prep_and_exec(
 	'SELECT res_id FROM ' . $name .
-	  ' WHERE id = last_insert_rowid()'));
+	  ' WHERE id = last_insert_rowid()');
+
+      return -1 unless $rv;
+
+      $id = ($sth->fetchrow_array);
 
       # Set publish and update time in entry
       $entry->{published} =
 	$entry->{updated} = time;
 
       # Store values
-      my $rv = 1;
+      $rv = 1;
       foreach my $key (keys %$entry) {
 	my $value = $entry->{$key};
 
@@ -63,7 +67,7 @@ MAX_ID
 
       # Insert into updated table
       $oro->insert(
-	$name.'_UPDATED ' => {
+	$name . '_UPDATED ' => {
 	  res_id  => $id,
 	  updated => $entry->{updated}
 	}) or return -1;
@@ -94,16 +98,14 @@ sub _create_normal_value {
 sub _create_complex_value {
   my ($oro, $name, $id, $key, $value) = @_;
 
-  # Add values for multiple inserts with sec_key
-  my @values;
-  foreach (keys %$value) {
-    push(@values, [$id, $key, $_, $value->{$_}]);
-  };
-
   # Insert values as multiple inserts
-  $oro->insert(
-    $name => [qw/res_id pri_key sec_key val/], @values
-  ) or return;
+  $oro->insert($name =>
+		 [
+		   [res_id => $id],
+		   [pri_key => $key],
+		   'sec_key', 'val'
+		 ] => map { [ $_, $value->{$_} ] } keys %$value
+	       ) or return;
 
   return 1;
 };
@@ -146,17 +148,14 @@ sub _create_plural_hash {
   # Get obj_id for plural hash
   my $obj_id = $oro->last_insert_id;
 
-  my @pass = ($id, $obj_id, $key);
-
-  # Prepare multiple inserts with object key
-  my @values;
-  foreach (keys %$object) {
-    push(@values, [@pass, $_, $object->{$_}]);
-  };
-
   # Insert values as multiple inserts
   $oro->insert(
-    $name => [qw/res_id obj_id pri_key sec_key val/], @values
+    $name => [
+      [res_id => $id],
+      [obj_id => $obj_id],
+      [pri_key => $key],
+      'sec_key', 'val'
+    ] => map { [ $_, $object->{$_} ] } keys %$object
   ) or return;
 
   return 1;

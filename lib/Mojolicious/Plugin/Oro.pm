@@ -46,8 +46,8 @@ sub register {
       $oro->txn(
 	sub {
 	  # Start init callback
-	  return $db->{init}->( $oro );
-	});
+	  $db->{init}->( $oro ) or return -1;
+	}) or croak "Unable to init database '$name'";
     };
 
     # Store database handle
@@ -87,7 +87,7 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
     }}
   );
 
-  $c->oro('Books')->insert(Content => { title => 'IT'});
+  $c->oro('Books')->insert(Content => { title => 'Misery'});
   print $c->oro(Books => 'Content')->count;
 
 =head1 DESCRIPTION
@@ -132,7 +132,7 @@ is the associated C<Sojolicious::Oro> handle.
 =head2 C<oro>
 
   # In Controllers:
-  $c->oro('Books')->insert(Content => { title => 'IT'});
+  $c->oro('Books')->insert(Content => { title => 'Misery' });
   print $c->oro(Books => 'Content')->count;
 
 Returns an Oro database handle if registered.

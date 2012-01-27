@@ -13,9 +13,11 @@ use Sojolicious::ComplexValues::Delete;
 #       of read - deletion of all '---' res_ids.
 # Todo: Create separated tutorial document.
 # Todo: Introduce replace operation.
-# Todo: Maybe a 'unique' parameter
+# Todo: Maybe a 'distinct' parameter
 # Todo: Create an ->error string object
 #       and return an error response for all actions
+# Todo: Use carp and croak
+
 
 has [qw/oro name/];
 has items_per_page => 10;
