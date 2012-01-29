@@ -208,9 +208,12 @@ sub insert {
     unshift(@keys, @default_keys);
 
     my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) . ') ';
-    my $union = ' SELECT ' . _q(\@keys). ' ';
+    my $union = 'SELECT ' . _q(\@keys);
 
-    if (scalar @_ <= MAX_COMP_SELECT) {
+    # Maximum bind variables
+    my $max = (MAX_COMP_SELECT / @keys) - @keys;
+
+    if (scalar @_ <= $max) {
 
       # Add data unions
       $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
@@ -228,7 +231,7 @@ sub insert {
       # Start transaction
       $self->txn(
 	sub {
-	  while (@v_array = splice(@values, 0, MAX_COMP_SELECT - 1)) {
+	  while (@v_array = splice(@values, 0, $max - 1)) {
 
 	    # Delete undef values
 	    @v_array = grep($_, @v_array) unless @_;

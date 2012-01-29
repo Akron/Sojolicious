@@ -1,4 +1,4 @@
-use Test::More tests => 143;
+use Test::More tests => 146;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -548,6 +548,19 @@ is($king->[1]->{year}, 2012, 'Default inserted');
 ok($king->[1]->{title}, 'Default inserted');
 is($king->[2]->{year}, 2012, 'Default inserted');
 ok($king->[2]->{title}, 'Default inserted');
+
+ok($oro->delete('Content'), 'Truncate');
+
+my @array;
+push(@array, ['ContentBulk', $_, $_]) foreach 1..1111;
+
+ok($oro->insert(Content =>
+		  [qw/title content author_id/] =>
+		    @array), 'Bulk Insert');
+
+is($oro->count('Content'), 1111, 'Count bulk insert');
+
+
 
 
 __END__
