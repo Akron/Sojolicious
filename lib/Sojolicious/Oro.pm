@@ -332,7 +332,6 @@ sub select {
   # Default
   $fields->[0] ||= '*';
 
-
   # Create sql query
   my $sql = join(', ', @$fields) . ' ' .
     'FROM '   . join(', ', @$tables);
@@ -952,12 +951,12 @@ sub _fields ($) {
   # Join with alias fields
   join(', ',
        map {
-	 if ($_ =~ /^(.+?):([^:]+?)$/) {
-	   $1 . ' AS ' . $2
+	 if ($_ =~ /^(.+?):([^:"]+?)$/) {
+	   $1 . ' AS "' . $2 . '"'
 	 } elsif ($_ =~ /^(?:.+?)\.(?:[^\.]+?)$/) {
 	   my $alias = $_;
-	   $alias =~ s/[\$\@\#\.\s]/_/g;
-	   $_ . ' AS ' . lc $alias;
+	   $alias =~ s/[\"\$\@\#\.\s]/_/g;
+	   $_ . ' AS "' . lc $alias . '"';
 	 } else {
 	   $_
 	 }

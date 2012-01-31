@@ -6,6 +6,7 @@ lib/Sojolicious/User_todo.pm
 lib/Sojolicious/Stream.pm
 lib/Sojolicious/Model.pm
 lib/Sojolicious/Model
+lib/Sojolicious/Oro/SQLite.pm
 lib/Sojolicious/Cache.pm
 lib/Sojolicious/Controller
 lib/Mojolicious/public
@@ -23,6 +24,7 @@ lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/Atom-Pub.t
+t/Oro-Ext.t
 t/TagHelpers
 t/PortableContacts.t
 t-speed
