@@ -8,6 +8,10 @@ our @CARP_NOT;
 
 our $VERSION = '0.04';
 
+# Todo: join: do not automatically assume '*' fields.
+# Todo: join: assume fieldnames to be aliases if not given.
+# Todo: Support all string operators witz [a-z]+.
+
 # Database connection
 use DBI;
 use DBD::SQLite;
@@ -21,7 +25,14 @@ use constant MAX_COMP_SELECT => 500;
 
 # Regex for function values
 our $FUNCTION_REGEX = qr/[a-zA-Z0-9]+\([^\)]*\)?/;
-our $AS_REGEX       = qr/(?::[a-zA-Z0-9]+)/;
+our $AS_REGEX       = qr/(?::[-_a-zA-Z0-9]+)/;
+our $OP_REGEX       = qr/^(?i:
+                            (?:[\<\>\!=]?\=?)|<>|
+                            (?:!|not[_ ])?
+                            (?:match|like|glob|regex|between)|
+			    (?:eq|ne|[gl][te])
+                          )$/x;
+our $KEY_REGEX      = qr/[_0-9a-zA-Z]/;
 
 # Constructor
 sub new {
@@ -29,8 +40,9 @@ sub new {
 
   # Bless object with hash
   my $self = bless {
-    created => 0,
-    in_txn  => 0
+    created  => 0,
+    in_txn   => 0,
+    last_sql => ''
   }, $class;
 
   # Store filename
@@ -53,7 +65,7 @@ sub new {
   $self->_connect or croak 'Unable to connect to database';
 
   # Release callback
-  $cb->($self) if $cb && ref($cb) eq 'CODE';
+  $cb->($self) if ($cb && $self->{created} && ref($cb) eq 'CODE');
 
   # Savepoint array
   # First element is a counter
@@ -123,6 +135,12 @@ sub dbh {
 sub file {
   return $_[0]->{file} unless $_[1];
   $_[0]->{file} = $_[1];
+};
+
+
+# Last executed SQL
+sub last_sql {
+  $_[0]->{last_sql} || 'empty';
 };
 
 
@@ -197,8 +215,10 @@ sub insert {
     my @default_keys;
     while ($keys[$i]) {
 
+      # No default - next
       $i++, next unless ref $keys[$i];
 
+      # Has default value
       my ($key, $value) = @{ splice( @keys, $i, 1) };
       push(@default_keys, $key);
       push(@default, $value);
@@ -219,7 +239,10 @@ sub insert {
       $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
 
       # Prepare and execute with prepended defaults
-      return $self->prep_and_exec($sql, [ map { (@default, @$_); }  @_ ]);
+      return $self->prep_and_exec(
+	$sql,
+	[ map { (@default, @$_); } @_ ]
+      );
     }
 
     # More than MAX_COMP_SELECT insertions
@@ -243,7 +266,7 @@ sub insert {
 	    # Prepare and execute
 	    my $rv_part = $self->prep_and_exec(
 	      $sub_sql,
-	      [ map { (@default, @$_); }  @v_array ]
+	      [ map { (@default, @$_); } @v_array ]
 	    );
 
 	    # Rollback transaction
@@ -279,8 +302,8 @@ sub update {
   # Nothing to update
   return unless @$pairs;
 
-  # No arrays allowed
-  return if $pairs ~~ / IN \([^\(]+?\)$/;
+  # No arrays or operators allowed
+  return unless $pairs ~~ /^$KEY_REGEX+ +(?:=|IS)/o;
 
   # Set undef to null
   my @pairs = map { $_ =~ s/ IS NULL$/= NULL/; $_ } @$pairs;
@@ -377,7 +400,8 @@ sub select {
     while ($row = $sth->fetchrow_hashref) {
 
       # Finish if callback returns -1
-      last if $_[0]->($row) == -1;
+      $rv = $_[0]->($row);
+      last if $rv && $rv == -1;
     };
 
     # Finish statement
@@ -560,6 +584,9 @@ sub prep_and_exec {
   my ($self, $sql, $values, $cached) = @_;
   my $dbh = $self->dbh;
 
+  # Last sql command
+  $self->{last_sql} = $sql;
+
   # Prepare
   my $sth;
   eval {
@@ -611,6 +638,7 @@ sub prep_and_exec {
 
 # Wrapper for DBI do
 sub do {
+  $_[0]->{last_sql} = $_[1];
   shift->dbh->do( @_ );
 };
 
@@ -878,7 +906,7 @@ sub _get_pairs ($) {
   my (@pairs, @values, %prep);
 
   while (my ($key, $value) = each %{$_[0]}) {
-    next unless $key =~ /^-?[_0-9a-zA-Z]+$/;
+    next unless $key =~ qr/^-?$KEY_REGEX+$/o;
 
     # Restriction of the result set
     if (index($key, '-') == 0) {
@@ -915,11 +943,46 @@ sub _get_pairs ($) {
       push(@pairs, $key . ' IS NULL');
     }
 
-    # Element of
-    elsif (ref($value) && ref($value) eq 'ARRAY') {
-      push (@pairs,
-	    $key . ' IN (' . _q($value) . ')' );
-      push(@values, @$value);
+    elsif (ref($value)) {
+
+      # Element of
+      if (ref($value) eq 'ARRAY') {
+	push (@pairs,
+	      $key . ' IN (' . _q($value) . ')' );
+	push(@values, @$value);
+      }
+
+      # Operators
+      elsif (ref($value) eq 'HASH') {
+	while (my ($op, $val) = each %$value) {
+	  if ($op =~ $OP_REGEX) {
+	    for ($op) {
+
+	      # Uppercase
+	      $_ = uc;
+
+	      # Translate negation
+	      s/^!(?=[MLGRB])/NOT /;
+	      s/^NOT_/NOT /;
+
+	      # Translate literal compare operators
+	      tr/GLENTQ/><=!/d if $_ =~ /(?:[GL][TE]|NE|EQ)/i;
+	    };
+
+	    # Simple operator
+	    if (index($op, 'BETWEEN') < 0) {
+	      push (@pairs, $key . ' ' . $op . ' ?');
+	      push(@values, $val);
+	    }
+
+	    # Between operator
+	    elsif (ref $val && ref $val eq 'ARRAY') {
+	      push (@pairs, $key . ' ' . $op . ' ? AND ?');
+	      push(@values, $val->[0], $val->[1]);
+	    };
+	  };
+	};
+      };
     }
 
     # Equality
@@ -1066,7 +1129,7 @@ The DBI database handle.
 
 The sqlite file of the database.
 
-This attribute is EXPERIMENTAL and may change without warnings.
+B<This attribute is EXPERIMENTAL and may change without warnings.>
 
 
 =head2 C<created>
@@ -1099,7 +1162,16 @@ and indices.
     });
   };
 
-This attribute is EXPERIMENTAL and may change without warnings.
+B<This attribute is EXPERIMENTAL and may change without warnings.>
+
+
+=head2 C<last_sql>
+
+  print $oro->last_sql;
+
+The last executed SQL command.
+
+B<This attribute is EXPERIMENTAL and may change without warnings.>
 
 
 =head1 METHODS
@@ -1148,8 +1220,8 @@ names can contain array references with a column name and the
 default value. This value is inserted for each inserted entry
 and especially usefull for n:m relation tables.
 
-Multiple insertions with defaults are EXPERIMENTAL and may
-change without warnings.
+B<Multiple insertions with defaults are EXPERIMENTAL and may
+change without warnings.>
 
 
 =head2 C<update>
@@ -1194,13 +1266,16 @@ Scalar condition values will be inserted, if the fields do not exist.
                            });
 
   my $users = $oro->select(Person => ['name:displayName']);
+
+  my $age = 0;
   $oro->select('Person' =>
-               ['id','age'] =>
+               ['id', 'age'] =>
                { name => 'Daniel' } =>
                sub {
                  my $user = shift;
-                 print $user->{id},"\n";
-                 return -1 if $user->{name} =~ /^Da/;
+                 say $user->{id};
+                 $age += $user->{age};
+                 return -1 if $age >= 100;
                });
 
 
@@ -1213,8 +1288,35 @@ which is released after each row.
 If the callback returns -1, the data fetching is aborted.
 In case of scalar values, identity is tested for the condition.
 In case of array refs, it is tested, if the field is an element of the set.
+In case of hash refs, the keys of the hash represent operators to
+test with (see below).
 Fields can be column names or functions. With a colon you can define
 aliases for the field names.
+
+=head3 Operators
+
+When checking with hashrefs, several operators are supported.
+
+  my $users = $oro->select(Person => {
+                            name => {
+                              like     => '%e%',
+                              not_glob => 'M*'
+                            },
+                            age => {
+                              between => [18, 48],
+                              ne      => 30
+                            }
+                          });
+
+Supported operators are '<' ('lt'), '>' ('gt'), '=' ('eq'),
+'<=' ('le'), '>=' ('ge'), '!=' ('ne').
+String comparison operators like 'like' and similar are supported.
+To negate the latter operators you can prepend 'not_'.
+The 'between' and 'not_between' operators are special as the expect
+a two value array as their operand.
+Multiple operators for checking with the same column are allowed.
+
+B<Operators are EXPERIMENTAL and may change without warnings.>
 
 =head3 Restrictions
 
@@ -1281,7 +1383,7 @@ After the join table array reference, the optional hash
 reference with conditions and restrictions and an optional
 callback follow immediately.
 
-Joins are EXPERIMENTAL and may change without warnings.
+B<Joins are EXPERIMENTAL and may change without warnings.>
 
 =head2 C<load>
 
@@ -1326,7 +1428,7 @@ Forces a secure deletion by overwriting all data with '0'.
 
 =back
 
-The security parameter is EXPERIMENTAL and may change without warnings.
+B<The security parameter is EXPERIMENTAL and may change without warnings.>
 
 
 =head2 C<count>
@@ -1366,7 +1468,7 @@ L<select>, L<load>, L<count> and - in case of non-joined-tables -
 for L<insert>, L<update>, L<merge>, and L<delete>.
 C<table> in conjunction with a joined table can be seen as an "ad hoc view".
 
-This method is EXPERIMENTAL and may change without warnings.
+B<This method is EXPERIMENTAL and may change without warnings.>
 
 =head2 C<prep_and_exec>
 
