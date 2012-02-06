@@ -1,4 +1,4 @@
-use Test::More tests => 191;
+use Test::More tests => 193;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -494,6 +494,15 @@ ok($found = $oro->select([
   Name => ['prename:author'] => { id => 1 },
   Book => ['title:title','year:year'] => { author_id => 1 }
 ] => { author => 'Fry' } ), 'Joins');
+
+my $last_sql = $oro->last_sql;
+
+ok($found = $oro->select([
+  Name => ['prename:author'] => { id => 1 },
+  Book => ['title','year'] => { author_id => 1 }
+] => { author => 'Fry' } ), 'Joins');
+
+is($oro->last_sql, $last_sql, 'Automated aliases');
 
 my $year;
 $year += $_->{year} foreach @$found;

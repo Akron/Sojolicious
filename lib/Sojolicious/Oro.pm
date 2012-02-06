@@ -9,8 +9,8 @@ our @CARP_NOT;
 our $VERSION = '0.04';
 
 # Todo: join: do not automatically assume '*' fields.
-# Todo: join: assume fieldnames to be aliases if not given.
-# Todo: Support all string operators witz [a-z]+.
+# Todo: Support all string operators with [a-z]+.
+# Todo: Support treatments.
 
 # Database connection
 use DBI;
@@ -393,26 +393,10 @@ sub select {
   return unless $sth;
 
   # Release callback
-  if ($_[0] && ref($_[0]) eq 'CODE') {
-
-    # Iterate through dbi result
-    my $row;
-    while ($row = $sth->fetchrow_hashref) {
-
-      # Finish if callback returns -1
-      $rv = $_[0]->($row);
-      last if $rv && $rv == -1;
-    };
-
-    # Finish statement
-    $sth->finish;
-    return;
-  }
+  return _select_callback($sth, $_[0]) if $_[0];
 
   # Return array ref
-  else {
-    return $sth->fetchall_arrayref({});
-  };
+  return $sth->fetchall_arrayref({});
 };
 
 
@@ -871,8 +855,11 @@ sub _join_tables {
 
       # Field array
       if ($ref eq 'ARRAY') {
+	# Automatically prepend table and, if not given, alias
 	push(@fields,
-	     _fields([ map { $table . '.' . $_ } @{ shift @join } ]));
+	     _fields([ map {
+	       $table . '.' . (index($_, ':') >= 0 ? $_ : $_ . ':' . $_)
+	     } @{ shift @join } ]));
       };
 
       # Marker hash reference
@@ -1050,6 +1037,32 @@ sub _restrictions ($$) {
   };
 
   $sql;
+};
+
+
+# Select callback
+sub _select_callback {
+  my ($sth, $cb) = @_;
+
+  # Callback is valid
+  if (ref($cb) eq 'CODE') {
+
+    # Iterate through dbi result
+    my $row;
+    while ($row = $sth->fetchrow_hashref) {
+
+      # Finish if callback returns -1
+      my $rv = $cb->($row);
+      last if $rv && $rv == -1;
+    };
+
+    # Finish statement
+    $sth->finish;
+    return;
+  };
+
+  carp 'Callback is no code reference';
+  return;
 };
 
 
@@ -1361,7 +1374,7 @@ use any number of tables and perform a simple join:
 
   $oro->select(
     [
-      Person =>    ['name:author', 'age:age'] => { id => 1 },
+      Person =>    ['name:author', 'age'] => { id => 1 },
       Book =>      ['title'] => { author_id => 1, publisher_id => 2 },
       Publisher => ['name:publisher', 'id:pub_id'] => { id => 2 }
     ] => { author => 'Akron' }
@@ -1372,8 +1385,6 @@ table names, field array references and optional hash references
 containing markers for the join.
 Fields can only be column names, functions are not allowed.
 With a colon you can define aliases for the field names.
-As a fieldname without an alias will have the corresponding
-table name as a prefix, aliases like 'age:age' are useful.
 The join marker hash reference has field names as keys
 (no aliases!) and numerical markers as values.
 Fields with identical markers will have identical content.
@@ -1384,6 +1395,38 @@ reference with conditions and restrictions and an optional
 callback follow immediately.
 
 B<Joins are EXPERIMENTAL and may change without warnings.>
+
+=head3 Treatments
+
+Sometimes field functions and returned values shall be treated
+in a special way.
+By handing over subroutines, C<select> as well as C<load> allow
+for these treatments.
+
+  my $name = sub {
+    return (
+      'name',
+      [],
+      sub { uc($_[0]) }
+    );
+  };
+  $oro->select(Person => ['age', [ $name => 'name'] ]);
+
+This example returns all values in the 'name' column in uppercase.
+Treatments are array references in the field array, with the first
+element being a treatment subroutine reference and the second element
+being the alias of the column.
+
+The treatment subroutine returns a field value (may be an SQL string),
+an array of values to bind to the field value (maybe empty),
+optionally an anonymous subroutine that is executed after each
+returned value, and optionally an array of values to pass to the inner
+subroutine after the value.
+Treatment subroutines are executed unless the first value is a string value.
+The first argument of the inner subroutine is the value of the chosen
+column. Afterwards all predefined values will follow.
+
+B<Treatments are EXPERIMENTAL and may change without warnings.>
 
 =head2 C<load>
 
