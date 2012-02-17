@@ -1,6 +1,4 @@
 use Test::More tests => 131;
-use File::Temp qw/:POSIX/;
-#use Data::Dumper qw(Dumper);
 use strict;
 use warnings;
 
@@ -12,7 +10,7 @@ use lib '../lib';
 use_ok 'Sojolicious::Oro';
 use_ok 'Sojolicious::ComplexValues';
 
-my $db_file = tmpnam();
+my $db_file = ':memory:';
 
 my $cv = Sojolicious::ComplexValues->new(
   oro => Sojolicious::Oro->new($db_file),
@@ -21,10 +19,7 @@ my $cv = Sojolicious::ComplexValues->new(
 
 ok($cv, 'Create Complex Value');
 
-# Init
-$cv->init_db;
-
-ok($cv, 'Database initialized');
+ok($cv->init_db, 'Initialize database');
 
 my $u_obj = {
   name => 'Akron',
@@ -33,7 +28,6 @@ my $u_obj = {
     foobar => 1,
     tree => 2
   }};
-
 
 # Create and Read
 my $obj_id;
@@ -87,8 +81,6 @@ ok($u_obj_2 = $cv->read({
 is($u_obj_2->{entry}->[0]->{urls}->[0]->{rel}, 'home', 'Read');
 
 # New
-unlink $db_file;
-
 $cv = Sojolicious::ComplexValues->new(
   oro => Sojolicious::Oro->new($db_file),
   name => 'Resource'

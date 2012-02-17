@@ -1,4 +1,4 @@
-use Test::More tests => 193;
+use Test::More tests => 207;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -9,62 +9,152 @@ $|++;
 use lib '../lib';
 use_ok 'Sojolicious::Oro';
 
+my $_init_name =
+'CREATE TABLE Name (
+   id             INTEGER PRIMARY KEY,
+   prename        TEXT NOT NULL,
+   surname        TEXT
+ )';
+
+my $_init_content =
+'CREATE TABLE Content (
+   id            INTEGER PRIMARY KEY,
+   content       TEXT,
+   title         TEXT,
+   author_id     INTEGER
+ )';
+
+my $_init_book =
+'CREATE TABLE Book (
+   id        INTEGER PRIMARY KEY,
+   title     TEXT,
+   year      INTEGER,
+   author_id INTEGER,
+   FOREIGN KEY (author_id) REFERENCES Name(id)
+)';
+
+# Real DB:
 my $db_file = tmpnam();
 
-END {
-  unlink $db_file;
+ok(my $oro = Sojolicious::Oro->new(
+  $db_file => sub {
+    for ($_[0]) {
+      $_->do($_init_name);
+      $_->do($_init_content);
+      $_->do($_init_book);
+    };
+  }), 'Init real db');
+
+ok($oro->insert(Content => {
+  title => 'Test', content => 'Value 1'
+}), 'Before disconnect');
+
+ok($oro->dbh->disconnect, 'Disonnect');
+
+ok($oro->insert(Content => {
+  title => 'Test', content => 'Value 2'
+}), 'Reconnect');
+
+unlink $db_file;
+
+$db_file = '';
+
+ok($oro = Sojolicious::Oro->new(
+  $db_file => sub {
+    for ($_[0]) {
+      $_->do($_init_name);
+      $_->do($_init_content);
+      $_->do($_init_book);
+    };
+  }), 'Init temp db');
+
+ok($oro->insert(Content => {
+  title => 'Test', content => 'Value 1'
+}), 'Before disconnect');
+
+ok($oro->dbh->disconnect, 'Disonnect');
+
+{
+  local $SIG{__WARN__} = sub {};
+  ok(!$oro->insert(Content => {
+    title => 'Test', content => 'Value 2'
+  }), 'Reconnect');
 };
 
-my $oro = Sojolicious::Oro->new(
+# In memory db
+$db_file = ':memory:';
+
+ok($oro = Sojolicious::Oro->new(
   $db_file => sub {
-    shift->do('CREATE TABLE Name (
-                 id             INTEGER PRIMARY KEY,
-                 prename        TEXT NOT NULL,
-                 surname        TEXT
-              )');
+    for ($_[0]) {
+      $_->do($_init_name);
+      $_->do($_init_content);
+      $_->do($_init_book);
+    };
+  }), 'Init memory db');
+
+{
+  local $SIG{__WARN__} = sub {};
+
+  # Negative checks
+  ok($oro->insert(Content => { title => 'Check!',
+			       content => 'This is content.'}), 'Insert');
+
+  ok($oro->insert(Name => { prename => 'Akron',
+			    surname => 'Sojolicious'}), 'Insert');
+
+  ok(!$oro->insert(Content_unknown => {title => 'Hey!'}), 'Insert');
+
+  ok(!$oro->insert(Name => { surname => 'Rodriguez'}), 'Insert');
+
+  ok(!$oro->update(Content_unknown =>
+		     { content => 'This is changed content.' } =>
+		       { title => 'Check not existent!' }), 'Update');
+
+  ok(!$oro->update(Content =>
+		     { content_unkown => 'This is changed content.' } =>
+		       { title => 'Check not existent!' }), 'Update');
+
+  ok(!$oro->select('Content_2'), 'Select');
+
+  ok(!$oro->merge( Content_unknown =>
+		     { content => 'Das ist der fuenfte content.' } =>
+		       { 'title' => 'Noch ein Check!' }),
+     'Merge');
+
+  ok(!$oro->insert(Content => [qw/titles content/] =>
+		     ['CheckBulk','Das ist der elfte content']),
+     'Bulk Insert');
+
+  ok(!$oro->insert(Content => [qw/title content/] =>
+		     ['CheckBulk','Das ist der zwoelfte content', 'Yeah']),
+     'Bulk Insert');
+
+  ok(!$oro->insert(Content => [qw/title content/]), 'Bulk Insert');
+};
+
+
+$oro = Sojolicious::Oro->new(
+  $db_file => sub {
+    shift->do($_init_name);
   });
 
 ok($oro, 'Created');
 ok($oro->created, 'Created');
 
 if ($oro->created) {
-  $oro->do(
-    'CREATE TABLE Content (
-       id            INTEGER PRIMARY KEY,
-       content       TEXT,
-       title         TEXT,
-       author_id     INTEGER
-     )'
-  );
-  $oro->do(
-    'CREATE TABLE Book (
-       id        INTEGER PRIMARY KEY,
-       title     TEXT,
-       year      INTEGER,
-       author_id INTEGER,
-       FOREIGN KEY (author_id) REFERENCES Name(id)
-     )'
-  );
-  $oro->do('CREATE INDEX i ON Book(author_id);');
+  $oro->do($_init_content);
+  $oro->do($_init_book);
+  $oro->do('CREATE INDEX i ON Book(author_id)');
 };
 
 
 # Insert:
 ok($oro->insert(Content => { title => 'Check!',
 			     content => 'This is content.'}), 'Insert');
-{
-  local $SIG{__WARN__} = sub {};
-  ok(!$oro->insert(Content_unknown => {title => 'Hey!'}), 'Insert');
-};
 
 ok($oro->insert(Name => { prename => 'Akron',
 			  surname => 'Sojolicious'}), 'Insert');
-
-{
-  local $SIG{__WARN__} = sub {};
-  ok(!$oro->insert(Name => { surname => 'Rodriguez'}), 'Insert');
-};
-
 
 # Update:
 ok($oro->update(Content =>
@@ -78,18 +168,6 @@ like($oro->last_sql, qr/^update/i, 'SQL command');
 ok(!$oro->update(Content =>
 		  { content => 'This is changed content.' } =>
 		    { title => 'Check not existent!' }), 'Update');
-
-{
-  local $SIG{__WARN__} = sub {};
-  ok(!$oro->update(Content_unknown =>
-		     { content => 'This is changed content.' } =>
-		       { title => 'Check not existent!' }), 'Update');
-
-  ok(!$oro->update(Content =>
-		     { content_unkown => 'This is changed content.' } =>
-		       { title => 'Check not existent!' }), 'Update');
-};
-
 
 # Load:
 my $row;
@@ -115,11 +193,6 @@ is($row->{content}, 'This is second content.', 'Check');
 
 is($oro->delete(Content => { title => 'Another check!' }), 1, 'Delete');
 ok(!$oro->delete(Content => { title => 'Well.' }), 'Delete');
-
-{
-  local $SIG{__WARN__} = sub {};
-  ok(!$oro->select('Content_2'), 'Select');
-};
 
 $oro->select('Content' => sub {
 	       like(shift->{content},
@@ -176,33 +249,12 @@ ok($oro->delete('Content' => { content => ['Das ist der siebte content.']}),
 
 is($oro->last_insert_id, 5, 'Row id');
 
-{
-  local $SIG{__WARN__} = sub {};
-  ok(!$oro->merge( Content_unknown =>
-		     { content => 'Das ist der fuenfte content.' } =>
-		       { 'title' => 'Noch ein Check!' }),
-     'Merge');
-};
-
 ok($oro->insert(Content => [qw/title content/] =>
 	   ['CheckBulk','Das ist der sechste content'],
 	   ['CheckBulk','Das ist der siebte content'],
 	   ['CheckBulk','Das ist der achte content'],
 	   ['CheckBulk','Das ist der neunte content'],
 	   ['CheckBulk','Das ist der zehnte content']), 'Bulk Insert');
-
-{
-  local $SIG{__WARN__} = sub {};
-  ok(!$oro->insert(Content => [qw/titles content/] =>
-		     ['CheckBulk','Das ist der elfte content']),
-     'Bulk Insert');
-
-  ok(!$oro->insert(Content => [qw/title content/] =>
-		     ['CheckBulk','Das ist der zwoelfte content', 'Yeah']),
-     'Bulk Insert');
-
-  ok(!$oro->insert(Content => [qw/title content/]), 'Bulk Insert');
-};
 
 ok($array = $oro->select('Content' => [qw/title content/]), 'Select');
 is(@$array, 8, 'Check Select');
@@ -434,11 +486,6 @@ ok($content->insert(
     ['Bulk 2', 'Content'],
     ['Bulk 3', 'Content'],
     ['Bulk 4', 'Content']), 'Bulk Insertion');
-
-ok($oro->dbh->disconnect, 'Disonnect');
-
-ok($oro->insert(Content => { title => 'Test', content => 'Value'}), 'Reconnect');
-
 
 # Joins:
 ok($oro->delete('Content'), 'Truncate');
@@ -683,5 +730,31 @@ $result = $oro->select(Content => { author_id => { not_between => [2, 1110] } })
 is($result->[0]->{content}, '1', 'Select with not_between');
 is($result->[1]->{content}, '1111', 'Select with not_between');
 is(@$result, 2, 'Select with not_between');
+
+# Driver test
+is($oro->driver, 'SQLite', 'Driver');
+
+# Treatment-Test
+my $treat_content = sub {
+  return ('content', sub { uc($_[0]) });
+};
+
+ok($oro->insert(Content => {
+  title => 'Not Bulk',
+  content => 'Simple Content' }), 'Insert');
+
+ok($row = $oro->load(Content =>
+		       ['title', [$treat_content => 'uccont'], 'content'] =>
+			 { title => { ne => 'ContentBulk' }}
+), 'Load with Treatment');
+
+is($row->{uccont}, 'SIMPLE CONTENT', 'Treatment');
+
+$oro->select(Content =>
+	       ['title', [$treat_content => 'uccont'], 'content'] =>
+		 { title => { ne => 'ContentBulk' }},
+	     sub {
+	       is($_[0]->{uccont}, 'SIMPLE CONTENT', 'Treatment');
+	     });
 
 __END__

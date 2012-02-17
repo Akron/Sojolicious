@@ -1,27 +1,18 @@
 #!/usr/bin/env perl
-use strict;
-use warnings;
+use Mojolicious::Lite;
 
 $|++;
 
 use lib '../lib';
 
 use Test::More tests => 13;
-
 use Test::Mojo;
-use Mojolicious::Lite;
-
-use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
 
-my $db_file = tmpnam();
-
-END {
-  unlink $db_file;
-};
+my $db_file = ':memory:';
 
 $app->plugin('oro' => {
   Books => {

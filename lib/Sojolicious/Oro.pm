@@ -6,19 +6,13 @@ use feature 'state';
 use Carp qw/carp croak/;
 our @CARP_NOT;
 
-our $VERSION = '0.04';
-
 # Todo: join: do not automatically assume '*' fields.
 # Todo: Support all string operators with [a-z]+.
-# Todo: Support treatments.
+# Todo: Create, release, and rollback savepoints as private methods
+#       so different drivers can handle them differently.
 
 # Database connection
 use DBI;
-use DBD::SQLite;
-
-# Find and create database file
-use File::Path;
-use File::Basename;
 
 # Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
 use constant MAX_COMP_SELECT => 500;
@@ -36,43 +30,63 @@ our $KEY_REGEX      = qr/[_0-9a-zA-Z]/;
 
 # Constructor
 sub new {
-  my ($class, $file, $cb) = @_;
+  my $class = shift;
+  my ($self, %param);
 
-  # Bless object with hash
-  my $self = bless {
-    created  => 0,
-    in_txn   => 0,
-    last_sql => ''
-  }, $class;
+  # SQLite - one parameter
+  if (@_ == 1) {
+    @param{qw/driver file/} = ('SQLite', shift);
+  }
 
-  # Store filename
-  $self->file($file);
+  # SQLite - two parameter
+  elsif (@_ == 2 && ref $_[1] && ref $_[1] eq 'CODE') {
+    @param{qw/driver file init/} = ('SQLite', @_);
+  }
 
-  # No database defined
-  croak 'No database defined' unless $file;
-
-  # Create path for file - based on ORLite
-  unless (-f $file) {
-    $self->{created} = 1;
-
-    my $dir = File::Basename::dirname($file);
-    unless ( -d $dir ) {
-      File::Path::mkpath( $dir, { verbose => 0 } );
-    };
+  # Hash
+  else {
+    %param = @_;
   };
+
+  # Init by default
+  @param{qw/created in_txn last_sql/} = (0, 0, '');
+
+  my $pwd = delete $param{password};
+
+  # Is SQLite
+  if (!exists $param{driver} || $param{driver} eq 'SQLite') {
+
+    # Load driver
+    require Sojolicious::Oro::SQLite;
+
+    # Get driver specific handle
+    $self = Sojolicious::Oro::SQLite->new( %param );
+  };
+
+  # No database created
+  return unless $self;
+
+  # Connection identifier (for _password)
+  $self->{_id} = "$self";
+
+  # Set password securely
+  $self->_password($pwd) if $pwd;
 
   # Connect to database
   $self->_connect or croak 'Unable to connect to database';
 
   # Release callback
-  $cb->($self) if ($cb && $self->{created} && ref($cb) eq 'CODE');
+  my $cb = $param{init} if $param{init} && (ref $param{init} || '') eq 'CODE';
+  $cb->($self) if $cb;
 
   # Savepoint array
   # First element is a counter
   $self->{savepoint} = [1];
 
-  return $self;
+  # Return Oro instance
+  $self;
 };
+
 
 # New table object
 sub table {
@@ -90,10 +104,12 @@ sub table {
   };
 
   # Clone parameters
-  foreach (qw/dbh created file in_txn
+  foreach (qw/dbh created in_txn
               savepoint pid tid/) {
     $param{$_} = $self->{$_};
   };
+
+  $param{_id} = "$self";
 
   # Bless object with hash
   bless \%param, ref($self);
@@ -131,17 +147,14 @@ sub dbh {
 };
 
 
-# File of database
-sub file {
-  return $_[0]->{file} unless $_[1];
-  $_[0]->{file} = $_[1];
-};
-
-
 # Last executed SQL
 sub last_sql {
   $_[0]->{last_sql} || 'empty';
 };
+
+
+# Database driver
+sub driver { '' };
 
 
 # Database was just created
@@ -192,9 +205,7 @@ sub insert {
 
     # Create insert string
     my $sql = 'INSERT INTO ' . $table .
-          ' (' . join(', ', @keys) . ')' .
-	  ' VALUES' .
-	  ' (' . _q(\@keys) . ')';
+      ' (' . join(', ', @keys) . ') VALUES (' . _q(\@keys) . ')';
 
     # Prepare and execute
     return scalar $self->prep_and_exec( $sql, \@values );
@@ -245,7 +256,7 @@ sub insert {
       );
     }
 
-    # More than MAX_COMP_SELECT insertions
+    # More than SQLite MAX_COMP_SELECT insertions
     else {
 
       my ($rv, @v_array);
@@ -339,7 +350,8 @@ sub select {
   my $self  = shift;
 
   # Get table object
-  my ($tables, $fields, $join_pairs) = _table_obj($self, \@_);
+  my ($tables, $fields, $join_pairs, $treatment) =
+    _table_obj($self, \@_);
 
   my @pairs = @$join_pairs;
 
@@ -349,15 +361,16 @@ sub select {
     # Not allowed for join selects
     return if $fields->[0];
 
-    $fields = [ _fields( shift(@_) ) ];
+    ($fields, $treatment) = _fields($tables->[0], shift(@_) );
+
+    $fields = [ $fields ];
   };
 
   # Default
   $fields->[0] ||= '*';
 
   # Create sql query
-  my $sql = join(', ', @$fields) . ' ' .
-    'FROM '   . join(', ', @$tables);
+  my $sql = join(', ', @$fields) . ' FROM ' . join(', ', @$tables);
 
   # Append condition
   my @values;
@@ -390,13 +403,66 @@ sub select {
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec('SELECT ' . $sql, \@values);
 
+  # No statement created
   return unless $sth;
 
+  # Prepare treatments
+  my (@treatment, %treatsub);
+  if ($treatment) {
+    @treatment = keys %$treatment;
+    foreach (@treatment) {
+      $treatsub{$_} = shift(@{$treatment->{$_}});
+    };
+  };
+
   # Release callback
-  return _select_callback($sth, $_[0]) if $_[0];
+  if ($_[0] && ref $_[0] && ref $_[0] eq 'CODE' ) {
+    my $cb = shift;
+
+    # Iterate through dbi result
+    my $row;
+    while ($row = $sth->fetchrow_hashref) {
+
+      # Treat result
+      if ($treatment) {
+
+	# Treat each treatable row value
+	foreach (@treatment) {
+	  $row->{$_} = $treatsub{$_}->(
+	    $row->{$_}, @{$treatment->{$_}}
+	  ) if $row->{$_};
+	};
+      };
+
+      # Finish if callback returns -1
+      my $rv = $cb->($row);
+      last if $rv && $rv == -1;
+    };
+
+    # Finish statement
+    $sth->finish;
+    return;
+  };
 
   # Return array ref
-  return $sth->fetchall_arrayref({});
+  return $sth->fetchall_arrayref({}) unless $treatment;
+
+  # Create array ref
+  my $result = $sth->fetchall_arrayref({});
+
+  # Treat each row
+  foreach my $row (@$result) {
+
+    # Treat each treatable row value
+    foreach (@treatment) {
+      $row->{$_} = $treatsub{$_}->(
+	$row->{$_}, @{$treatment->{$_}}
+      ) if $row->{$_};
+    };
+  };
+
+  # Return result
+  return $result;
 };
 
 
@@ -420,8 +486,8 @@ sub load {
   # Select with limit
   my $row = $self->select(@param);
 
-  # Not found
-  return {} unless $row;
+  # Error or not found
+  return unless $row;
 
   # Return row
   return $row->[0];
@@ -445,43 +511,15 @@ sub delete {
     # Add condition
     ($pairs, $values, $prep) = _get_pairs( shift(@_) );
 
-    if ($prep) {
-      $secure = 1 if delete $prep->{secure};
-      $prep = undef unless keys %$prep;
-    };
-
+    # Add where clause to sql
     $sql .= ' WHERE ' . join(' AND ', @$pairs) if @$pairs || $prep;
 
     # Apply restrictions
     $sql .= _restrictions($prep, $values) if $prep;
   };
 
-  my $rv;
-
-  # Delete
-  unless ($secure) {
-    # Prepare and execute
-    $rv = $self->prep_and_exec($sql, $values);
-  }
-
-  # Delete securely
-  else {
-    my $sec_value;
-
-    # Retrieve secure delete pragma
-    my ($rv2, $sth) = $self->prep_and_exec('PRAGMA secure_delete');
-    $sec_value = $sth->fetchrow_array if $rv2;
-    $sth->finish;
-
-    # Set secure_delete pragma
-    $self->do('PRAGMA secure_delete = ON') unless $sec_value;
-
-    # Prepare and execute
-    $rv = $self->prep_and_exec($sql, $values);
-
-    # Reset secure_delete pragma
-    $self->do('PRAGMA secure_delete = OFF') unless $sec_value;
-  }
+  # Execute deletion
+  my $rv = $self->prep_and_exec($sql, $values);
 
   # Return value
   return (!$rv || $rv eq '0E0') ? 0 : $rv;
@@ -532,7 +570,8 @@ sub count {
   my $self  = shift;
 
   # Init arrays
-  my ($tables, $fields, $join_pairs) = _table_obj($self, \@_);
+  my ($tables, $fields, $join_pairs, $treatment) =
+    _table_obj($self, \@_);
   my @pairs = @$join_pairs;
 
   # Build sql
@@ -572,27 +611,22 @@ sub prep_and_exec {
   $self->{last_sql} = $sql;
 
   # Prepare
-  my $sth;
-  eval {
-    $sth =
-      $cached ? $dbh->prepare_cached( $sql ) :
-	$dbh->prepare( $sql );
-  };
+  my $sth =
+    $cached ? $dbh->prepare_cached( $sql ) :
+      $dbh->prepare( $sql );
 
   # Check for errors
-  if ($@) {
+  if ($dbh->err) {
 
     # Retry with reconnect
     $dbh = $self->_connect;
 
-    eval {
-      $sth =
-	$cached ? $dbh->prepare_cached( $sql ) :
-	  $dbh->prepare( $sql );
-    };
+    $sth =
+      $cached ? $dbh->prepare_cached( $sql ) :
+	$dbh->prepare( $sql );
 
-    if ($@) {
-      carp $@ . '... in "' . $sql . '"';
+    if ($dbh->err) {
+      carp $dbh->errstr . ' in "' . $sql . '"';
       return;
     };
   };
@@ -600,14 +634,11 @@ sub prep_and_exec {
   return unless $sth;
 
   # Execute
-  my $rv;
-  eval {
-    $rv = $sth->execute( @$values );
-  };
+  my $rv = $sth->execute( @$values );
 
   # Check for errors
-  if ($@) {
-    carp $@ . '... in "' . $sql . '"';
+  if ($dbh->err) {
+    carp $dbh->errstr . ' in "' . $sql . '"';
     return;
   };
 
@@ -661,7 +692,6 @@ sub txn {
 
   # Inside transaction
   else {
-
     $self->{in_txn} = 1;
 
     # Push savepoint on stack
@@ -708,9 +738,9 @@ sub txn {
 };
 
 
-# Wrapper for sqlite last_insert_row_id
+# Wrapper for DBI last_insert_id
 sub last_insert_id {
-  shift->dbh->sqlite_last_insert_rowid;
+  shift->dbh->last_insert_id;
 };
 
 
@@ -723,6 +753,9 @@ sub DESTROY {
 
     # No database connection
     return $self unless $self->{dbh};
+
+    # Delete password
+    $self->_password(0);
 
     # Delete cached kids
     my $kids = $self->{dbh}->{CachedKids};
@@ -742,23 +775,20 @@ sub _connect {
   my $self = shift;
 
   # DBI Connect
-  my $dbh;
-  eval {
-    $dbh = DBI->connect(
-      'dbi:SQLite:' . $self->file,
-      undef,
-      undef,
-      {
-	PrintError     => 0,
-	RaiseError     => 1,
-	AutoCommit     => 1,
-	sqlite_unicode => 1
-      });
-  };
+  my $dbh = DBI->connect(
+    $self->{dsn},
+    $self->{user} // undef,
+    $self->_password,
+    {
+      PrintError     => 0,
+      RaiseError     => 0,
+      AutoCommit     => 1,
+      @_
+    });
 
   # Unable to connect to database
-  if ($@) {
-    carp $@;
+  unless ($dbh) {
+    carp $DBI::errstr;
     return;
   };
 
@@ -772,6 +802,46 @@ sub _connect {
   $self->{tid} = threads->tid if $INC{'threads.pm'};
 
   return $dbh;
+};
+
+
+# Password closure should prevent accidentally overt passwords
+{
+  # Password hash
+  my %pwd;
+
+  # Password method
+  sub _password {
+    my $id = shift()->{_id};
+    my $pwd_set = shift;
+
+    my ($this) = caller(0);
+
+    # Request only allowed in this namespace
+    return unless index(__PACKAGE__, $this) == 0;
+
+    # Return password
+    unless (defined $pwd_set) {
+      return $pwd{$id};
+    }
+
+    # Delete password
+    unless ($pwd_set) {
+      delete $pwd{$id};
+    }
+
+    # Set password
+    else {
+
+      # Password can only be set on construction
+      for ((caller(1))[3]) {
+	m/::new$/ or return;
+	index(__PACKAGE__, $_) or return;
+	!$pwd{$id} or return;
+	$pwd{$id} = $pwd_set;
+      };
+    };
+  };
 };
 
 
@@ -840,7 +910,7 @@ sub _table_obj {
 sub _join_tables {
   my @join   = @{ shift @_ };
 
-  my (@tables, @fields, @pairs);
+  my (@tables, @fields, @pairs, $treatment);
   my %marker;
 
   # Parse table array
@@ -856,10 +926,15 @@ sub _join_tables {
       # Field array
       if ($ref eq 'ARRAY') {
 	# Automatically prepend table and, if not given, alias
-	push(@fields,
-	     _fields([ map {
-	       $table . '.' . (index($_, ':') >= 0 ? $_ : $_ . ':' . $_)
-	     } @{ shift @join } ]));
+	(my $fields, $treatment) =
+	  _fields(
+	    $table,
+	    [ map {
+	      $table . '.' .
+		((index($_, ':') >= 0 || ref $_) ? $_ : $_ . ':' . $_)
+	      } @{ shift @join } ]);
+
+	push(@fields, $fields);
       };
 
       # Marker hash reference
@@ -884,7 +959,7 @@ sub _join_tables {
   };
 
   # Return join initialised values
-  return (\@tables, \@fields, \@pairs);
+  return (\@tables, \@fields, \@pairs, $treatment);
 };
 
 
@@ -920,7 +995,7 @@ sub _get_pairs ($) {
       }
 
       # Limit and Offset restriction
-      elsif ($key ~~ ['-limit', '-offset', '-distinct', '-secure']) {
+      elsif ($key ~~ ['-limit', '-offset', '-distinct']) {
 	$prep{substr($key,1)} = $value if $value =~ /^\d+$/;
       };
     }
@@ -930,6 +1005,7 @@ sub _get_pairs ($) {
       push(@pairs, $key . ' IS NULL');
     }
 
+    # Array or Hash
     elsif (ref($value)) {
 
       # Element of
@@ -984,13 +1060,30 @@ sub _get_pairs ($) {
 
 
 # Get fields
-sub _fields ($) {
+sub _fields ($$) {
+  my $table = shift;
 
-  # Check for valid fields
-  my @fields = grep(
-    /^(?:(?:[\*\.\w]+|$FUNCTION_REGEX))$AS_REGEX?$/o,
-    @{ $_[0] }
-  );
+  my %treatment;
+
+  my @fields;
+  foreach (@{$_[0]}) {
+
+    # Ordinary String
+    unless (ref $_) {
+      push(@fields, $_) if /^(?:(?:[\*\.\w]+|$FUNCTION_REGEX))$AS_REGEX?$/o,
+    }
+
+    # Treatment
+    elsif (ref $_ eq 'ARRAY') {
+      my ($sub, $alias) = @$_;
+      my ($sql, $inner_sub) = $sub->($table);
+      ($sql, $inner_sub, my @param) = $sql->($table) if ref $sql;
+
+      $treatment{ $alias } = [$inner_sub, @param ] if $inner_sub;
+      push(@fields, $sql . ':' . $alias);
+    };
+  };
+
   my $fields = join(', ', @fields);
 
   # Return if no alias fields exist
@@ -999,18 +1092,19 @@ sub _fields ($) {
   };
 
   # Join with alias fields
-  join(', ',
-       map {
-	 if ($_ =~ /^(.+?):([^:"]+?)$/) {
-	   $1 . ' AS "' . $2 . '"'
-	 } elsif ($_ =~ /^(?:.+?)\.(?:[^\.]+?)$/) {
-	   my $alias = $_;
-	   $alias =~ s/[\"\$\@\#\.\s]/_/g;
-	   $_ . ' AS "' . lc $alias . '"';
-	 } else {
-	   $_
-	 }
-       } @fields);
+  (join(', ',
+	map {
+	  if ($_ =~ /^(.+?):([^:"]+?)$/) {
+	    $1 . ' AS "' . $2 . '"'
+	  } elsif ($_ =~ /^(?:.+?)\.(?:[^\.]+?)$/) {
+	    my $alias = $_;
+	    $alias =~ s/[\"\$\@\#\.\s]/_/g;
+	    $_ . ' AS "' . lc $alias . '"';
+	  } else {
+	    $_
+	  }
+	} @fields),
+   %treatment ? \%treatment : undef);
 };
 
 
@@ -1037,32 +1131,6 @@ sub _restrictions ($$) {
   };
 
   $sql;
-};
-
-
-# Select callback
-sub _select_callback {
-  my ($sth, $cb) = @_;
-
-  # Callback is valid
-  if (ref($cb) eq 'CODE') {
-
-    # Iterate through dbi result
-    my $row;
-    while ($row = $sth->fetchrow_hashref) {
-
-      # Finish if callback returns -1
-      my $rv = $cb->($row);
-      last if $rv && $rv == -1;
-    };
-
-    # Finish statement
-    $sth->finish;
-    return;
-  };
-
-  carp 'Callback is no code reference';
-  return;
 };
 
 
@@ -1093,7 +1161,7 @@ __END__
 
 =head1 NAME
 
-Sojolicious::Oro - Simple SQLite database accessor
+Sojolicious::Oro - Simple database accessor
 
 
 =head1 SYNOPSIS
@@ -1135,16 +1203,6 @@ It should be fork- and thread-safe.
 The DBI database handle.
 
 
-=head2 C<file>
-
-  my $file = $oro->file;
-  $oro->file('myfile.sqlite');
-
-The sqlite file of the database.
-
-B<This attribute is EXPERIMENTAL and may change without warnings.>
-
-
 =head2 C<created>
 
   if ($oro->created) {
@@ -1184,6 +1242,13 @@ B<This attribute is EXPERIMENTAL and may change without warnings.>
 
 The last executed SQL command.
 
+
+=head2 C<driver>
+
+  print $oro->driver;
+
+The driver ('SQLite') of the Oro instance.
+
 B<This attribute is EXPERIMENTAL and may change without warnings.>
 
 
@@ -1203,8 +1268,8 @@ B<This attribute is EXPERIMENTAL and may change without warnings.>
   })
 
 Creates a new sqlite database accessor object on the
-given filename. If the database does not already exist,
-it is created.
+given filename or in memory, if the filename is ':memory:'.
+If the database file does not already exist, it is created.
 Accepts an optional callback that is only released, if
 the database is newly created. The first parameter of
 the callback function is the Oro-object.
@@ -1225,16 +1290,13 @@ For multiple insertions, it expects the table name
 to insert, an arrayref of the column names and an arbitrary
 long array of array references of values to insert.
 
-  $oro->insert(Person => ['prename', [surname => 'Meier']] =>
+  $oro->insert(Person => ['prename', [ surname => 'Meier' ]] =>
                          map { [$_] } qw/Peter Sabine Frank/);
 
 For multiple insertions with defaults, the arrayref for column
 names can contain array references with a column name and the
 default value. This value is inserted for each inserted entry
 and especially usefull for n:m relation tables.
-
-B<Multiple insertions with defaults are EXPERIMENTAL and may
-change without warnings.>
 
 
 =head2 C<update>
@@ -1268,22 +1330,22 @@ Scalar condition values will be inserted, if the fields do not exist.
 =head2 C<select>
 
   my $users = $oro->select('Person');
-  $oro->select(Person => sub {
-                 print $_[0]->{id},"\n";
-                 return -1 if $_[0]->{name} eq 'Peter';
-               });
   my $users = $oro->select(Person => ['id', 'name']);
   my $users = $oro->select(Person => ['id'] => {
                              age  => 24,
                              name => ['Daniel','Sabine']
                            });
-
   my $users = $oro->select(Person => ['name:displayName']);
+
+  $oro->select(Person => sub {
+                 print $_[0]->{id},"\n";
+                 return -1 if $_[0]->{name} eq 'Peter';
+               });
 
   my $age = 0;
   $oro->select('Person' =>
                ['id', 'age'] =>
-               { name => 'Daniel' } =>
+               { name => { like => 'Dani%' }} =>
                sub {
                  my $user = shift;
                  say $user->{id};
@@ -1404,11 +1466,7 @@ By handing over subroutines, C<select> as well as C<load> allow
 for these treatments.
 
   my $name = sub {
-    return (
-      'name',
-      [],
-      sub { uc($_[0]) }
-    );
+    return ('name', sub { uc($_[0]) });
   };
   $oro->select(Person => ['age', [ $name => 'name'] ]);
 
@@ -1417,14 +1475,16 @@ Treatments are array references in the field array, with the first
 element being a treatment subroutine reference and the second element
 being the alias of the column.
 
-The treatment subroutine returns a field value (may be an SQL string),
-an array of values to bind to the field value (maybe empty),
+The treatment subroutine returns a field value (an SQL string),
 optionally an anonymous subroutine that is executed after each
 returned value, and optionally an array of values to pass to the inner
-subroutine after the value.
-Treatment subroutines are executed unless the first value is a string value.
-The first argument of the inner subroutine is the value of the chosen
-column. Afterwards all predefined values will follow.
+subroutine. The first parameter the inner subroutine has to handle,
+is the value to treat, following the optional treatment parameters.
+The treatment returns the treated value (that does not has to be a string).
+
+Outer subroutines are executed as long as the first value is not a string
+value. The only parameter passed to the outer subroutine is the
+current table name.
 
 B<Treatments are EXPERIMENTAL and may change without warnings.>
 
@@ -1456,22 +1516,6 @@ In case of scalar values, identity is tested for the condition.
 In case of array refs, it is tested, if the field is an element of the set.
 Restrictions can be applied as with L<select>.
 Returns the number of rows that were deleted.
-
-=head3 Security
-
-In addition to conditions, the deletion can have further parameters.
-
-  $oro->delete(Person => { id => 4, -secure => 1});
-
-=over 2
-
-=item C<-secure>
-
-Forces a secure deletion by overwriting all data with '0'.
-
-=back
-
-B<The security parameter is EXPERIMENTAL and may change without warnings.>
 
 
 =head2 C<count>
@@ -1558,14 +1602,16 @@ Allows to wrap transactions.
 Expects an anonymous subroutine containing all actions.
 If the subroutine returns -1, the transactional data will be omitted.
 Otherwise the actions will be released.
-Transactions established with this method can be securely nested.
+Transactions established with this method can be securely nested
+(although inner transactions may not be true transactions depending
+on the driver).
 
 
 =head2 C<last_insert_id>
 
   my $id = $oro->last_insert_id;
 
-Returns the globally last inserted id.
+Returns the globally last inserted id regarding to the database connection.
 
 
 =head2 C<do>
@@ -1577,7 +1623,7 @@ Returns the globally last inserted id.
      )');
 
 Executes SQL code.
-This is a Wrapper for the DBI C<do()> method (but fork- and thread-safe).
+This is a wrapper for the DBI C<do()> method (but fork- and thread-safe).
 
 
 =head1 DEPENDENCIES

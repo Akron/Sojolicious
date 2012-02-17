@@ -2,6 +2,9 @@ package Mojolicious::Plugin::Oro;
 use Mojo::Base 'Mojolicious::Plugin';
 use Carp qw/carp croak/;
 
+# Todo: Create command for all databases
+#       loaded with this module
+
 # Database driver
 use Sojolicious::Oro;
 
@@ -28,27 +31,11 @@ sub register {
     # Already exists
     next if exists $databases->{$name};
 
-    # No file name given
-    croak "No file given for database '$name'" unless $db->{file};
-
     # Get Database handle
-    my $oro = Sojolicious::Oro->new( $db->{file} );
+    my $oro = Sojolicious::Oro->new( %$db );
 
     # No succesful creation
     croak "Unable to create database handle '$name'" unless $oro;
-
-    # Initialize database
-    if (exists $db->{init} &&
-	  $oro->created &&
-	    ref($db->{init})) {
-
-      # Start transaction
-      $oro->txn(
-	sub {
-	  # Start init callback
-	  $db->{init}->( $oro ) or return -1;
-	}) or croak "Unable to init database '$name'";
-    };
 
     # Store database handle
     $databases->{$name} = $oro;
@@ -87,7 +74,7 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
     }}
   );
 
-  $c->oro('Books')->insert(Content => { title => 'Misery'});
+  $c->oro('Books')->insert(Content => { title => 'Misery' });
   print $c->oro(Books => 'Content')->count;
 
 =head1 DESCRIPTION

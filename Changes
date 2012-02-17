@@ -1,4 +1,13 @@
-0.15 2012-02-2
+0.16 2012-02-11
+        - Split Oro and Oro::SQLite.
+	- Added Oro::SQLite.
+	- Added snippet, offsets, and matchinfo support to Oro::SQLite.
+	- Added attach and detach support to Oro::SQLite.
+	- Added password support to Oro.
+	- Added treatment support to Oro.
+	- Changed default errors in Oro to be printed.
+
+0.15 2012-02-02
         - Added Mojolicious::Plugin::Oro.
         - Made Sojolicious::Oro thread- and fork-safe.
         - Added restrictions to Sojolicious::Oro.
