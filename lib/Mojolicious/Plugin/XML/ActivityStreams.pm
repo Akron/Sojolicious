@@ -4,72 +4,76 @@ use Mojo::Base 'Mojolicious::Plugin::XML::Base';
 our $PREFIX = 'activity';
 our $NAMESPACE = 'http://activitystrea.ms/schema/1.0/';
 
-# Todo - support json
-sub new {  warn 'Only use as an extension to Atom'; 0; };
+# Todo: support to_json
+
+sub new {
+  warn 'Only use as an extension to Atom';
+  undef;
+};
 
 # Add ActivityStreams actor
 sub add_actor {
-    my $self  = shift;
-    my $actor = $self->add_author( @_ );
-    $actor->add('object-type', $NAMESPACE . 'person');
-    return $actor;
+  my $self  = shift;
+  my $actor = $self->add_author( @_ );
+  $actor->add('object-type', $NAMESPACE . 'person');
+  return $actor;
 };
 
 # Add ActivityStreams verb
 sub add_verb {
-    my $self = shift;
+  my $self = shift;
 
-    return unless $_[0];
+  return unless $_[0];
 
-    # Add ns prefix if not given
-    my $verb = shift;
-    if (index($verb, '/') == -1) {
-	$verb = $NAMESPACE . $verb;
-    };
+  # Add ns prefix if not given
+  my $verb = shift;
+  if (index($verb, '/') == -1) {
+    $verb = $NAMESPACE . $verb;
+  };
 
-    return $self->add('verb', $verb);
+  return $self->add('verb', $verb);
 };
 
 # add ActivityStreams object construct
 sub _add_object_construct {
-    my $obj = shift;
-    my %params = @_;
+  my $obj = shift;
+  my %params = @_;
 
-    $obj->add_id( delete $params{id} ) if exists $params{id};
+  $obj->add_id( delete $params{id} ) if exists $params{id};
 
-    if (exists $params{type}) {
+  if (exists $params{type}) {
 
-	my $type = delete $params{type};
+    my $type = delete $params{type};
 
-	# Add ns prefix if not given
-	if (index($type, '/') == -1) {
-	    $type = $NAMESPACE . lc($type);
-	};
-
-	$obj->add('object-type', $type);
+    # Add ns prefix if not given
+    if (index($type, '/') == -1) {
+      $type = $NAMESPACE . lc($type);
     };
 
-    foreach (keys %params) {
-	$obj->add('-' . $_ => $params{$_});
-    };
+    $obj->add('object-type', $type);
+  };
 
-    return $obj;
+  foreach (keys %params) {
+    $obj->add('-' . $_ => $params{$_});
+  };
+
+  return $obj;
 };
 
 # Add ActivityStreams object
 sub add_object {
-    my $self = shift;
-    my $obj = $self->add('object');
-    $obj->_add_object_construct(@_);
-    return $obj;
+  my $self = shift;
+  my $obj = $self->add('object');
+  $obj->_add_object_construct(@_);
+  return $obj;
 };
 
 # Add ActivityStreams target
 sub add_target {
-    my $self = shift;
-    my $target = $self->add('target');
-    $target->_add_object_construct(@_);
-    return $target;
+  my $self = shift;
+  my $target = $self->add('target');
+  $target->_add_object_construct(@_);
+  return $target;
 };
 
 1;
@@ -183,7 +187,7 @@ L<Mojolicious::Plugin::XML::Atom>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

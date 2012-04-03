@@ -2,6 +2,7 @@ package Mojolicious::Plugin::LRDD;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 
+
 # Register Plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
@@ -11,6 +12,7 @@ sub register {
   unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
     $mojo->plugin('HostMeta');
   };
+
 
   # lrdd helper
   $mojo->helper(
@@ -28,16 +30,18 @@ sub register {
       return $plugin->_get_lrdd($c, $ressource => $host );
     });
 
+
   # Add 'lrdd' shortcut
   $mojo->routes->add_shortcut(
-    'lrdd' => sub {
+    lrdd => sub {
       my ($route, $param_key) = @_;
 
       # Set endpoint-uri
       $route->endpoint(
-	'lrdd' => {
+	lrdd => {
 	  query  => $param_key ? [ $param_key => '{uri}' ] : undef
 	});
+
 
       # Add Route to Hostmeta - exactly once
       $mojo->hook(
@@ -51,7 +55,7 @@ sub register {
 	  my $lrdd = { type => 'application/xrd+xml' };
 
 	  # If It's a template, point the lrdd to it
-	  my $type = index($endpoint, '{uri}') > 0 ? 'template' : 'href';
+	  my $type = index($endpoint, '{uri}') >= 0 ? 'template' : 'href';
 	  $lrdd->{$type} = $endpoint;
 
 	  $hostmeta->add_link('lrdd' => $lrdd)
@@ -72,7 +76,7 @@ sub register {
 
 	  # Emit 'on_prepare_lrdd' hook
 	  $mojo->plugins->emit_hook(
-	    'on_prepare_lrdd' => (
+	    on_prepare_lrdd => (
 	      $plugin, $c, $uri, \$ok
 	    ));
 
@@ -94,6 +98,7 @@ sub register {
     });
 };
 
+
 # Fetch ressource
 sub _get_lrdd {
   my $plugin = shift;
@@ -109,7 +114,7 @@ sub _get_lrdd {
   # Hook for caching
   my $lrdd_xrd;
   $c->app->plugins->emit_hook(
-    'before_fetching_lrdd' =>
+    before_fetching_lrdd =>
       ($plugin, $c, $ressource, $host, \$lrdd_xrd )
     );
 
@@ -127,13 +132,13 @@ sub _get_lrdd {
 
   # Get uri by using template
   my $uri;
-  if ($uri = $lrdd->{'template'}) {
+  if ($uri = $lrdd->{template}) {
     my $res = b($ressource)->url_escape;
     $uri =~ s/\{uri\}/$res/;
   }
 
   # Get uri by using href
-  elsif (not ($uri = $lrdd->{'href'})) {
+  elsif (not ($uri = $lrdd->{href})) {
     return undef;
   };
 
@@ -175,7 +180,7 @@ sub _get_lrdd {
 
   # Hook for caching
   $c->app->plugins->emit_hook(
-    'after_fetching_lrdd'=> (
+    after_fetching_lrdd => (
       $plugin,
       $c,
       $ressource,
@@ -204,7 +209,7 @@ sub _serve_lrdd {
 
   # Run hook
   $c->app->plugins->emit_hook(
-    'before_serving_lrdd' => (
+    before_serving_lrdd => (
       $plugin, $c, $uri, $lrdd_xrd
     ));
 
@@ -213,6 +218,7 @@ sub _serve_lrdd {
 
 
 1;
+
 
 __END__
 
@@ -254,6 +260,17 @@ Mojolicious::Plugin::LRDD - Link-based Resource Descriptor Discovery
 L<Mojolicious::Plugin::LRDD> provides a route shortcut
 for serving a C<lrdd> Link relation in C</.well-known/host-meta>
 (see L<Mojolicious::Plugin::HostMeta).
+
+
+=head1 HELPERS
+
+=head2 C<webfinger>
+
+  # In Controllers:
+  my $xrd = $self->lrdd('https://sojolicio.us/image.gif');
+
+Returns the LRDD L<Mojolicious::Plugin::XRD> document.
+
 
 =head1 HOOKS
 

@@ -7,7 +7,7 @@ our $DELEGATE = 'Mojolicious::Plugin::XML::XRD';
 sub register {
   my ($plugin, $mojo) = @_;
 
-  $mojo->types->type('jrd'    => 'application/json');
+  $mojo->types->type(jrd => 'application/json');
 
   # Add 'render_xrd' helper
   $mojo->helper(
@@ -97,7 +97,7 @@ L<Mojolicious::Plugin::XML>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

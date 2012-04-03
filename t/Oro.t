@@ -1,4 +1,4 @@
-use Test::More tests => 207;
+use Test::More tests => 208;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -756,5 +756,11 @@ $oro->select(Content =>
 	     sub {
 	       is($_[0]->{uccont}, 'SIMPLE CONTENT', 'Treatment');
 	     });
+
+$oro->insert(Name => { prename => '0045', surname => 'xyz777'});
+
+is($oro->load(Name => { surname => 'xyz777' })->{prename},
+   '0045',
+   'Prepended Zeros');
 
 __END__

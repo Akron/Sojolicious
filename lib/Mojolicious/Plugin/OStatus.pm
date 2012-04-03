@@ -24,11 +24,11 @@ sub register {
   };
 
   $mojo->plugin('XML' => {
-    new_ostatus => ['Atom',
-		    'ActivityStreams',
-		    'Atom::Threading',
-		    'GeoRSS',
-		    'OStatus'] # PortableContacts
+    new_ostatus => [qw/Atom
+		       ActivityStreams
+		       Atom::Threading
+		       GeoRSS
+		       OStatus/] # PortableContacts
   });
 };
 

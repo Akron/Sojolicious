@@ -1,4 +1,9 @@
-0.16 2012-02-11
+0.17 2012-04-03
+        - Made Sojolicious::ComplexValues independent from Mojo.
+        - Made M::P::Date::RFC3339 independent from Mojo.
+        - Lots of bugfixes everywhere.
+
+0.16 2012-04-02
         - Split Oro and Oro::SQLite.
 	- Added Oro::SQLite.
 	- Added snippet, offsets, and matchinfo support to Oro::SQLite.
@@ -6,6 +11,8 @@
 	- Added password support to Oro.
 	- Added treatment support to Oro.
 	- Changed default errors in Oro to be printed.
+        - Added explain method to Oro.
+        - Lots of bugfixes everywhere.
 
 0.15 2012-02-02
         - Added Mojolicious::Plugin::Oro.

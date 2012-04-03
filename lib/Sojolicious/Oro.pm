@@ -105,14 +105,15 @@ sub table {
 
   # Clone parameters
   foreach (qw/dbh created in_txn
-              savepoint pid tid/) {
+              savepoint pid tid
+	      dsn/) {
     $param{$_} = $self->{$_};
   };
 
   $param{_id} = "$self";
 
   # Bless object with hash
-  bless \%param, ref($self);
+  bless \%param, ref $self;
 };
 
 
@@ -618,6 +619,11 @@ sub prep_and_exec {
   # Check for errors
   if ($dbh->err) {
 
+    if (index($dbh->errstr, 'database') <= 0) {
+      carp $dbh->errstr . ' in "' . $sql . '"';
+      return;
+    };
+
     # Retry with reconnect
     $dbh = $self->_connect;
 
@@ -654,7 +660,34 @@ sub prep_and_exec {
 # Wrapper for DBI do
 sub do {
   $_[0]->{last_sql} = $_[1];
-  shift->dbh->do( @_ );
+  my $dbh = shift->dbh;
+  my (@rv) = $dbh->do( @_ );
+
+  carp $dbh->errstr . ' in "' . $_[0] . '"' if $dbh->err;
+  return @rv;
+};
+
+
+# Explain query plan
+sub explain {
+  my $self = shift;
+
+  # Prepare and execute explain query plan
+  my ($rv, $sth) = $self->prep_and_exec(
+    'EXPLAIN QUERY PLAN ' . shift, @_
+  );
+
+  # Query was not succesfull
+  return unless $rv;
+
+  # Create string
+  my $string;
+  foreach ( @{ $sth->fetchall_arrayref([]) }) {
+    $string .= sprintf("%3d | %3d | %3d | %-60s\n", @$_);
+  };
+
+  # Return query plan string
+  return $string;
 };
 
 
@@ -773,6 +806,8 @@ sub DESTROY {
 # Connect with database
 sub _connect {
   my $self = shift;
+
+  die 'No database given' unless $self->{dsn};
 
   # DBI Connect
   my $dbh = DBI->connect(
@@ -1581,6 +1616,17 @@ the statement handle.
 Accepts the SQL statement, parameters for binding in an array
 reference and optionally a boolean value, if the prepared
 statement should be cached.
+
+
+=head2 C<explain>
+
+  print $oro->explain(
+    'SELECT ? FROM Person', ['name']
+  );
+
+Returns the query plan for a given query as a line-breaked string.
+
+B<This method is EXPERIMENTAL and may change without warnings.>
 
 
 =head2 C<txn>

@@ -23,6 +23,7 @@ SELECT "id",
   ifnull((SELECT MAX(res_id) FROM $name),0) + 1
 MAX_ID
 
+      # TODO: This can possibly be a subquery
       my ($rv, $sth) = $oro->prep_and_exec(
 	'SELECT res_id FROM ' . $name .
 	  ' WHERE id = last_insert_rowid()');
@@ -40,7 +41,7 @@ MAX_ID
       foreach my $key (keys %$entry) {
 	my $value = $entry->{$key};
 
-	next unless $value;
+	# next unless $value;
 
 	# Todo: Better oop
 	my @pass = ($oro, $name, $id, $key, $value);

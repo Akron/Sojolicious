@@ -4,13 +4,17 @@ use Mojolicious::Plugin::XML::Base;
 use Mojo::Loader;
 
 # Namespace for xml classes and extensions
-my $space = 'Mojolicious::Plugin::XML';
+has namespace => 'Mojolicious::Plugin::XML';
 
 my %base_classes;
 
 # Register Plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
+
+  if (exists $param->{namespace}) {
+    $plugin->namespace(delete $param->{namespace});
+  };
 
   # Start Mojo::Loader instance
   my $loader = Mojo::Loader->new;
@@ -20,7 +24,7 @@ sub register {
     my @helper = @{ $param->{ $helper } };
     my $base = shift(@helper);
 
-    my $module = $space . '::' . $base;
+    my $module = $plugin->namespace . '::' . $base;
 
     # Load module if not loaded
     if (!exists $base_classes{$module}) {
@@ -55,12 +59,12 @@ sub register {
     my $code = '
 sub {
   shift; # Controller or app
-  my $doc = ' . $space . '::' . $base . '->new( @_ );';
+  my $doc = ' . $plugin->namespace . '::' . $base . '->new( @_ );';
 
     if (@helper) {
       $code .= '
   $doc->add_extension(' .
-    join(',', map( '"' . $space . '::' . $_ . '"', @helper)) .
+    join(',', map( '"' . $plugin->namespace . '::' . $_ . '"', @helper)) .
       ");\n";
     };
     $code .= '  return $doc;'."\n};";
@@ -121,7 +125,8 @@ Mojolicious::Plugin::XML - XML generation with Mojolicious
 =head1 SYNOPSIS
 
   # Mojolicious
-  $mojo->plugin('XML' => {
+  $mojo->plugin(XML => {
+    namespace    => 'Mojolicious::Plugin::XML',
     new_activity => ['Atom', 'ActivityStreams'],
     new_hostmeta => ['XRD',  'HostMeta'],
     new_myXML    => ['Base', 'Atom', 'Atom-Threading']

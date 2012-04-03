@@ -20,8 +20,7 @@ sub register {
     $mojo->attr(
       oro_handles => sub {
 	return $databases;
-      }
-    );
+      });
   };
 
   # Init databases
@@ -58,9 +57,13 @@ sub register {
    });
 };
 
+
 1;
 
+
 __END__
+
+=pod
 
 =head1 NAME
 
@@ -90,11 +93,13 @@ L<Sojolicious::Oro>.
       file => 'Database/Books.sqlite',
       init => sub {
         my $oro = shift;
-        $oro->do('CREATE TABLE Content (
-                     id      INTEGER PRIMARY KEY,
-                     title   TEXT,
-                     content TEXT
-                  )') or return -1;
+        $oro->txn(sub{
+          $oro->do('CREATE TABLE Content (
+                       id      INTEGER PRIMARY KEY,
+                       title   TEXT,
+                       content TEXT
+                    )') or return -1;
+          }) or return;
       }
     }}
   );
@@ -112,7 +117,8 @@ parameter C<file> and an optional anonymous function with
 the parameter C<init>.
 The callback is executed on initialization if the database
 is newly created. The first argument passed to the callback
-is the associated C<Sojolicious::Oro> handle.
+is the associated C<Sojolicious::Oro> handle. The callback
+is executed inside a transaction, so it expects
 
 =head1 HELPERS
 
@@ -128,7 +134,7 @@ a table name.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious> (best with SSL support),
+L<Mojolicious>,
 L<Sojolicious::Oro>.
 
 =head1 AVAILABILITY

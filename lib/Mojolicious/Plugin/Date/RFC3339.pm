@@ -1,13 +1,7 @@
 package Mojolicious::Plugin::Date::RFC3339;
-use Mojo::Base -base;
 use overload '""' => sub { shift->to_string }, fallback => 1;
 
 require Time::Local;
-
-has 'epoch';
-has 'granularity' => 0;
-
-# Based on Mojo::Date
 
 # rfc3339 timestamp
 my $RFC3339_RE = qr/^(\d{4})          # year
@@ -28,7 +22,8 @@ my $OFFSET_RE = qr/^([-\+])(\d?\d)(?::(\d?\d))?$/;
 
 # Constructor
 sub new {
-  my $self = shift->SUPER::new;
+  my $self = bless {}, shift;
+  $self->granularity(0);
   $self->parse(@_);
   return $self;
 };
@@ -110,6 +105,7 @@ sub parse {
   return $self;
 };
 
+
 # return string
 sub to_string {
   my $self  = shift;
@@ -131,6 +127,31 @@ sub to_string {
 
   return sprintf($s, @a);
 };
+
+
+# Epoch datetime
+sub epoch {
+  my $self = shift;
+  return $self->{epoch} unless @_;
+  if ($_[0] =~ /^[0-9]+$/ && $_[0]) {
+    $self->{epoch} = shift;
+    return 1;
+  };
+  return;
+};
+
+
+# Granularity
+sub granularity {
+  my $self = shift;
+  return $self->{granularity} unless @_;
+  if (defined $_[0] && $_[0] =~ /^[0-4]$/) {
+    $self->{granularity} = shift;
+    return 1;
+  };
+  return;
+};
+
 
 1;
 
@@ -177,17 +198,22 @@ Epoch seconds.
 Level of granularity.
 
 =over 2
-  item 0: Complete date plus hours, minutes and seconds
-  item 1: Complete date plus hours and minutes
-  item 2: Complete date
-  item 3: Year and month
-  item 4: Year
+
+=item 0: Complete date plus hours, minutes and seconds
+
+=item 1: Complete date plus hours and minutes
+
+=item 2: Complete date
+
+=item 3: Year and month
+
+=item 4: Year
+
 =back
 
 =head1 METHODS
 
-L<Mojolicious::Plugin::Date::RCF3339> inherits all methods from
-L<Mojo::Base> and implements the following new ones.
+L<Mojolicious::Plugin::Date::RCF3339> implements the following methods.
 
 =head2 C<new>
 
@@ -215,7 +241,6 @@ Uses the objects granularity level by default.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>,
 L<Time::Local>.
 
 =head1 COPYRIGHT AND LICENSE
@@ -228,7 +253,7 @@ for additional copyright and license information.
 
   https://github.com/Akron/Sojolicious
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

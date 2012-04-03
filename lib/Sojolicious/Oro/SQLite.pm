@@ -47,6 +47,9 @@ sub new {
   # Data source name
   $self->{dsn} = 'dbi:SQLite:dbname=' . $self->file;
 
+  # Attach hash
+  $self->{attached} = {};
+
   # Return object
   $self;
 };
@@ -59,6 +62,11 @@ sub _connect {
 
   # Set busy timeout
   $dbh->sqlite_busy_timeout( $self->{busy_timeout} || 300 );
+
+  # Reattach possibly attached databases
+  while (my ($db_name, $file) = each %{$self->{attached}}) {
+    $self->prep_and_exec("ATTACH '$file' AS ?", [$db_name]);
+  };
 
   # Return database handle
   $dbh;
@@ -122,7 +130,9 @@ sub attach {
 
   # Attach file, memory or temporary database
   if ($file eq ':memory:' || length($file) == 0 || -e $file) {
-    return scalar $self->prep_and_exec("ATTACH '$file' AS ?", [$db_name]);
+    my $rv = scalar $self->prep_and_exec("ATTACH '$file' AS ?", [$db_name]);
+    $self->{attached}->{$db_name} = $file if $rv;
+    return $rv;
   };
 
   return;
@@ -133,6 +143,7 @@ sub attach {
 sub detach {
   my ($self, $db_name) = @_;
   return unless $db_name;
+  delete $self->{attached}->{$db_name};
   return scalar $self->prep_and_exec('DETACH ?', [$db_name]);
 };
 

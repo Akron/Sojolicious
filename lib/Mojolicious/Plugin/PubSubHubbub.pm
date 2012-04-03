@@ -12,11 +12,17 @@ has 'hub';
 # Character set for challenge
 my @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9 );
 
+# Todo: Support Link-Headers for discovery-Method,
+#       when subscribing to html, rss without hub etc.
+
+
 # Register plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
   $plugin->hub($param->{hub}) if $param->{hub};
+
+  push (@{ $mojo->renderer->classes }, __PACKAGE__);
 
   # Add 'pubsub' shortcut
   $mojo->routes->add_shortcut(
@@ -476,18 +482,17 @@ sub _render_success {
 
   # Render success with no content
   return $c->render(
-    'status' => 204,
-    'format' => 'text',
-    'data'   => ''
+    status => 204,
+    format => 'text',
+    data   => ''
   );
 };
 
 # Render fail
 sub _render_fail {
   return shift->render(
-    'template'       => 'pubsub-endpoint',
-    'template_class' => __PACKAGE__,
-    'status'         => 400  # bad request
+    template => 'pubsub-endpoint',
+    status   => 400  # bad request
   );
 };
 

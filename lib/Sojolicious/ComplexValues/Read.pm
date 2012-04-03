@@ -56,12 +56,17 @@ sub read {
   # Id request
   if (defined $id) {
 
+    # Todo:
+    #  - Fetch cached single request
+    #  - Fields?
+
     # Fetch all res_ids based on ids
     my ($sql, $bind_param) = _id_sql($name, { %$param }, $id);
 
     # Fetch all entry lines
     my ($rv, $sth) = $oro->prep_and_exec($sql, $bind_param);
 
+    # Return on failure
     return unless $rv;
 
     my $entry_lines = $sth->fetchall_arrayref;
@@ -69,12 +74,20 @@ sub read {
     # Single entry
     if ($single) {
       ($resource[0]) = _lines_to_entries($entry_lines);
+
+      # Todo:
+      #  - Save cached single request
+
       $total_results = 1 if $resource[0];
     }
 
     # Multiple entries
     else {
       @resource = _lines_to_entries($entry_lines);
+
+      # Todo:
+      #  - Save cached single requests (multiple)
+
       $total_results = scalar(@resource);
     };
   }
@@ -97,9 +110,10 @@ sub read {
     };
 
     # Prepare and execute
-    my ($rv, $sth) = $oro->prep_and_exec($sql, $bind_param, 'cached');;
+    my ($rv, $sth) = $oro->prep_and_exec($sql, $bind_param, 'cached');
 
-    # Todo: Check for rv
+    # Todo:
+    #  - Check for rv
 
     # Fetch all matching ids
     my @matches = map { $_->[0] }  @{$sth->fetchall_arrayref};
@@ -126,7 +140,8 @@ sub read {
       # Prepare
       my ($rv, $sth) = $oro->prep_and_exec($sql, $bind_param, 'cached');
 
-      # Todo: Check for rv
+      # Todo:
+      #  - Check for rv
 
       my $entry_lines = $sth->fetchall_arrayref;
 
@@ -224,10 +239,31 @@ sub _multiple_basic_sql {
   # Get date construct
   my $date;
   if (exists $param->{updatedSince}) {
-    $date = Mojolicious::Plugin::Date::RFC3339->new(
-      delete $param->{updatedSince}
-    );
-    $date = $date ? $date->epoch : undef;
+
+    # Mojolicious::Plugin::RFC3339 loaded
+    if ($Sojolicious::ComplexValues::RFC eq 'Mojolicious') {
+      $date = Mojolicious::Plugin::Date::RFC3339->new(
+	delete $param->{updatedSince}
+      );
+      $date = $date ? $date->epoch : undef;
+    }
+
+    # DateTime::Format::RFC3339 loaded
+    else {
+      my $us = delete $param->{updatedSince};
+
+      # Epoch string
+      if ($us =~ /^[0-9]+$/ && $us > 5000) {
+	$date = $us;
+      }
+
+      # Datetime string
+      else {
+	my $dt = DateTime::Format::RFC3339->new;
+	$dt->parse_datetime($us);
+	$date = $dt->epoch;
+      };
+    };
   };
 
   # Simple updatedSince access

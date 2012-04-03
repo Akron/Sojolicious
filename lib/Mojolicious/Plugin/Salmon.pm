@@ -1,40 +1,29 @@
 package Mojolicious::Plugin::Salmon;
 use Mojo::Base 'Mojolicious::Plugin';
 
-has 'host';
-has 'secure' => 0;
-
+# Salmon namespaces
 use constant {
   SALMON_REPLIES_NS   => 'http://salmon-protocol.org/ns/salmon-replies',
   SALMON_MENTIONED_NS => 'http://salmon-protocol.org/ns/salmon-mention'
 };
 
+
 # Register plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Push package to render classes for DATA sections
+  push (@{ $mojo->renderer->classes }, __PACKAGE__);
+
   # Load magic signatures if not loaded
-  # Automatically loads webfinger, hostmeta, endpoint and xrd.
+  # Automatically loads webfinger, hostmeta, endpoint, and xrd.
   unless (exists $mojo->renderer->helpers->{'magicenvelope'}) {
-    $mojo->plugin('MagicSignatures', {'host' => $param->{'host'}} );
+    $mojo->plugin('MagicSignatures');
   };
-
-  # Todo: Delete all security and host things
-  # Attributes
-  # set host
-  if (defined $param->{host}) {
-    $plugin->host($param->{host});
-  } else {
-# TODO: This is not supported anymore!
-    $plugin->host( $mojo->hostmeta('host') || 'localhost' );
-  };
-
-  # Does it need ssl or not
-  $plugin->secure( $param->{secure} );
 
   # Add 'salmon' shortcut
   $mojo->routes->add_shortcut(
-    'salmon' => sub {
+    salmon => sub {
       my ($route, $param) = @_;
 
       # Not a valid shortcut parameter
@@ -45,20 +34,15 @@ sub register {
 
       # Handle GET requests
       $route->get->to(
-	'cb' => sub {
+	cb => sub {
 	  return shift->render(
-	    'template'       => 'salmon-endpoint',
-	    'template_class' => __PACKAGE__,
-	    'status'         => 400 # bad request
+	    template => 'salmon-endpoint',
+	    status   => 400 # bad request
 	  );
 	});
 
       # Set salmon endpoints
-      $route->endpoint(
-	'salmon-' . $param => {
-	  scheme => $plugin->secure ? 'https' : 'http',
-	  host   => $plugin->host
-	});
+      $route->endpoint('salmon-' . $param);
 
       # All replies route
       # Todo: Both routes can be merged to one
@@ -66,7 +50,7 @@ sub register {
 
 	# Add reply handle to webfinger
 	$mojo->hook(
-	  'before_serving_webfinger' => sub {
+	  before_serving_webfinger => sub {
 	    my ($c, $acct, $xrd) = @_;
 
 	    # Todo: pass acct to endpoint
@@ -87,7 +71,7 @@ sub register {
 
 	# Add mention handle to webfinger
 	$mojo->hook(
-	  'before_serving_webfinger' => sub {
+	  before_serving_webfinger => sub {
 	    my ($c, $acct, $xrd) = @_;
 
 	    # Todo: pass acct to endpoint
@@ -100,7 +84,7 @@ sub register {
 
 	# Handle POST requests
 	$route->post->to(
-	  'cb' => sub { $plugin->_salmon_response( 'mentioned', @_ ) }
+	  cb => sub { $plugin->_salmon_response( 'mentioned', @_ ) }
 	);
       }
 
@@ -126,7 +110,7 @@ sub register {
 	  );
 
 	$route->post->to(
-	  'cb' => sub { $plugin->_signer( @_ ); }
+	  cb => sub { $plugin->_signer( @_ ); }
 	);
       };
     });
@@ -146,10 +130,10 @@ sub salmon {
 
   my $ct = $c->req->headers->content_type;
 
+  # Content-Type is magic envelope
   if (index($ct, 'application/magic-envelope') == 0) {
-    my ($unwrapped_ct,
-	$unwrapped_body) =
-	  $c->magicenvelope($c->req->body)->data;
+    my ($unwrapped_ct, $unwrapped_body) =
+      $c->magicenvelope($c->req->body)->data;
 
     # Use Atom information
     # elsif ($me->data_type eq 'application/atom+xml') {
@@ -163,24 +147,24 @@ sub salmon {
     # };
 
     $c->respond_to(
-      'me+xml'  => { text =>
-		       'XML: '.
-			 $unwrapped_ct.
-			   "\n\n".
-			     $unwrapped_body },
-      'me+json' => { text =>
-		       'JSON: '.
-			 $unwrapped_ct.
-			   "\n\n".
-			     $unwrapped_body}
+      'me+xml'  => {
+	text => 'XML: ' . $unwrapped_ct . "\n\n" . $unwrapped_body
+      },
+      'me+json' => {
+	text => 'JSON: ' . $unwrapped_ct . "\n\n" . $unwrapped_body
+      }
     );
   }
 
   # No magic envelope
   else {
-    $c->render_text('Booh! No me!');
+    return $c->render(
+      template => 'salmon-no-me',
+      status   => 400 # bad request
+    );
   };
 };
+
 
 # To be implemented!
 # Needs OAuth token check
@@ -260,8 +244,7 @@ sub _salmon_response {
       title    => 'Salmon Error',
       content  => 'The posted magic ' .
 	          'envelope seems ' .
-	          'to be empty.',
-      template_class => __PACKAGE__
+	          'to be empty.'
     )
   };
 
@@ -295,8 +278,7 @@ sub _salmon_response {
     unless ($c->rendered) {
       $c->render(
 	status         => 200,
-	template       => 'salmon-' . $action . '-ok',
-	template_class => __PACKAGE__
+	template       => 'salmon-' . $action . '-ok'
       );
     };
     return;
@@ -311,8 +293,7 @@ sub _salmon_response {
     template => 'salmon',
     title    => 'Salmon Error',
     content  => 'The posted magic ' .
-                "envelope can't be validated.",
-    template_class => __PACKAGE__
+                "envelope can't be validated."
   );
 };
 
@@ -425,8 +406,7 @@ __DATA__
       <a href="http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html">Salmon protocol</a>
     </p>
     <p>
-      There is no reason to <emph>get</emph>
-      this ressource.
+      There is no reason to <emph>get</emph> this ressource.
       However - feel free to <emph>post</emph>!
     </p>
 
@@ -437,6 +417,11 @@ __DATA__
 @@ salmon-mentioned-ok.html.ep
 % layout 'salmon', title => 'Salmon'
    <p>Thank you for your mention.</p
+
+@@ salmon-no-me.html.ep
+% layout 'salmon', title => 'Salmon Magic Envelope'
+   <p>This endpoint expects a magic envelope, see <a href="http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html">Salmon protocol</a>.</p
+
 
 __END__
 
@@ -450,7 +435,7 @@ Mojolicious::Plugin::Salmon - A Salmon Plugin for Mojolicious
 
   use Mojolicious::Lite;
 
-  plugin 'Salmon', host => 'example.org';
+  plugin 'Salmon';
 
   my $r = app->routes;
 
@@ -465,22 +450,6 @@ Mojolicious::Plugin::Salmon - A Salmon Plugin for Mojolicious
 
 L<Mojolicious::Plugin::Salmon> is a plugin for L<Mojolicious>
 to work with Salmon as described in L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html|Specification>.
-
-=head1 ATTRIBUTES
-
-=head2 C<host>
-
-  $salmon->host('sojolicio.us');
-  my $host = $salmon->host;
-
-The host for the salmon domain.
-
-=head2 C<secure>
-
-  $salmon->secure(1);
-  my $sec = $salmon->secure;
-
-Use C<http> or C<https>.
 
 =head1 SHORTCUTS
 

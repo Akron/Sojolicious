@@ -1,6 +1,26 @@
 package Sojolicious::ComplexValues;
-use Mojo::Base -base;
-use Mojolicious::Plugin::Date::RFC3339;
+use strict;
+use warnings;
+use Carp qw/carp croak/;
+
+BEGIN {
+  # Load RFC3339 module
+  foreach (qw/Mojolicious::Plugin::Date::RFC3339
+	      DateTime::Format::RFC3339/) {
+    if (eval "require $_; 1;") {
+      next if index($@, "Can't locate") == 0;
+      ($Sojolicious::ComplexValues::RFC) = ($_ =~ /^([^:]+):/);
+      last;
+    };
+  };
+
+  # Unable to load
+  croak 'Unable to load RFC3339 module'
+    unless $Sojolicious::ComplexValues::RFC;
+};
+
+# Load Oro module
+use Sojolicious::Oro;
 
 # Load CRUD methods
 use Sojolicious::ComplexValues::Create;
@@ -18,24 +38,38 @@ use Sojolicious::ComplexValues::Delete;
 #       and return an error response for all actions
 # Todo: Use carp and croak
 # Todo: Check for possible views
+# Todo: Maybe use UNIQUE keyword
+# Todo: Don't use Mojo::Base
 
-has [qw/oro name/];
-has items_per_page => 10;
+# Todo:
+# - Use CHI caching
+# - Simple Caching of users
 
+my $NAME_RE = qr{^[_a-zA-Z][_a-zA-Z0-9]*$};
 
 # Constructor
 sub new {
-  my $self = shift->SUPER::new(@_);
+  my $class = shift;
+  my $self = bless { @_ }, $class;
 
-  unless ($self->{oro} ||
-	  ref($self->{oro}) ne 'Sojolicious::Oro') {
-    warn 'You need to define a Sojolicious::Oro handle';
-    return;
+  # Set default items per page
+  unless (defined $self->{items_per_page}) {
+    $self->{items_per_page} = 10;
+  };
+
+  if (!$self->{oro} ||
+	index(ref($self->{oro}), 'Sojolicious::Oro') != 0) {
+
+    # In-memory database
+    $self->{oro} = Sojolicious::Oro->new(
+      driver => 'SQLite',
+      file   => ':memory:'
+    );
   };
 
   unless ($self->{name} &&
-          $self->{name} =~ /^[_a-zA-Z][_a-zA-Z0-9]*$/) {
-    warn 'You need to define a valid table name';
+	  $self->{name} =~ $NAME_RE) {
+    carp 'You need to define a valid table name';
     return;
   };
 
@@ -125,7 +159,45 @@ TRIGGER
     });
 };
 
+
+# Oro Attribute
+sub oro {
+  my $self = shift;
+  return $self->{oro} unless @_;
+  if (index(ref($_[0]), 'Sojolicious::Oro') == 0) {
+    $self->{oro} = shift;
+    return 1;
+  };
+  return;
+};
+
+
+# Name Attribute
+sub name {
+  my $self = shift;
+  return $self->{name} unless @_;
+  if ($_[0] =~ $NAME_RE) {
+    $self->{name} = shift;
+    return 1;
+  };
+  carp 'You need to define a valid table name';
+  return;
+};
+
+
+# Items per Page Attribute
+sub items_per_page {
+  my $self = shift;
+  return $self->{items_per_page} unless @_;
+  if ($_[0] =~ /^[0-9]+$/ && $_[0]) {
+    $self->{items_per_page} = shift;
+    return 1;
+  };
+  return;
+};
+
 1;
+
 
 __END__
 
@@ -186,7 +258,7 @@ Sojolicious::ComplexValues - Database accessor for complex values
 =head1 Description
 
 L<Sojolicious::ComplexValues> allows for storing and retrieving
-values with limited complexity in SQL databases.
+values with limited complexity in SQL databases (semi-schemaless).
 It supports the query language of the
 L<http://portablecontacts.net/draft-spec.html#query-params|PortableContacts>
 specification.
@@ -228,7 +300,7 @@ Defaults to 10.
   );
 
 Creates a new complex value database acceptor.
-Accepts a hash reference containing at least a handle to a
+Accepts a hash reference containing a handle to a
 L<Sojolicious::Oro> instance and the name of the table.
 In addition it allows for setting the value for items
 shown per page on read (if not specified on retrieval).
@@ -409,7 +481,7 @@ with a defined '.' character, for example 'name.givenName'.
 =item C<filterOp>
 
 Defines the relation of the field and the given C<filterValue>.
-Defined values are L<equals> for identical strings,
+Defined values are C<equals> for identical strings,
 C<contains> for matching substrings and C<startswith> for matching prefixes.
 C<present> checks for the existence of the field and does not need
 a C<filterValue>.
@@ -628,8 +700,8 @@ Returns a true value on success, otherwise C<undef>.
 
 =head1 DEPENDENCIES
 
-L<Mojolicious>,
 L<Sojolicious::Oro>,
+L<DateTime::Format::RFC3339> or
 L<Mojolicious::Plugin::Date::RFC3339>.
 
 =head1 AVAILABILITY
@@ -638,7 +710,7 @@ L<Mojolicious::Plugin::Date::RFC3339>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

@@ -2,6 +2,7 @@ package Mojolicious::Plugin::Webfinger;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 
+
 # Register Plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
@@ -12,9 +13,10 @@ sub register {
     $mojo->plugin('LRDD');
   };
 
+
   # Add 'webfinger' helper
   $mojo->helper(
-    'webfinger' => sub {
+    webfinger => sub {
       my $c = shift;
       my ($user, $domain, $norm) = $c->parse_acct( shift );
 
@@ -22,12 +24,14 @@ sub register {
       if ($domain ~~ [$c->req->url->host, 'localhost']) {
 	return $plugin->_serve_webfinger($c, $norm);
       };
+
       return $c->lrdd($norm => $domain);
     });
 
+
   # Add 'parse_acct' helper
   $mojo->helper(
-    'parse_acct' => sub {
+    parse_acct => sub {
       my ($c, $acct) = @_;
 
       # Delete scheme if exists
@@ -51,9 +55,10 @@ sub register {
       return $norm;
     });
 
+
   # on prepare webfinger hook
   $mojo->hook(
-    'on_prepare_lrdd' => sub {
+    on_prepare_lrdd => sub {
       my ($lrdd_plugin, $c, $uri, $ok_ref) = @_;
 
       my ($user, $domain, $norm);
@@ -61,7 +66,7 @@ sub register {
 
 	# Emit 'on_prepare_webfinger' hook
 	$mojo->plugins->emit_hook(
-	  'on_prepare_webfinger' => (
+	  on_prepare_webfinger => (
 	    $plugin, $c, $uri, $ok_ref
 	  ));
 
@@ -92,11 +97,11 @@ sub _serve_webfinger {
       $domain ~~ [$c->req->url->host, 'localhost']) {
 
     my $wf_xrd = $c->new_xrd;
-    $wf_xrd->add('Subject' => $norm);
+    $wf_xrd->add(Subject => $norm);
 
     # Run hook
     $c->app->plugins->emit_hook(
-      'before_serving_webfinger' => (
+      before_serving_webfinger => (
 	$plugin, $c, $norm, $wf_xrd
       ));
 
@@ -107,7 +112,9 @@ sub _serve_webfinger {
   return undef;
 };
 
+
 1;
+
 
 __END__
 
@@ -209,7 +216,7 @@ L<Mojolicious::Plugin::LRDD>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

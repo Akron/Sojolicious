@@ -56,7 +56,7 @@ sub register {
 
   # Add 'endpoint' helper
   $mojo->helper(
-    'endpoint' => sub {
+    endpoint => sub {
       my $c           = shift;
       my $name        = shift;
       my $given_param = shift || {};
@@ -89,15 +89,11 @@ sub register {
 
       # Unescape template variables
       $endpoint =~
-	s/\%7[bB](.+?)%7[dD]/'{'.b($1)->url_unescape.'}'/ge;
+	s/\%7[bB](.+?)\%7[dD]/'{' . b($1)->url_unescape . '}'/ge;
 
       # Get stash or defaults hash
       my $stash_param = ref($c) eq 'Mojolicious::Controller' ?
-	                $c->stash :
-			(
-			  ref($c) eq 'Mojolicious' ?
-			  $c->defaults : {}
-			);
+	$c->stash : ( ref $c eq 'Mojolicious' ? $c->defaults : {} );
 
       # Interpolate template
       pos($endpoint) = 0;

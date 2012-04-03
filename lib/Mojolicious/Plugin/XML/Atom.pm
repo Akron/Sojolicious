@@ -476,8 +476,8 @@ parameters accepted by L<new_person>.
   $atom->add_category('world');
 
 Adds category information to the Atom object.
-Accepts either a hash for attributes or one string
-representing the categories term.
+Accepts either a hash for attributes (with, e.g., term and label)
+or one string representing the categories term.
 
 =head2 C<add_contributor>
 
@@ -501,7 +501,7 @@ Adds generator information to the Atom object.
 
 Adds a URI to an icon associated with the Atom object.
 The image should be suitable for small representation size
-and have an aspect ratio of 1:1. 
+and have an aspect ratio of 1:1.
 
 =head2 C<add_id>
 
@@ -527,7 +527,7 @@ or multiple hashes for the attributes of the link.
   $atom->add_logo('http://sojolicio.us/sojolicious.png');
 
 Adds a URI to a logo associated with the Atom object.
-The image should have an aspect ratio of 2:1. 
+The image should have an aspect ratio of 2:1.
 
 =head2 C<add_published>
 
