@@ -1,6 +1,9 @@
 package Sojolicious::ComplexValues;
 use strict;
 use warnings;
+
+our $VERSION = '0.01';
+
 use Carp qw/carp croak/;
 
 BEGIN {
@@ -65,6 +68,12 @@ sub new {
       driver => 'SQLite',
       file   => ':memory:'
     );
+  }
+
+  # Temporary
+  elsif ($self->{oro}->driver ne 'SQLite') {
+    carp __PACKAGE__ . ' ' . $VERSION . ' supports SQLite only';
+    return;
   };
 
   unless ($self->{name} &&
@@ -157,6 +166,8 @@ END
 TRIGGER
 
     });
+
+  return $self;
 };
 
 
@@ -696,7 +707,7 @@ the database file was just created, for example like this:
     $cv->init_db or die 'Unable to create database!';
   };
 
-Returns a true value on success, otherwise C<undef>.
+Returns the complex value object on success, otherwise C<undef>.
 
 =head1 DEPENDENCIES
 

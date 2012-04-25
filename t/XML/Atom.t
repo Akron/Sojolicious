@@ -5,12 +5,13 @@ use warnings;
 $|++;
 
 use lib '../lib';
+use lib '../../lib';
 
 use Mojo::ByteStream 'b';
 use Test::Mojo;
 use Mojolicious::Lite;
 
-use Test::More tests => 89;
+use Test::More tests => 95;
 
 my $poco_ns  = 'http://www.w3.org/TR/2011/WD-contacts-api-20110616/';
 my $xhtml_ns = 'http://www.w3.org/1999/xhtml';
@@ -37,6 +38,7 @@ $text = $atom->new_text(type => 'xhtml',
 is($text->at('text')->text, '', 'Text: xhtml1');
 is($text->at('text')->all_text, 'Hello World!', 'Text: xhtml2');
 is($text->at('div')->namespace, $xhtml_ns, 'Text: xhtml3');
+
 
 $text = $atom->new_text('xhtml' => 'Hello <strong>World</strong>!');
 is($text->at('text')->text, '', 'Text: xhtml4');
@@ -390,14 +392,15 @@ $date = $atom->new_date(1313131313);
 $atom->add_updated($date);
 is($atom->at('updated')->text, '2011-08-12T06:41:53Z', 'Updated');
 
-__END__
-
 # Plugin helper
 my $t = Test::Mojo->new;
 my $app = $t->app;
 
-$app->plugin('atom');
-$atom = $app->new_atom;
+$app->plugin('XML' => {
+  'new_atom' => ['Atom']
+});
+
+$atom = $app->new_atom('feed');
 
 my $atom_string = $atom->to_pretty_xml;
 $atom_string =~ s/[\s\r\n]+//g;
@@ -407,7 +410,6 @@ is ($atom_string, '<?xmlversion="1.0"encoding="UTF-8'.
                   'tp://www.w3.org/2005/Atom"/>',
                   'Initial Atom');
 
-
 $entry = $atom->add_entry(id => '#33775');
 $entry->add_author($person);
 
@@ -416,4 +418,18 @@ is($atom->at('author uri')->text, 'http://sojolicio.us/fry', 'Author-URI');
 is($atom->at('author birthday')->text, '1/1/1970', 'Author-Poco-Birthday');
 is($atom->at('author birthday')->namespace, $poco_ns, 'Author-Poco-NS');
 
-$atom->add_contributor($person);
+$atom->add_title(
+  type => 'html',
+  content => 'Dies ist <b>html</b> Inhalt.'
+);
+
+$atom->add_content(
+  type => 'xhtml',
+  content => 'This is <b>xhtml</b> content!'
+);
+
+my $atom2 = $app->new_atom($atom->to_pretty_xml);
+
+is($atom2->at('content div b')->text, 'xhtml', 'Pretty Print');
+
+__END__

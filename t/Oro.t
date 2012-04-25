@@ -1,4 +1,4 @@
-use Test::More tests => 208;
+use Test::More tests => 216;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
@@ -53,6 +53,27 @@ ok($oro->dbh->disconnect, 'Disonnect');
 
 ok($oro->insert(Content => {
   title => 'Test', content => 'Value 2'
+}), 'Reconnect');
+
+ok($oro->on_connect(
+  sub {
+    ok(1, 'on_connect release 1')}
+), 'on_connect');
+
+ok($oro->on_connect(
+  testvalue => sub {
+    ok(1, 'on_connect release 2')}
+), 'on_connect');
+
+ok(!$oro->on_connect(
+  testvalue => sub {
+    ok(0, 'on_connect release 3')}
+), 'on_connect');
+
+ok($oro->dbh->disconnect, 'Disconnect');
+
+ok($oro->insert(Content => {
+  title => 'Test', content => 'Value 3'
 }), 'Reconnect');
 
 unlink $db_file;
@@ -762,5 +783,17 @@ $oro->insert(Name => { prename => '0045', surname => 'xyz777'});
 is($oro->load(Name => { surname => 'xyz777' })->{prename},
    '0045',
    'Prepended Zeros');
+
+ok(length($oro->explain(
+  'SELECT
+     Name.prename AS "author",
+     Book.title AS "title",
+     Book.year AS "year"
+   FROM
+     Name,
+     Book
+   WHERE
+     Name.id = Book.author_id AND
+     author_id = ?', [4])) > 0, 'Explain');
 
 __END__

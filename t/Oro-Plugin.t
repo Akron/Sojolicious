@@ -1,13 +1,14 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite;
+use Test::More tests => 14;
+use Test::Mojo;
+use Data::Dumper 'Dumper';
 
 $|++;
 
 use lib '../lib';
+use_ok 'Sojolicious::Oro';
 
-use Test::More tests => 13;
-use Test::Mojo;
-use Data::Dumper 'Dumper';
 
 my $t = Test::Mojo->new;
 my $app = $t->app;
@@ -30,6 +31,8 @@ $app->plugin('oro' => {
 
 my $c = Mojolicious::Controller->new;
 $c->app($app);
+
+Mojo::IOLoop->start;
 
 my $books = $c->oro('Books');
 ok($books, 'Oro handle');

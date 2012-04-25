@@ -3,8 +3,9 @@ use strict;
 use warnings;
 
 use lib '../lib';
+use lib '../../lib';
 
-use Test::More tests => 21;
+use Test::More tests => 22;
 
 use_ok('Mojolicious::Plugin::XML::Base');
 
@@ -89,4 +90,7 @@ my $data = $env->add('data' => { type => 'base64',
 B64
 $data->comment('This is base64 data!');
 
-# diag $xml->to_pretty_xml;
+$xml->add('div' => { -type => 'raw' } => 'That\'s <b>coool</b>');
+
+my $read = Mojolicious::Plugin::XML::Base->new($xml->to_pretty_xml);
+is($read->at('div b')->text, 'coool', 'Raw rendered');

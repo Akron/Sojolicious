@@ -15,6 +15,7 @@ sub register {
   # Hash of database handles
   my $databases = $mojo->attr('oro_handles');
 
+  # No databases attached
   unless ($databases) {
     $databases = {};
     $mojo->attr(
@@ -24,21 +25,35 @@ sub register {
   };
 
   # Init databases
-  foreach my $name (keys %$param) {
-    my $db = $param->{$name};
+  Mojo::IOLoop->timer(
+    0 => sub {
 
-    # Already exists
-    next if exists $databases->{$name};
+      foreach my $name (keys %$param) {
+	my $db = $param->{$name};
 
-    # Get Database handle
-    my $oro = Sojolicious::Oro->new( %$db );
+	# Already exists
+	next if exists $databases->{$name};
 
-    # No succesful creation
-    croak "Unable to create database handle '$name'" unless $oro;
+	# Get Database handle
+	my $oro = Sojolicious::Oro->new(
+	  %$db,
+	  on_connect => sub {
+	    my $oro = shift;
+	    $mojo->log->info(
+	      'Connect from ' . $$ .
+	      ' instead of ' . $oro->{pid}
+	    );
+          }
+	);
 
-    # Store database handle
-    $databases->{$name} = $oro;
-  };
+	# No succesful creation
+	croak "Unable to create database handle '$name'" unless $oro;
+
+	# Store database handle
+	$databases->{$name} = $oro;
+      };
+    }
+  );
 
   # Add helper
   $mojo->helper(
@@ -74,7 +89,7 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
   $app->plugin('Oro' => {
     Books => {
       file => 'Database/Books.sqlite'
-    }}
+    }
   );
 
   $c->oro('Books')->insert(Content => { title => 'Misery' });
@@ -85,7 +100,21 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
 L<Mojolicious::Plugin::Oro> is a simple plugin to work with
 L<Sojolicious::Oro>.
 
-=head1 REGISTER
+=head1 HELPERS
+
+=head2 C<oro>
+
+  # In Controllers:
+  $c->oro('Books')->insert(Content => { title => 'Misery' });
+  print $c->oro(Books => 'Content')->count;
+
+Returns an Oro database handle if registered.
+Accepts the name of the registered database and optionally
+a table name.
+
+=head1 METHODS
+
+=head2 C<register>
 
   # Mojolicious
   $app->plugin('Oro' => {
@@ -106,31 +135,12 @@ L<Sojolicious::Oro>.
 
   # Mojolicious::Lite
   plugin 'Oro' => {
-    Books => {
-      file => 'Database/Books.sqlite'
-    }
+    Books => { file => 'Database/Books.sqlite' }
   };
 
 On creation, the plugin accepts a hash of database names
-associated with hashrefs, giving the filename with the
-parameter C<file> and an optional anonymous function with
-the parameter C<init>.
-The callback is executed on initialization if the database
-is newly created. The first argument passed to the callback
-is the associated C<Sojolicious::Oro> handle. The callback
-is executed inside a transaction, so it expects
+associated with a L<Sojolicious::Oro> object.
 
-=head1 HELPERS
-
-=head2 C<oro>
-
-  # In Controllers:
-  $c->oro('Books')->insert(Content => { title => 'Misery' });
-  print $c->oro(Books => 'Content')->count;
-
-Returns an Oro database handle if registered.
-Accepts the name of the registered database and optionally
-a table name.
 
 =head1 DEPENDENCIES
 

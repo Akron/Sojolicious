@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.15';
+our $VERSION = '0.18';
 
 1;
 
@@ -142,7 +142,7 @@ L<http://ostatus.org/>.
 
 =head1 ... and?
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

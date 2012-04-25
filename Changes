@@ -1,3 +1,9 @@
+0.18 2012-04-25
+        - Added on_connect event to Oro.
+        - Made Oro-Plugin work with Hypnotoad.
+        - Deleted Waypoints from PortableContacts.
+        - Fixed a pretty printer bug in M::P::XML::Base.
+
 0.17 2012-04-03
         - Made Sojolicious::ComplexValues independent from Mojo.
         - Made M::P::Date::RFC3339 independent from Mojo.

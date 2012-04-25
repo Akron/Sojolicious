@@ -78,7 +78,8 @@ sub register {
       );
 
       # Add route /@me/@all/
-      my $me_all = $route->waypoint('/');
+      my $me_all = $route->route('/');
+
       for ($me_all) {
 	$_->name('poco/@me/@all-1');
 
@@ -87,10 +88,18 @@ sub register {
 	  cb => sub {
 	    $plugin->serve( shift );
 	  });
+      };
+
+      $me_all = $route->route('/@me/@all');
+
+      for ($me_all) {
+	$_->name('poco/@me/@all-2');
 
 	# Explicit Route
-	$_->route('/@me/@all')
-	  ->name('poco/@me/@all-2')->to;
+	$_->to(
+	  cb => sub {
+	    $plugin->serve( shift );
+	  });
       };
 
       # Add route /@me/@all/{id}
@@ -403,7 +412,7 @@ L<Mojolicious::Plugin::HostMeta>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

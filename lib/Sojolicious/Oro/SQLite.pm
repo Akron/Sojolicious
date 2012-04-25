@@ -2,6 +2,9 @@ package Sojolicious::Oro::SQLite;
 use strict;
 use warnings;
 
+# Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
+use constant MAX_COMP_SELECT => 500;
+
 use base 'Sojolicious::Oro';
 use feature qw/switch state/;
 use Carp qw/carp/;
@@ -81,6 +84,51 @@ sub file { $_[0]->{file} // '' };
 sub driver { 'SQLite' };
 
 
+# Database was just created
+sub created {
+  my $self = shift;
+
+  # Creation state is 0
+  return 0 unless $self->{created};
+
+  # Check for thread id
+  if (defined $self->{tid} && $self->{tid} != threads->tid) {
+    return ($self->{created} = 0);
+  }
+
+  # Check for process id
+  elsif ($self->{pid} != $$) {
+    return ($self->{created} = 0);
+  };
+
+  # Return creation state
+  return 1;
+};
+
+
+# Explain query plan
+sub explain {
+  my $self = shift;
+
+  # Prepare and execute explain query plan
+  my ($rv, $sth) = $self->prep_and_exec(
+    'EXPLAIN QUERY PLAN ' . shift, @_
+  );
+
+  # Query was not succesfull
+  return unless $rv;
+
+  # Create string
+  my $string;
+  foreach ( @{ $sth->fetchall_arrayref([]) }) {
+    $string .= sprintf("%3d | %3d | %3d | %-60s\n", @$_);
+  };
+
+  # Return query plan string
+  return $string;
+};
+
+
 # Delete with SQLite feature
 sub delete {
   my $self = shift;
@@ -120,6 +168,136 @@ sub delete {
     return $rv;
   };
 };
+
+
+# Insert values to database
+sub insert {
+  my $self  = shift;
+
+  # Get table name
+  my $table = $self->_table_name(\@_) or return;
+
+  # No parameters
+  return unless $_[0];
+
+  # Properties
+  my $prop = shift if ref $_[0] eq 'HASH' && ref $_[1];
+
+  # Single insert
+  if (ref $_[0] eq 'HASH') {
+
+    # Param
+    my %param = %{ shift(@_) };
+
+    # Create insert arrays
+    my (@keys, @values);
+    while (my ($key, $value) = each %param) {
+      next unless $key =~ /^[_0-9a-zA-Z]+$/;
+      push(@keys,   $key);
+      push(@values, $value);
+    };
+
+    # Create insert string
+    my $sql = 'INSERT ';
+    if ($prop) {
+      given ($prop->{-on_conflict}) {
+	when ('replace') { $sql .= 'OR REPLACE '};
+	when ('ignore')  { $sql .= 'OR IGNORE '};
+      };
+    };
+
+    $sql .= 'INTO ' . $table .
+      ' (' . join(', ', @keys) . ') VALUES (' . _q(\@keys) . ')';
+
+    # Prepare and execute
+    return scalar $self->prep_and_exec( $sql, \@values );
+  }
+
+  # Multiple inserts
+  elsif (ref($_[0]) eq 'ARRAY') {
+
+    return unless $_[1];
+
+    my @keys = @{ shift(@_) };
+
+    # Default values
+    my @default = ();
+
+    # Check if keys are defaults
+    my $i = 0;
+    my @default_keys;
+    while ($keys[$i]) {
+
+      # No default - next
+      $i++, next unless ref $keys[$i];
+
+      # Has default value
+      my ($key, $value) = @{ splice( @keys, $i, 1) };
+      push(@default_keys, $key);
+      push(@default, $value);
+    };
+
+    # Unshift default keys to front
+    unshift(@keys, @default_keys);
+
+    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) . ') ';
+    my $union = 'SELECT ' . _q(\@keys);
+
+    # Maximum bind variables
+    my $max = (MAX_COMP_SELECT / @keys) - @keys;
+
+    if (scalar @_ <= $max) {
+
+      # Add data unions
+      $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
+
+      # Prepare and execute with prepended defaults
+      return $self->prep_and_exec(
+	$sql,
+	[ map { (@default, @$_); } @_ ]
+      );
+    }
+
+    # More than SQLite MAX_COMP_SELECT insertions
+    else {
+
+      my ($rv, @v_array);
+      my @values = @_;
+
+      # Start transaction
+      $self->txn(
+	sub {
+	  while (@v_array = splice(@values, 0, $max - 1)) {
+
+	    # Delete undef values
+	    @v_array = grep($_, @v_array) unless @_;
+
+	    # Add data unions
+	    my $sub_sql = $sql . $union .
+	      ((' UNION ' . $union) x ( scalar(@v_array) - 1 ));
+
+	    # Prepare and execute
+	    my $rv_part = $self->prep_and_exec(
+	      $sub_sql,
+	      [ map { (@default, @$_); } @v_array ]
+	    );
+
+	    # Rollback transaction
+	    return -1 unless $rv_part;
+	    $rv += $rv_part;
+	  };
+
+	}) or return;
+
+      # Everything went fine
+      return $rv;
+    };
+  };
+
+  # Unknown query
+  return;
+};
+
 
 
 # Attach database
@@ -321,7 +499,15 @@ sub snippet {
   return eval( $sub );
 };
 
+
+# Questionmark string
+sub _q ($) {
+  join(', ', split('', '?' x scalar( @{$_[0]} )));
+};
+
+
 1;
+
 
 __END__
 

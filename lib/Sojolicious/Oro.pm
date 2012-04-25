@@ -2,20 +2,23 @@ package Sojolicious::Oro;
 use strict;
 use warnings;
 
-use feature 'state';
+our $VERSION = '0.01';
+
+use feature qw/state switch/;
 use Carp qw/carp croak/;
 our @CARP_NOT;
 
+# Todo: Check on_connect regarding leaking
 # Todo: join: do not automatically assume '*' fields.
 # Todo: Support all string operators with [a-z]+.
 # Todo: Create, release, and rollback savepoints as private methods
 #       so different drivers can handle them differently.
+# Todo: Use simple hash-memory for query cache
+# Todo: oro->load(irgendwas => foobar); returns always a value
+# Read: http://irclog.perlgeek.de/mojo/2012-04-15#i_5446716
 
 # Database connection
 use DBI;
-
-# Defaults to 500 for SQLITE_MAX_COMPOUND_SELECT
-use constant MAX_COMP_SELECT => 500;
 
 # Regex for function values
 our $FUNCTION_REGEX = qr/[a-zA-Z0-9]+\([^\)]*\)?/;
@@ -27,6 +30,7 @@ our $OP_REGEX       = qr/^(?i:
 			    (?:eq|ne|[gl][te])
                           )$/x;
 our $KEY_REGEX      = qr/[_0-9a-zA-Z]/;
+
 
 # Constructor
 sub new {
@@ -49,19 +53,31 @@ sub new {
   };
 
   # Init by default
-  @param{qw/created in_txn last_sql/} = (0, 0, '');
+  @param{qw/in_txn last_sql/} = (0, '');
+
+  $param{created} //= 0;
+
+  # Get callback
+  my $cb = delete $param{init} if $param{init} &&
+    (ref $param{init} || '') eq 'CODE';
 
   my $pwd = delete $param{password};
 
-  # Is SQLite
-  if (!exists $param{driver} || $param{driver} eq 'SQLite') {
+  # Set default to SQLite
+  $param{driver} //= 'SQLite';
 
-    # Load driver
-    require Sojolicious::Oro::SQLite;
-
-    # Get driver specific handle
-    $self = Sojolicious::Oro::SQLite->new( %param );
+  # Load driver
+  my $package = 'Sojolicious::Oro::' . $param{driver};
+  unless (eval 'require ' . $package . '; 1;') {
+    croak 'Unable to load ' . $package;
+    return;
   };
+
+  # On_connect event
+  my $on_connect = delete $param{on_connect};
+
+  # Get driver specific handle
+  $self = $package->new( %param );
 
   # No database created
   return unless $self;
@@ -72,11 +88,20 @@ sub new {
   # Set password securely
   $self->_password($pwd) if $pwd;
 
+  # On connect events
+  $self->{on_connect} = {};
+  $self->{_connect_cb} = 1;
+  if ($on_connect) {
+    $self->on_connect(
+      ref $on_connect eq 'HASH' ?
+      %$on_connect : $on_connect
+    ) or return;
+  };
+
   # Connect to database
   $self->_connect or croak 'Unable to connect to database';
 
   # Release callback
-  my $cb = $param{init} if $param{init} && (ref $param{init} || '') eq 'CODE';
   $cb->($self) if $cb;
 
   # Savepoint array
@@ -106,10 +131,12 @@ sub table {
   # Clone parameters
   foreach (qw/dbh created in_txn
               savepoint pid tid
-	      dsn/) {
+	      dsn _connect_cb
+	      on_connect/) {
     $param{$_} = $self->{$_};
   };
 
+  # Connection identifier (for _password)
   $param{_id} = "$self";
 
   # Bless object with hash
@@ -160,27 +187,12 @@ sub driver { '' };
 
 # Database was just created
 sub created {
-  my $self = shift;
-
-  # Creation state is 0
-  return 0 unless $self->{created};
-
-  # Check for thread id
-  if (defined $self->{tid} && $self->{tid} != threads->tid) {
-    return ($self->{created} = 0);
-  }
-
-  # Check for process id
-  elsif ($self->{pid} != $$) {
-    return ($self->{created} = 0);
-  };
-
-  # Return creation state
-  return 1;
+  $_[0]->{created};
 };
 
 
 # Insert values to database
+# This is the MySQL way
 sub insert {
   my $self  = shift;
 
@@ -190,8 +202,11 @@ sub insert {
   # No parameters
   return unless $_[0];
 
+  # Properties
+  my $prop = shift if ref $_[0] eq 'HASH' && ref $_[1];
+
   # Single insert
-  if (ref($_[0]) eq 'HASH') {
+  if (ref $_[0] eq 'HASH') {
 
     # Param
     my %param = %{ shift(@_) };
@@ -205,7 +220,15 @@ sub insert {
     };
 
     # Create insert string
-    my $sql = 'INSERT INTO ' . $table .
+    my $sql = 'INSERT ';
+    if ($prop) {
+      given ($prop->{-on_conflict}) {
+	when ('replace') { $sql = 'REPLACE '};
+	when ('ignore')  { $sql .= 'IGNORE '};
+      };
+    };
+
+    $sql .= 'INTO ' . $table .
       ' (' . join(', ', @keys) . ') VALUES (' . _q(\@keys) . ')';
 
     # Prepare and execute
@@ -239,58 +262,25 @@ sub insert {
     # Unshift default keys to front
     unshift(@keys, @default_keys);
 
-    my $sql = 'INSERT INTO ' . $table . ' (' . join(', ', @keys) . ') ';
-    my $union = 'SELECT ' . _q(\@keys);
-
-    # Maximum bind variables
-    my $max = (MAX_COMP_SELECT / @keys) - @keys;
-
-    if (scalar @_ <= $max) {
-
-      # Add data unions
-      $sql .= $union . ((' UNION ' . $union) x ( scalar(@_) - 1 ));
-
-      # Prepare and execute with prepended defaults
-      return $self->prep_and_exec(
-	$sql,
-	[ map { (@default, @$_); } @_ ]
-      );
-    }
-
-    # More than SQLite MAX_COMP_SELECT insertions
-    else {
-
-      my ($rv, @v_array);
-      my @values = @_;
-
-      # Start transaction
-      $self->txn(
-	sub {
-	  while (@v_array = splice(@values, 0, $max - 1)) {
-
-	    # Delete undef values
-	    @v_array = grep($_, @v_array) unless @_;
-
-	    # Add data unions
-	    my $sub_sql = $sql . $union .
-	      ((' UNION ' . $union) x ( scalar(@v_array) - 1 ));
-
-	    # Prepare and execute
-	    my $rv_part = $self->prep_and_exec(
-	      $sub_sql,
-	      [ map { (@default, @$_); } @v_array ]
-	    );
-
-	    # Rollback transaction
-	    return -1 unless $rv_part;
-	    $rv += $rv_part;
-	  };
-
-	}) or return;
-
-      # Everything went fine
-      return $rv;
+    # Create insert string
+    my $sql = 'INSERT ';
+    if ($prop) {
+      given ($prop->{-on_conflict}) {
+	when ('replace') { $sql = 'REPLACE '};
+	when ('ignore')  { $sql .= 'IGNORE '};
+      };
     };
+
+    $sql .= 'INTO ' . $table . ' (' . join(', ', @keys) . ') ';
+
+    # Add data in brackets
+    $sql .= _q(\@keys) x ( scalar(@_) - 1 );
+
+    # Prepare and execute with prepended defaults
+    return $self->prep_and_exec(
+      $sql,
+      [ map { (@default, @$_); } @_ ]
+    );
   };
 
   # Unknown query
@@ -576,7 +566,7 @@ sub count {
   my @pairs = @$join_pairs;
 
   # Build sql
-  my $sql = 'SELECT ' . join(', ', 'count(*)', @$fields) .
+  my $sql = 'SELECT ' . join(', ', 'count(1)', @$fields) .
             ' FROM '  . join(', ', @$tables);
 
   # Get conditions
@@ -670,24 +660,7 @@ sub do {
 
 # Explain query plan
 sub explain {
-  my $self = shift;
-
-  # Prepare and execute explain query plan
-  my ($rv, $sth) = $self->prep_and_exec(
-    'EXPLAIN QUERY PLAN ' . shift, @_
-  );
-
-  # Query was not succesfull
-  return unless $rv;
-
-  # Create string
-  my $string;
-  foreach ( @{ $sth->fetchall_arrayref([]) }) {
-    $string .= sprintf("%3d | %3d | %3d | %-60s\n", @$_);
-  };
-
-  # Return query plan string
-  return $string;
+  return 'Not implemented for ' . $_[0]->driver;
 };
 
 
@@ -695,6 +668,7 @@ sub explain {
 sub txn {
   my $self = shift;
 
+  # No callback defined
   return unless (
     $_[0] && ref($_[0]) eq 'CODE'
   );
@@ -771,6 +745,27 @@ sub txn {
 };
 
 
+# Add connect event
+sub on_connect {
+  my $self = shift;
+  my $cb = pop;
+
+  # Parameter is no subroutine
+  return unless ref $cb && ref $cb eq 'CODE';
+
+  my $name = shift || '_cb_' . $self->{_connect_cb}++;
+
+  # Push subroutines on_connect
+  unless (exists $self->{on_connect}->{$name}) {
+    $self->{on_connect}->{$name} = $cb;
+    return 1;
+  };
+
+  # Event was not newly established
+  return;
+};
+
+
 # Wrapper for DBI last_insert_id
 sub last_insert_id {
   shift->dbh->last_insert_id;
@@ -796,7 +791,9 @@ sub DESTROY {
 
     # Disconnect
     $self->{dbh}->disconnect unless $self->{dbh}->{Kids};
-    $self->{dbh} = undef;
+
+    # Delete parameters
+    delete $self->{$_} foreach qw/dbh on_connect _connect_cb/;
   };
 
   return $self;
@@ -807,7 +804,7 @@ sub DESTROY {
 sub _connect {
   my $self = shift;
 
-  die 'No database given' unless $self->{dsn};
+  croak 'No database given' unless $self->{dsn};
 
   # DBI Connect
   my $dbh = DBI->connect(
@@ -835,6 +832,11 @@ sub _connect {
 
   # Save thread id
   $self->{tid} = threads->tid if $INC{'threads.pm'};
+
+  # Emit all on_connect events
+  foreach (values %{ $self->{on_connect} }) {
+    $_->( $self, $dbh );
+  };
 
   return $dbh;
 };
@@ -1223,12 +1225,13 @@ Sojolicious::Oro - Simple database accessor
 
 L<Sojolicious::Oro> is a simple database accessor that provides
 basic functionalities to work with simple databases in a web
-environment.
+environment. Its aim is not to be a complete abstract replacement
+for SQL communication with DBI, but to make common tasks easier.
 For now it is limited to SQLite.
 It should be fork- and thread-safe.
 
-=head1 ATTRIBUTES
 
+=head1 ATTRIBUTES
 
 =head2 C<dbh>
 
@@ -1651,6 +1654,34 @@ Otherwise the actions will be released.
 Transactions established with this method can be securely nested
 (although inner transactions may not be true transactions depending
 on the driver).
+
+
+=head1 EVENTS
+
+=head2 C<on_connect>
+
+  $oro->on_connect(
+    sub { $log->debug('New connection established') }
+  );
+
+  if ($oro->on_connect(
+    my_event => sub {
+      shift->insert(Log => { msg => 'reconnect' } )
+    })) {
+    say 'Event newly established!';
+  };
+
+Add callback for execution in case of newly established
+database connections.
+The first argument to the anonymous subroutine is the Oro object,
+the second one is the newly established database connection.
+Prepending a string with a name will prevent from adding an
+event multiple times - adding the event again will be ignored.
+Returns a true value in case the event is newly established,
+otherwise false.
+Events will be emitted in a unparticular order.
+
+B<This method is EXPERIMENTAL and may change without warnings.>
 
 
 =head2 C<last_insert_id>
