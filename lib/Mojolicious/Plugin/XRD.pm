@@ -1,5 +1,6 @@
 package Mojolicious::Plugin::XRD;
 use Mojo::Base 'Mojolicious::Plugin';
+use Mojo::Util qw/quote/;
 
 our $DELEGATE = 'Mojolicious::Plugin::XML::XRD';
 
@@ -11,10 +12,18 @@ sub register {
 
   # Add 'render_xrd' helper
   $mojo->helper(
-    'render_xrd' => sub {
+    render_xrd => sub {
       my ($c, $xrd) = @_;
 
       $c->stash('format' => $c->param('format')) unless $c->stash('format');
+
+      # rel parameter
+      if ($c->param('rel')) {
+	$xrd = $c->new_xrd($xrd->to_xml);
+	my @rel = split(/\s+/, $c->param('rel'));
+	my $rel = 'Link:' . join(':', map { 'not([rel=' . quote ($_) . '])'} @rel);
+	$xrd->find($rel)->each(sub{ $_->replace('') });
+      };
 
       # Add CORS header
       $c->res->headers->header('Access-Control-Allow-Origin' => '*');
@@ -67,6 +76,9 @@ L<Mojolicious::Plugin::XRD> is a plugin to support
 Extensible Resource Descriptor (XRD) documents
 (see L<Specification|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>),
 that where created using L<Mojolicious::Plugin::XML::XRD>.
+Additionally it supports the "rel" parameter of the
+L<WebFinger|https://datatracker.ietf.org/doc/draft-jones-appsawg-webfinger/>
+Specification.
 
 =head1 HELPERS
 

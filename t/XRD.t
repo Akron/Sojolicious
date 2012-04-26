@@ -4,7 +4,7 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 12;
+use Test::More tests => 36;
 use Test::Mojo;
 use Mojolicious::Lite;
 use Mojo::JSON;
@@ -155,5 +155,41 @@ is_deeply(
   $json->decode($xrd->to_json),
   $json->decode($jrd_doc), 'JRD'
 );
+
+#diag $xrd->to_pretty_xml;
+
+$app->routes->route('/test')->to(
+  cb => sub { shift->render_xrd($xrd) }
+);
+
+$t->get_ok('/test')
+  ->status_is(200)
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->element_exists('Link[rel="author"][href="http://blog.example.com/author/steve"]')
+  ->element_exists('Link[rel="author"][href="http://example.com/author/john"]')
+  ->element_exists('Link[rel="copyright"][template="http://example.com/copyright?id={uri}"]');
+
+$t->get_ok('/test?rel=author')
+  ->status_is(200)
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->element_exists('Link[rel="author"][href="http://blog.example.com/author/steve"]')
+  ->element_exists('Link[rel="author"][href="http://example.com/author/john"]')
+  ->element_exists_not('Link[rel="copyright"][template="http://example.com/copyright?id={uri}"]');
+
+$t->get_ok('/test?rel=author%20copyright')
+  ->status_is(200)
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->element_exists('Link[rel="author"][href="http://blog.example.com/author/steve"]')
+  ->element_exists('Link[rel="author"][href="http://example.com/author/john"]')
+  ->element_exists('Link[rel="copyright"][template="http://example.com/copyright?id={uri}"]');
+
+$t->get_ok('/test?rel=copyright')
+  ->status_is(200)
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->element_exists_not('Link[rel="author"][href="http://blog.example.com/author/steve"]')
+  ->element_exists_not('Link[rel="author"][href="http://example.com/author/john"]')
+  ->element_exists('Link[rel="copyright"][template="http://example.com/copyright?id={uri}"]');
+
+
 
 __END__

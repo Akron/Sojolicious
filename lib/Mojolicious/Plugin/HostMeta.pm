@@ -3,6 +3,9 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::JSON;
 use Storable 'dclone';
 
+# Todo: Delete 'host' and 'secure'
+# Todo: Add "resource" and "rel" parameter
+
 has 'host';
 has 'secure' => 0;
 

@@ -2,6 +2,8 @@ package Mojolicious::Plugin::Webfinger;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 
+# Todo: Allow for cache plugin
+# Todo: Allow direct "resource" retrieval, if available.
 
 # Register Plugin
 sub register {
@@ -117,6 +119,8 @@ sub _serve_webfinger {
 
 
 __END__
+
+=pod
 
 =head1 NAME
 

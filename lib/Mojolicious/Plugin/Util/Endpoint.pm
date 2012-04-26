@@ -12,7 +12,7 @@ sub register {
 
   # Add 'endpoint' shortcut
   $mojo->routes->add_shortcut(
-    'endpoint' => sub {
+    endpoint => sub {
       my ($route, $name, $param) = @_;
 
       # Endpoint already defined

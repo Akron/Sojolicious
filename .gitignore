@@ -2,6 +2,7 @@ blib
 log
 Sandbox
 lib/Sojolicious/User.pm
+lib/Sojolicious/User2.pm
 lib/Sojolicious/User_todo.pm
 lib/Sojolicious/Stream.pm
 lib/Sojolicious/Model.pm

@@ -222,6 +222,8 @@ sub _serve_lrdd {
 
 __END__
 
+=pod
+
 =head1 NAME
 
 Mojolicious::Plugin::LRDD - Link-based Resource Descriptor Discovery
@@ -264,7 +266,7 @@ for serving a C<lrdd> Link relation in C</.well-known/host-meta>
 
 =head1 HELPERS
 
-=head2 C<webfinger>
+=head2 C<lrdd>
 
   # In Controllers:
   my $xrd = $self->lrdd('https://sojolicio.us/image.gif');
@@ -360,7 +362,7 @@ L<Mojolicious::Plugin::HostMeta>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

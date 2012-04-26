@@ -60,18 +60,8 @@ sub new {
     $self->{items_per_page} = 10;
   };
 
-  if (!$self->{oro} ||
-	index(ref($self->{oro}), 'Sojolicious::Oro') != 0) {
-
-    # In-memory database
-    $self->{oro} = Sojolicious::Oro->new(
-      driver => 'SQLite',
-      file   => ':memory:'
-    );
-  }
-
   # Temporary
-  elsif ($self->{oro}->driver ne 'SQLite') {
+  if ($self->{oro} && $self->{oro}->driver ne 'SQLite') {
     carp __PACKAGE__ . ' ' . $VERSION . ' supports SQLite only';
     return;
   };

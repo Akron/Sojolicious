@@ -102,7 +102,7 @@ sub new {
   $self->_connect or croak 'Unable to connect to database';
 
   # Release callback
-  $cb->($self) if $cb;
+  $cb->($self) if $cb && $self->created;
 
   # Savepoint array
   # First element is a counter

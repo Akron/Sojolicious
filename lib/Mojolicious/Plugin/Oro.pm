@@ -40,11 +40,15 @@ sub register {
 	  on_connect => sub {
 	    my $oro = shift;
 	    $mojo->log->info(
-	      'Connect from ' . $$ .
-	      ' instead of ' . $oro->{pid}
+	      'Connect from ' . $$ . ' instead of ' . $oro->{pid}
 	    );
           }
 	);
+
+	# Emit on_oro_connect hook
+	$mojo->plugins->emit_hook(
+	  on_oro_init => ($plugin, $name, $oro)
+	) if $oro->created;
 
 	# No succesful creation
 	croak "Unable to create database handle '$name'" unless $oro;
@@ -141,6 +145,18 @@ a table name.
 On creation, the plugin accepts a hash of database names
 associated with a L<Sojolicious::Oro> object.
 
+
+=head1 HOOKS
+
+=item <on_oro_init>
+
+  $mojo->hook(
+    on_oro_init => sub {
+      my ($plugin, $c, $name, $oro) = @_;
+      $oro->init_db;
+    });
+
+This hook is run when an oro database is initialized.
 
 =head1 DEPENDENCIES
 

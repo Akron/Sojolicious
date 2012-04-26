@@ -8,6 +8,9 @@ our $NAMESPACE = 'http://docs.oasis-open.org/ns/xri/xrd-1.0';
 our $PREFIX    = 'xrd';
 
 # Todo: Allow for JRD-to-XRD Conversion
+# Todo: To make this work embedded,
+#       a 'register' method is needed
+
 
 # Constructor
 sub new {
@@ -29,10 +32,6 @@ sub new {
   else {
     $xrd = $class->SUPER::new(@_);
   };
-  # Todo: To make this work embedded,
-  #        a 'register' method is needed
-
-
 
   # Add XMLSchema instance namespace
   $xrd->add_namespace(
@@ -394,7 +393,7 @@ L<Mojolicious::Plugin::Date::RFC3339>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

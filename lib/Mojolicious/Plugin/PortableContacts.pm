@@ -293,7 +293,9 @@ sub _new_response {
          Mojolicious::Plugin::PortableContacts::Response->new(@_) : $_[0];
 };
 
+
 1;
+
 
 __END__
 
@@ -301,12 +303,12 @@ __END__
 
 =head1 NAME
 
-Mojolicious::Plugin::PortableContacts
+Mojolicious::Plugin::PortableContacts - PortableContacts Plugin
 
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('PortableContacts' => { count => 20});
+  $app->plugin('PortableContacts' => { count => 20 });
 
   # Mojolicious::Lite
   plugin 'PortableContacts', count => 20;
@@ -323,7 +325,7 @@ Mojolicious::Plugin::PortableContacts
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::PortableContacts> provides tools for
-the PortableContacts API as described in L<http://portablecontacts.net/draft-spec.html>.
+the L<PortableContacts API|http://portablecontacts.net/draft-spec.html>.
 
 This plugin is database agnostic. Communication with a datastore
 can be enabled via Hooks.
@@ -365,9 +367,9 @@ Defaults to 0, which means that there is no limit.
 The helper C<poco> returns the result set of a PortableContacts
 Query as a L<Mojolicious::Plugin::PortableContacts::Response> object.
 The minimal set of possible parameters are described
-L<http://portablecontacts.net/draft-spec.html>.
+in the L<Draft Spec|http://portablecontacts.net/draft-spec.html>.
 In addition to that, user ids (as in /@me/@all/{id}) should be
-provided as C<id => {id}>.
+provided as C<id =E<gt> {id}>.
 
 =head1 SHORTCUTS
 
