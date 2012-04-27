@@ -6,7 +6,7 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 15;
+use Test::More tests => 20;
 use Test::Mojo;
 use Mojo::ByteStream 'b';
 use Mojolicious::Lite;
@@ -92,4 +92,10 @@ $t->get_ok('/lrdd?q='.b($ressource)->url_escape)
 
 $t->get_ok('/lrdd?q=akron@sojolicio.us')
   ->status_is('404')
-  ->content_type_like(qr/html/);
+  ->content_type_like(qr/xrd/)
+  ->text_is('Subject', 'akron@sojolicio.us');
+
+$t->get_ok('/.well-known/host-meta?resource='.b($ressource)->url_escape)
+  ->status_is('200')
+  ->content_type_is('application/xrd+xml')
+  ->text_is('Subject' => $ressource);

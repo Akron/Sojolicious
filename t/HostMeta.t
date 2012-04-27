@@ -6,7 +6,7 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 44;
+use Test::More tests => 52;
 use Test::Mojo;
 use Mojo::JSON;
 use Mojolicious::Lite;
@@ -123,7 +123,9 @@ $app->hook('before_serving_hostmeta',
 	   => sub {
 	     my ($plugin, $c, $xrd_ref) = @_;
 
-	     my $link = $xrd_ref->add_link('salmon' => 'http://www.sojolicio.us/' );
+	     my $link = $xrd_ref->add_link('salmon' => {
+	       href => 'http://www.sojolicio.us/'
+	     });
 	     $link->add('Title' => 'Salmon');
 	   });
 
@@ -133,7 +135,8 @@ is_deeply(Mojo::JSON->new->decode($xrd->to_json),
 	    {"rel" => "salmon",
 	     "titles" => {
 	       "default" => "Salmon"
-	     }
+	     },
+	     "href" => 'http://www.sojolicio.us/'
 	   }
 	  ],
 	   "properties" => {
@@ -142,3 +145,13 @@ is_deeply(Mojo::JSON->new->decode($xrd->to_json),
 	     "foo" => "bar"
 	   }
 	 }, 'json Export');
+
+$t->get_ok('/.well-known/host-meta.json')
+    ->status_is(200)
+    ->content_type_is('application/json');
+
+# rel parameter
+$t->get_ok('/.well-known/host-meta?rel=author')
+  ->status_is(200)
+  ->element_exists_not('Link[rel="salmon"]');
+

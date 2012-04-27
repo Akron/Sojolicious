@@ -6,7 +6,7 @@ $|++;
 
 use lib '../lib';
 
-use Test::More tests => 15;
+use Test::More tests => 20;
 use Test::Mojo;
 use Mojo::ByteStream 'b';
 use Mojolicious::Lite;
@@ -90,7 +90,28 @@ $t->get_ok('/webfinger?q='.b($acct)->url_escape)
 
 $t->get_ok('/webfinger?q=nothing')
   ->status_is('404')
-  ->content_type_like(qr/html/);
+  ->content_type_is('application/xrd+xml')
+  ->text_is(Subject => 'nothing');
 
+$app->hook(
+  on_prepare_webfinger => sub {
+    my ($plugin, $c, $acct, $ok_ref) = @_;
+    if (lc $acct eq 'acct:akron@sojolicio.us') {
+      $$ok_ref = 1;
+    };
+  });
+
+$app->hook(
+  before_serving_webfinger => sub {
+    my ($plugin, $c, $acct, $wf_xrd) = @_;
+    if (lc $acct eq 'acct:akron@sojolicio.us') {
+      $wf_xrd->add_link(author => 'Nils Diewald');
+    };
+  });
+
+$t->get_ok('/.well-known/host-meta?resource='.b($acct)->url_escape)
+  ->status_is('200')
+  ->content_type_is('application/xrd+xml')
+  ->text_is('Subject' => $acct);
 
 __END__

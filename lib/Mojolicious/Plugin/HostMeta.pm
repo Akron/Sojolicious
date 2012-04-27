@@ -3,13 +3,11 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::JSON;
 use Storable 'dclone';
 
-# Todo: Delete 'host' and 'secure'
-# Todo: Add "resource" and "rel" parameter
-
-has 'host';
-has 'secure' => 0;
 
 use constant WK_PATH => '/.well-known/host-meta';
+
+sub host { warn 'host is deprecated' };
+sub secure { warn 'secure is deprecated' };
 
 # Register plugin
 sub register {
@@ -35,32 +33,18 @@ sub register {
 
   my $hostmeta = $mojo->new_hostmeta;
 
-  # If domain parameter is given
-  if ($param->{host}) {
-    $plugin->host($param->{host});
-
-    # Add host-information to host-meta
-    $hostmeta->add_host($plugin->host);
-  }
-
   # Get host information on first request
-  else {
-    $mojo->hook(
-      'on_prepare_hostmeta' =>
-	sub {
-	  my ($plugin, $c, $xrd_ref) = @_;
-	  my $host = $c->req->url->host;
-	  if ($host) {
-	    $plugin->host($host);
+  $mojo->hook(
+    'on_prepare_hostmeta' =>
+      sub {
+	my ($plugin, $c, $xrd_ref) = @_;
+	my $host = $c->req->url->host;
+	if ($host) {
 
-	    # Add host-information to host-meta
-	    $hostmeta->add_host($host);
-	  }
-	});
-  };
-
-  # use https or http
-  $plugin->secure( $param->{secure} );
+	  # Add host-information to host-meta
+	  $hostmeta->add_host($host);
+	}
+      });
 
   # Establish 'hostmeta' helper
   $mojo->helper(
@@ -85,16 +69,24 @@ sub register {
   my $route = $mojo->routes->route( WK_PATH );
 
   # Define endpoint
-  $route->endpoint(
-    'hostmeta' => {
-      scheme => $plugin->secure ? 'https' : 'http',
-      host   => $plugin->host,
-    });
+  $route->endpoint('hostmeta');
 
   # Set route callback
   $route->to(
     cb => sub {
       my $c = shift;
+
+      # resource parameter
+      if ($c->param('resource')) {
+	my $res = $c->param('resource');
+
+	# LRDD
+	if (exists $helpers->{'lrdd'}) {
+	  my $xrd = $c->lrdd($res => 'localhost');
+	  return $c->render_xrd($xrd) if $xrd;
+	  return $c->render_xrd(undef, $res);
+	};
+      };
 
       my $hostmeta_clone = $plugin->_prepare_and_serve($c, $hostmeta);
       return $c->render_xrd($hostmeta_clone);
@@ -109,6 +101,13 @@ sub _get_hostmeta {
 
   my $host = lc(shift(@_));
 
+  my ($param, $res, $res_param, $rel) = (shift);
+  if ($param) {
+    $rel = $param->{rel};
+    $res = $param->{resource};
+    $res_param = $res ? '?resource=' . $res : '';
+  };
+
   # Hook for caching
   my $hostmeta_xrd;
   $c->app->plugins->emit_hook(
@@ -119,7 +118,10 @@ sub _get_hostmeta {
     \$hostmeta_xrd
   );
 
-  return $hostmeta_xrd if $hostmeta_xrd;
+  if ($hostmeta_xrd) {
+    _filter_rel($hostmeta_xrd, $rel) if $rel;
+    return $hostmeta_xrd;
+  };
 
   # 1. Check https:, then http:
   my $host_hm_path = $host . WK_PATH;
@@ -131,21 +133,23 @@ sub _get_hostmeta {
   # Fetch Host-Meta XRD
   # First try ssl
   my $secure = 'https://';
-  my $host_hm = $ua->get($secure . $host_hm_path);
+  my $host_hm = $ua->get($secure . $host_hm_path . $res_param);
 
-#  unless ($host_hm->success) { ... };
+  #  unless ($host_hm->success) { ... };
 
-  if (!$host_hm ||
-	!$host_hm->res->is_status_class(200)
-      ) {
+  unless ($host_hm &&
+	  $host_hm->res->is_status_class(200)) {
+
+    if ($res && index($host_hm->res->content_type, 'application') == 0) {
+      return undef;
+    };
 
     # Then try insecure
     $secure = 'http://';
-    $host_hm = $ua->get($secure.$host_hm_path);
+    $host_hm = $ua->get($secure . $host_hm_path . $res_param);
 
-    if (!$host_hm ||
-	  !$host_hm->res->is_status_class(200)
-	) {
+    unless ($host_hm &&
+	    $host_hm->res->is_status_class(200)) {
 
       # Reset max_redirects
       $ua->max_redirects(0);
@@ -159,17 +163,34 @@ sub _get_hostmeta {
   $hostmeta_xrd =
     $c->new_hostmeta($host_hm->res->body);
 
-  # Host validation is now deprecated
-
-  # Hook for caching
-  $c->app->plugins->emit_hook(
-    'after_fetching_hostmeta',
-    $plugin,
-    $c,
-    $host,
-    \$hostmeta_xrd,
-    $host_hm->res
+  my @hook_array = (
+    $plugin, $c, $host, \$hostmeta_xrd, $host_hm->res
   );
+
+  # Resource request
+  if ($res && $hostmeta_xrd->at('Subject')->text eq $res) {
+    my $helpers = $c->app->renderer->helpers;
+
+    # LRDD exists
+    if (exists $helpers->{'lrdd'}) {
+
+      # Hook for caching
+      $c->app->plugins->emit_hook(
+	after_fetching_lrdd => @hook_array
+      );
+    };
+  }
+
+  # Common HostMeta request
+  else {
+
+    # Hook for caching
+    $c->app->plugins->emit_hook(
+      after_fetching_hostmeta => @hook_array
+    );
+  };
+
+  _filter_rel($hostmeta_xrd, $rel) if $rel;
 
   # Return XRD DOM
   return $hostmeta_xrd;
@@ -211,7 +232,18 @@ sub _prepare_and_serve {
   return $hostmeta_clone;
 };
 
+
+# Filter link relations
+sub _filter_rel {
+  my ($xrd, $rel) = @_;
+  my @rel = ref $rel ? @$rel : split(/\s+/, $rel);
+  $rel = 'Link:' . join(':', map { 'not([rel=' . quote ($_) . '])'} @rel);
+  $xrd->find($rel)->each(sub{ $_->replace('') });
+}
+
+
 1;
+
 
 __END__
 
@@ -224,11 +256,10 @@ Mojolicious::Plugin::HostMeta - HostMeta Plugin for Mojolicious
 =head1 SYNOPSIS
 
   # Mojolicious
-  $self->plugin('HostMeta', { 'host' => 'sojolicio.us' } );
+  $self->plugin('HostMeta');
 
   # Mojolicious::Lite
   plugin 'HostMeta';
-  plugin HostMeta => { host => 'sojolicio.us' };
 
   # In Controllers
   print $self->hostmeta('gmail.com')->get_link('lrrd');
@@ -241,21 +272,6 @@ L<Mojolicious::Plugin::HostMeta> is a plugin to support
 "well-known" HostMeta documents
 (see L<https://tools.ietf.org/html/rfc6415|RFC6415>).
 
-=head1 ATTRIBUTES
-
-=head2 C<host>
-
-  $hm->host('sojolicio.us');
-  my $host = $hm->host;
-
-The host for the hostmeta domain.
-
-=head2 C<secure>
-
-  $hm->secure(1);
-  my $sec = $hm->secure;
-
-Use C<http> or C<https>.
 
 =head1 HELPERS
 
@@ -263,7 +279,11 @@ Use C<http> or C<https>.
 
   # In Controller:
   my $xrd = $self->hostmeta;
-  my $xrd = $self->hostmeta('gmail.com');
+  $xrd = $self->hostmeta('gmail.com');
+  $xrd = $self->hostmeta('sojolicio.us' => {
+    resource => 'acct:akron@sojolicio.us',
+    rel      => 'hub'
+  });
 
 The helper C<hostmeta> returns the own hostmeta document
 as an L<Mojolicious::Plugin::XML::XRD> object with
@@ -271,6 +291,9 @@ L<Mojolicious::Plugin::XML::HostMeta> extension,
 if no hostname is given.
 If a hostname is given, the corresponding hostmeta document
 is retrieved and returned as an XRD object.
+In that case an additional hash reference is accepted
+with C<resource> and C<rel> parameters (see the spec for explanation).
+
 
 =head2 C<new_hostmeta>
 
@@ -280,10 +303,12 @@ is retrieved and returned as an XRD object.
 The helper C<new_hostmeta> returns a new L<Mojolicious::Plugin::XML::XRD>
 object with C<Mojolicious::Plugin::XML::HostMeta> extension.
 
+
 =head1 ROUTES
 
 The route C</.well-known/host-meta> is established and serves
 the host's own hostmeta document.
+
 
 =head1 HOOKS
 
@@ -323,8 +348,8 @@ This hook is only emitted once for each subscriber.
   };
 
 This hook is run before the host's own hostmeta document is
-served. The hook returns the current ??? object and the hostmeta
-document.
+served. The hook returns the plugin object, the current
+controller object and the hostmeta document.
 
 =item C<before_fetching_hostmeta>
 
@@ -340,6 +365,7 @@ This hook is run after a foreign hostmeta document is retrieved.
 The hook returns the current controller object, the host name,
 a string reference meant to refer to the XRD object, and the
 L<Mojo::Message::Response> object from the request.
+This hook is NOT released after a successful resource request.
 This can be used for caching.
 
 =back

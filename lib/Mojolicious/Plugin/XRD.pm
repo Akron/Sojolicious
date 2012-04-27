@@ -13,32 +13,45 @@ sub register {
   # Add 'render_xrd' helper
   $mojo->helper(
     render_xrd => sub {
-      my ($c, $xrd) = @_;
+      my ($c, $xrd, $res) = @_;
 
+      # Define xrd or jrd
       $c->stash('format' => $c->param('format')) unless $c->stash('format');
 
+      # Add CORS header
+      $c->res->headers->header('Access-Control-Allow-Origin' => '*');
+
+      my $status = 200;
+
+      # Not found
+      if (!defined $xrd) {
+	$status = 404;
+	$xrd = $c->new_xrd;
+	$xrd->add(Subject => $res);
+      }
+
       # rel parameter
-      if ($c->param('rel')) {
+      elsif ($c->param('rel')) {
 	$xrd = $c->new_xrd($xrd->to_xml);
 	my @rel = split(/\s+/, $c->param('rel'));
 	my $rel = 'Link:' . join(':', map { 'not([rel=' . quote ($_) . '])'} @rel);
 	$xrd->find($rel)->each(sub{ $_->replace('') });
       };
 
-      # Add CORS header
-      $c->res->headers->header('Access-Control-Allow-Origin' => '*');
-
       # content negotiation
       $c->respond_to(
 	json => sub { $c->render(
+	  status => $status,
 	  data   => $xrd->to_json,
 	  format => 'jrd'
 	)},
 	jrd => sub { $c->render(
+	  status => $status,
 	  data   => $xrd->to_json,
 	  format => 'jrd'
 	)},
 	any  => sub { $c->render(
+	  status => $status,
 	  data   => $xrd->to_pretty_xml,
 	  format => 'xrd'
 	)}

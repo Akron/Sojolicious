@@ -4,7 +4,7 @@ use warnings;
 
 use lib '../lib';
 
-use Test::More tests => 36;
+use Test::More tests => 51;
 use Test::Mojo;
 use Mojolicious::Lite;
 use Mojo::JSON;
@@ -162,6 +162,12 @@ $app->routes->route('/test')->to(
   cb => sub { shift->render_xrd($xrd) }
 );
 
+$app->routes->route('/no_test')->to(
+  cb => sub {
+    my $c = shift;
+    return $c->render_xrd(undef, $c->param('res'))
+  });
+
 $t->get_ok('/test')
   ->status_is(200)
   ->header_is('Access-Control-Allow-Origin' => '*')
@@ -189,6 +195,24 @@ $t->get_ok('/test?rel=copyright')
   ->element_exists_not('Link[rel="author"][href="http://blog.example.com/author/steve"]')
   ->element_exists_not('Link[rel="author"][href="http://example.com/author/john"]')
   ->element_exists('Link[rel="copyright"][template="http://example.com/copyright?id={uri}"]');
+
+$t->get_ok('/no_test?res=versuch')
+  ->status_is(404)
+  ->content_type_is('application/xrd+xml')
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->text_is('Subject' => 'versuch');
+
+$t->get_ok('/no_test?res=versuch&format=json')
+  ->status_is(404)
+  ->content_type_is('application/json')
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->json_is('/subject' => 'versuch');
+
+$t->get_ok('/no_test?res=versuch&format=jrd')
+  ->status_is(404)
+  ->content_type_is('application/json')
+  ->header_is('Access-Control-Allow-Origin' => '*')
+  ->json_is('/subject' => 'versuch');
 
 
 
