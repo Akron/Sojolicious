@@ -5,15 +5,16 @@ use Mojo::DOM;
 
 use constant ATOM_NS => 'http://www.w3.org/2005/Atom';
 
+# Todo: Support Link-Headers for discovery-Method,
+#       when subscribing to html, rss without hub etc.
+
+
 # Default lease seconds before automatic subscription refreshing
 has 'lease_seconds' => ( 30 * 24 * 60 * 60 );
 has 'hub';
 
 # Character set for challenge
 my @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9 );
-
-# Todo: Support Link-Headers for discovery-Method,
-#       when subscribing to html, rss without hub etc.
 
 
 # Register plugin
@@ -506,7 +507,9 @@ sub _challenge {
   return $chal;
 };
 
+
 1;
+
 
 __DATA__
 @@ layouts/pubsub.html.ep
@@ -528,7 +531,6 @@ __DATA__
       <a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html">PubSubHubbub protocol</a>
     </p>
     <p>Your request was not correct.</p>
-
 
 __END__
 
@@ -566,16 +568,19 @@ Mojolicious::Plugin::PubSubHubbub - PubSubHubbub Plugin for Mojolicious
   $c->unsubscribe( topic => 'https://sojolicio.us/feed.atom',
                    hub   => 'https://hub.sojolicio.us' );
 
+
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::PubSubHubbub> is a plugin to support
 PubSubHubbub Webhooks as described in
-L<http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html|Specification>.
+L<PubSubHubbub 0.3|http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html>.
 
 The plugin currently supports the publisher and subscriber part,
-not the hub part.
+B<not> the hub part.
 
-The plugin is data store agnostic. Please use this plugin by applying hooks.
+The plugin is data store agnostic.
+Please use this plugin by applying hooks.
+
 
 =head1 ATTRIBUTES
 
@@ -584,7 +589,7 @@ The plugin is data store agnostic. Please use this plugin by applying hooks.
   $ps->hub('http://pubsubhubbub.appspot.com/');
   my $hub = $ps->hub;
 
-The preferred hub. Currently local hubs are not supported.
+The preferred hub. Currently no local hubs are supported.
 
 =head2 C<lease_seconds>
 
@@ -594,24 +599,29 @@ The preferred hub. Currently local hubs are not supported.
 Seconds a subscription is valid by default before auto refresh
 is enabled.
 
+
 =head1 HELPERS
 
 =head2 C<pubsub_publish>
 
   # In Controllers
-  $c->pubsub_publish( 'my_feed',                       # named route
-                      '/feed.atom',                    # relative paths
-                      'https://sojolicio.us/feed.atom' # absolute uris
-                     ):
+  $c->pubsub_publish(
+    'my_feed',                       # named route
+    '/feed.atom',                    # relative paths
+    'https://sojolicio.us/feed.atom' # absolute uris
+  );
 
 Publish a list of feeds in terms of a notification to the hub.
+
 
 =head2 C<pubsub_subscribe>
 
   # In Controllers
-  $c->pubsub_subscribe(topic => 'https://sojolicio.us/feed.atom',
-                       hub   => 'https://hub.sojolicio.us' );
-                       lease_seconds => 123456 );
+  $c->pubsub_subscribe(
+    topic => 'https://sojolicio.us/feed.atom',
+    hub   => 'https://hub.sojolicio.us' );
+    lease_seconds => 123456
+  );
 
 Subscribe to a topic.
 
@@ -631,16 +641,19 @@ hub's response message body is returned additionally.
 =head2 C<pubsub_unsubscribe>
 
   # In Controllers
-  $c->pubsub_unsubscribe(topic => 'https://sojolicio.us/feed.atom',
-                         hub   => 'https://hub.sojolicio.us' );
+  $c->pubsub_unsubscribe(
+    topic => 'https://sojolicio.us/feed.atom',
+    hub   => 'https://hub.sojolicio.us'
+  );
 
 Unsubscribe from a topic.
 
 Relevant parameters are 'hub', 'secret', and 'verify_token'.
 Additional parameters are possible and can be used in the hooks.
-The method returns a true value on succes and a false value
+The method returns a true value on success and a false value
 if an error occured. If called in an array context, the
 hub's response message body is returned additionally.
+
 
 =head1 HOOKS
 
@@ -658,11 +671,11 @@ hub's response message body is returned additionally.
       return;
      });
 
-This hook is released, when content arrived the pubsub
+This hook is released, when content arrives at the pubsub
 endpoint. The parameters include the plugin object, the current
 controller object, the content type, an array reference of topics,
 an empty string reference for a possible secret, and a string
-reference for the C<X-Hub-On-Behalf-Of> value, initially 0.
+reference for the C<X-Hub-On-Behalf-Of> value, which is initially 0.
 
 This hook can be used to filter unwanted topics, to give a
 necessary secret for signed content, and information on
@@ -693,8 +706,8 @@ The parameters include the plugin object, the current
 controller object, the content type, and the - maybe topic
 filtered - content as a L<Mojo::DOM> object.
 
-The L<Mojo::DOM> object is modified in a way that each entry in
-the feed (either RSS or Atom) includes its topic in
+The L<Mojo::DOM> object is canonicalized in a way that each
+entry in the feed (either RSS or Atom) includes its topic in
 'source link[rel="self"][href]'.
 
 =head2 C<before_pubsub_subscribe>
@@ -789,7 +802,7 @@ This hook can be used to deal with errors.
 
 This hook is released, when a verification is requested. The parameters
 are the plugin object, the current controller object, the parameters
-of the verification request as a Hash reference, and a string reference
+of the verification request as a hash reference, and a string reference
 to a false value.
 If verification is granted, this value has to be set to true.
 
@@ -804,7 +817,7 @@ L<Mojolicious::Plugin::Util::Endpoint>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

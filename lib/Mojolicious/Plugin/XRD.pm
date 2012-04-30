@@ -99,9 +99,12 @@ Specification.
 
   # In Controllers
   $self->render_xrd( $xrd );
+  $self->render_xrd( undef, 'acct:peter@sojolicio.us' );
 
 The helper C<render_xrd> renders an XRD object either
 in C<xml> or in C<json> notation, depending on the request.
+If an XRD object is empty, it renders a 404 error
+and accepts a second parameter as the subject of the 404.
 
 =head2 C<new_hostmeta>
 

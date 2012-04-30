@@ -42,13 +42,13 @@ use Sojolicious::ComplexValues::Delete;
 # Todo: Use carp and croak
 # Todo: Check for possible views
 # Todo: Maybe use UNIQUE keyword
-# Todo: Don't use Mojo::Base
 
 # Todo:
 # - Use CHI caching
 # - Simple Caching of users
 
 my $NAME_RE = qr{^[_a-zA-Z][_a-zA-Z0-9]*$};
+
 
 # Constructor
 sub new {
@@ -72,7 +72,8 @@ sub new {
     return;
   };
 
-  return $self;
+  # Return object
+  $self;
 };
 
 
@@ -141,19 +142,18 @@ sub init_db {
       };
 
       # Create trigger update
-      $oro->do(<<"TRIGGER") or return -1;
-CREATE TRIGGER
-  update_updated
-AFTER UPDATE OF updated
-ON ${name}_UPDATED
-BEGIN
-  UPDATE $name SET
-    val = new.updated
-  WHERE
-    res_id  = new.res_id AND
-    pri_key = "updated";
-END
-TRIGGER
+      $oro->do(
+	'CREATE TRIGGER
+           ' . $name . '_update_updated
+         AFTER UPDATE OF updated
+           ON ' . $name . '_UPDATED
+         BEGIN
+           UPDATE ' . $name . ' SET
+             val = new.updated
+           WHERE
+             res_id  = new.res_id AND
+             pri_key = "updated";
+         END') or return -1;
 
     });
 
@@ -239,13 +239,13 @@ Sojolicious::ComplexValues - Database accessor for complex values
     filterBy    => 'name.givenName',
     filterOp    => 'startswith',
     filterValue => 'H',
-    fields      => ['name','displayName','gender'],
+    fields      => [qw/name displayName gender/],
     sortBy      => 'displayName',
     startIndex  => 2,
     count       => 4
   });
 
-  say $response->{entry}->[0]->{displayName};
+  print $response->{entry}->[0]->{displayName};
 
   $cv->update({
     id => 3,
@@ -281,6 +281,7 @@ The L<Sojolicious::Oro> accessor handle.
 
 The table name of the complex value resource.
 
+
 =head2 C<items_per_page>
 
   print $cv->items_per_page;
@@ -288,6 +289,7 @@ The table name of the complex value resource.
 
 The default number of items per page in the response.
 Defaults to 10.
+
 
 =head1 METHODS
 
@@ -306,6 +308,7 @@ L<Sojolicious::Oro> instance and the name of the table.
 In addition it allows for setting the value for items
 shown per page on read (if not specified on retrieval).
 The default value is 10.
+
 
 =head2 C<create>
 
@@ -357,6 +360,7 @@ complexity are valid:
 A simple value 'updated' is automatically set to the current time
 as a Unix timestamp.
 
+
 =head2 C<read>
 
   my $response = $cv->read({
@@ -377,6 +381,7 @@ in L<http://portablecontacts.net/draft-spec.html#query-params|PortableContacts>
 (see L<below|Filtering>).
 Expects a hash reference for querying and optional a second hash
 with a predefined response hash reference.
+
 
 =head3 ID Requests
 
@@ -470,6 +475,7 @@ are returned. The response has the following structure:
 
 =back
 
+
 =head3 Filtering
 
 =over 2
@@ -500,6 +506,7 @@ to only return items updated after this point in time.
 
 =back
 
+
 =head3 Sorting
 
 =over 2
@@ -517,6 +524,7 @@ Allowed values are C<ascending> and C<descending>.
 
 =back
 
+
 =head3 Pagination
 
 =over 2
@@ -531,6 +539,7 @@ Defines the number of items per page. The default value is 10.
 This default value can be overwritten in the constructor.
 
 =back
+
 
 =head3 Presentation
 

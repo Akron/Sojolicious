@@ -4,11 +4,9 @@ use Mojo::JSON;
 use Mojolicious::Plugin::XML::Base;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
-# Todo! Allow other valid values
+# Todo: Allow other valid values
 my @RESPONSE = qw/startIndex itemsPerPage totalResults/;
 
-has [qw/startIndex totalResults/] => 0;
-has 'itemsPerPage';
 
 # Constructor
 sub new {
@@ -16,6 +14,7 @@ sub new {
   my $self = $class->SUPER::new( @_ );
 
   if (exists $self->{entry}) {
+
     # Multiple contacts
     if (ref($self->{entry}) eq 'ARRAY') {
       $self->{entry} = [
@@ -35,18 +34,28 @@ sub new {
   return $self;
 };
 
-# Private function for entry objects
-sub _new_entry {
-  # Is an entry already
-  if (ref($_[0]) eq
-	'Mojolicious::Plugin::PortableContacts::Entry') {
-    return $_[0];
-  }
 
-  # Is no entry yet
-  else {
-    return Mojolicious::Plugin::PortableContacts::Entry->new( @_ );
-  };
+# Attribute itemsPerPage
+sub items_per_page {
+  my $self = shift;
+  return $self->{itemsPerPage} unless $_[0];
+  $self->{itemsPerPage} = shift;
+};
+
+
+# Attribute startIndex
+sub start_index {
+  my $self = shift;
+  return $self->{startIndex} || 0 unless $_[0];
+  $self->{startIndex} = shift;
+};
+
+
+# Attribute totalResults
+sub total_results {
+  my $self = shift;
+  return $self->{totalResults} || 0 unless $_[0];
+  $self->{totalResults} = shift;
 };
 
 
@@ -59,6 +68,7 @@ sub entry {
   return $self->{entry} if ref($self->{entry}) eq 'ARRAY';
   return [$self->{entry}];
 };
+
 
 # Return JSON document
 sub to_json {
@@ -92,6 +102,7 @@ sub to_json {
   return $x;
 };
 
+
 # Return XML document
 sub to_xml {
   my $self = shift;
@@ -122,7 +133,24 @@ sub to_xml {
   return $response->to_pretty_xml;
 };
 
+
+# Private function for entry objects
+sub _new_entry {
+  # Is an entry already
+  if (ref($_[0]) eq
+	'Mojolicious::Plugin::PortableContacts::Entry') {
+    return $_[0];
+  }
+
+  # Is no entry yet
+  else {
+    return Mojolicious::Plugin::PortableContacts::Entry->new( @_ );
+  };
+};
+
+
 1;
+
 
 __END__
 
@@ -155,26 +183,26 @@ class of responses for L<Mojolicious::Plugin::PortableContacts>.
 
 =head1 ATTRIBUTES
 
-=head2 C<itemsPerPage>
+=head2 C<items_per_page>
 
-  my $items = $response->itemsPerPage;
-  $response->itemsPerPage(25);
+  my $items = $response->items_per_page;
+  $response->items_per_page(25);
 
 Number of query result entries per page.
 
-=head2 C<startIndex>
+=head2 C<start_index>
 
-  my $si = $response->startIndex;
-  $response->startIndex(20);
+  my $si = $response->start_index;
+  $response->start_index(20);
 
 Absolute start index of the query result entries.
 
-=head2 C<totalResults>
+=head2 C<total_results>
 
-  my $total = $response->totalResults;
-  $response->totalResults(5);
+  my $total = $response->total_results;
+  $response->total_results(5);
 
-Number of query results in total.
+Number of query result entries in total.
 
 =head2 C<entry>
 
@@ -215,7 +243,7 @@ L<Mojolicious::Plugin::PortableContacts::Entry>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

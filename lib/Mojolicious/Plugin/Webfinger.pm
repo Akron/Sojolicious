@@ -23,7 +23,7 @@ sub register {
 
       # If local, serve local
       if ($domain ~~ [$c->req->url->host, 'localhost']) {
-	return $plugin->_serve_webfinger($c, $norm);
+	return $plugin->_serve($c, $norm);
       };
 
       return $c->lrdd($norm => $domain);
@@ -73,10 +73,10 @@ sub register {
 
 	if ($$ok_ref) {
 	  # Get local xrd document
-	  my $xrd = $plugin->_serve_webfinger($c, $uri);
+	  my $xrd = $plugin->_serve($c, $uri);
 
 	  # Serve local XRD document
-	  $c->render_xrd($xrd) if $xrd;
+	  $c->render_xrd($xrd => $uri);
 	};
       };
       return;
@@ -86,7 +86,7 @@ sub register {
 
 
 # Serve webfinger
-sub _serve_webfinger {
+sub _serve {
   my $plugin = shift;
   my $c      = shift;
 
@@ -145,7 +145,7 @@ Mojolicious::Plugin::Webfinger - Webfinger Plugin
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::Webfinger> provides several functions for
-the Webfinger Protocol (see L<http://code.google.com/p/webfinger/wiki/WebFingerProtocol|Specification>).
+the L<Webfinger Protocol|https://datatracker.ietf.org/doc/draft-jones-appsawg-webfinger/>.
 It hooks into link-based descriptor discovery as provided by
 L<Mojolicious::Plugin::LRDD>.
 

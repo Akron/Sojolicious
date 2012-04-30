@@ -1,11 +1,12 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite;
-use Test::More tests => 14;
+use Test::More tests => 21;
 use Test::Mojo;
 use Data::Dumper 'Dumper';
 
 $|++;
 
+use lib 'lib';
 use lib '../lib';
 use_ok 'Sojolicious::Oro';
 
@@ -15,7 +16,25 @@ my $app = $t->app;
 
 my $db_file = ':memory:';
 
-$app->plugin('oro' => {
+$app->plugin('Config' => {
+  default => {
+    Oro => {
+      default => {
+	file => $db_file,
+	init => sub {
+	  my $oro = shift;
+	  $oro->do('CREATE TABLE Article (
+                  id     INTEGER PRIMARY KEY,
+                  titel  TEXT,
+                  inhalt TEXT
+                )') or return -1;
+	}
+      }
+    }
+  }
+});
+
+$app->plugin('Oro' => {
   Books => {
     file => $db_file,
     init => sub {
@@ -66,3 +85,13 @@ is($c->oro('Books')->count('Content'), 3, 'Count');
 
 is($c->oro(Books => 'Author')->count, 2, 'Count');
 is($c->oro('Books')->count('Author'), 2, 'Count');
+
+ok($c->oro->insert(Article => { titel => 'Headline1', inhalt => 'Text1'}), 'Insert');
+my $article = $c->oro->table('Article');
+ok($article->insert({ titel => 'Headline2', inhalt => 'Text2' }), 'Insert');
+ok($article->insert({ titel => 'Headline3', inhalt => 'Text3' }), 'Insert');
+ok($article->insert({ titel => 'Headline4', inhalt => 'Text4' }), 'Insert');
+
+is($c->oro->load(Article => { titel => 'Headline2' })->{inhalt}, 'Text2', 'Load');
+is($c->oro->load(Article => { titel => 'Headline3' })->{inhalt}, 'Text3', 'Load');
+is($c->oro->load(Article => { titel => 'Headline4' })->{inhalt}, 'Text4', 'Load');

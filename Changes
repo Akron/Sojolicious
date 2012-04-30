@@ -3,6 +3,7 @@
 	- Added "resource" parameter support to M::P::HostMeta.
         - Prepared ComplexValues for Hypnotoad compatible init.
         - Small bugfix in LRDD.
+        - Added simple CHI plugin.
 
 0.18 2012-04-25
         - Added on_connect event to Oro.

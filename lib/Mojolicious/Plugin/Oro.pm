@@ -12,6 +12,11 @@ use Sojolicious::Oro;
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Load parameter from Config file
+  if (my $config_param = $mojo->config('Oro')) {
+    $param = { %$config_param, %$param };
+  };
+
   # Hash of database handles
   my $databases = $mojo->attr('oro_handles');
 
@@ -63,6 +68,7 @@ sub register {
   $mojo->helper(
     oro => sub {
       my ($c, $name, $table) = @_;
+      $name //= 'default';
       my $oro = $databases->{$name};
 
       # Database unknown
@@ -96,6 +102,13 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
     }
   );
 
+  # Or in your config file
+  {
+    Oro => {
+      default => { file => ':memory:' }
+    }
+  }
+
   $c->oro('Books')->insert(Content => { title => 'Misery' });
   print $c->oro(Books => 'Content')->count;
 
@@ -115,6 +128,9 @@ L<Sojolicious::Oro>.
 Returns an Oro database handle if registered.
 Accepts the name of the registered database and optionally
 a table name.
+If no database handle name is given, a database handle name
+C<default> is assumed.
+
 
 =head1 METHODS
 

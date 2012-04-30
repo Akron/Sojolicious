@@ -5,9 +5,6 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojolicious::Plugin::PortableContacts::Response;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
-has 'host';
-has 'secure' => 0;
-
 # Default count parameter
 # TODO: Make ->poco PortableContact Server as well as Client
 # TODO: Check OAuth2 and fill $c->stash->{'poco.user_id'} -> poco.user_id
@@ -52,11 +49,7 @@ sub register {
       my ($route, $param) = @_;
 
       # Set endpoint
-      $route->endpoint(
-	poco => {
-	  host   => $plugin->host,
-	  scheme => $plugin->secure ? 'https' : 'http'
-	});
+      $route->endpoint('poco');
 
       # Add Route to Hostmeta - exactly once
       $mojo->hook(
@@ -146,7 +139,7 @@ sub serve {
 
   # Empty response
   my $response = {
-    totalResults => 0,
+    totalResults  => 0,
     itemsPerPage => 0
   };
 
@@ -263,7 +256,7 @@ sub _get_param {
 
       # Count is valid
       if ($count > $new_param{count}) {
-	$count =  delete $new_param{count};
+	$count = delete $new_param{count};
       }
 
       # Count is invalid
@@ -311,12 +304,15 @@ Mojolicious::Plugin::PortableContacts - PortableContacts Plugin
   $app->plugin('PortableContacts' => { count => 20 });
 
   # Mojolicious::Lite
-  plugin 'PortableContacts', count => 20;
+  plugin PortableContacts => { count => 20 };
 
-  my $response = $c->poco( filterBy    => 'name.givenName',
-                           filterOp    => 'startswith',
-                           filterValue => 'Ak',
-                           fields      => 'name,birthday');
+  # In Controller
+  my $response = $c->poco(
+    filterBy    => 'name.givenName',
+    filterOp    => 'startswith',
+    filterValue => 'Ak',
+    fields      => 'name,birthday'
+  );
 
   print $response->entry->[0]->to_xml;
 
@@ -332,20 +328,6 @@ can be enabled via Hooks.
 
 =head1 ATTRIBUTES
 
-=head2 C<host>
-
-  $pc->host('sojolicio.us');
-  my $host = $pc->host;
-
-The host for the PortableContacts Endpoint.
-
-=head2 C<secure>
-
-  $pc->secure(1);
-  my $sec = $pc->secure;
-
-Use C<http> or C<https>.
-
 =head2 C<count>
 
   $pc->count(1);
@@ -359,10 +341,12 @@ Defaults to 0, which means that there is no limit.
 =head2 C<poco>
 
   # In Controller:
-  my $response = $c->poco( filterBy    => 'name.givenName',
-                           filterOp    => 'startswith',
-                           filterValue => 'Ak',
-                           fields      => 'name,birthday');
+  my $response = $c->poco(
+    filterBy    => 'name.givenName',
+    filterOp    => 'startswith',
+    filterValue => 'Ak',
+    fields      => 'name,birthday'
+  );
 
 The helper C<poco> returns the result set of a PortableContacts
 Query as a L<Mojolicious::Plugin::PortableContacts::Response> object.
