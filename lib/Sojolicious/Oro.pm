@@ -2,7 +2,7 @@ package Sojolicious::Oro;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use feature qw/state switch/;
 use Carp qw/carp croak/;
@@ -15,7 +15,6 @@ our @CARP_NOT;
 #       so different drivers can handle them differently.
 # Todo: Use simple hash-memory for query cache
 # Todo: oro->load(irgendwas => foobar); returns always a value
-# Read: http://irclog.perlgeek.de/mojo/2012-04-15#i_5446716
 
 # Database connection
 use DBI;
@@ -30,7 +29,7 @@ our $OP_REGEX       = qr/^(?i:
 			    (?:eq|ne|[gl][te])
                           )$/x;
 our $KEY_REGEX      = qr/[_0-9a-zA-Z]/;
-
+our $CACHE_COMMENT  = 'From Cache';
 
 # Constructor
 sub new {
@@ -177,7 +176,17 @@ sub dbh {
 
 # Last executed SQL
 sub last_sql {
-  $_[0]->{last_sql} || 'empty';
+  return $_[0]->{last_sql} || '' unless wantarray;
+
+  # Return as array
+  return ('', 0) unless $_[0]->{last_sql};
+
+  # Check if database request
+  state $offset = -1 * length $CACHE_COMMENT;
+  return (
+    $_[0]->{last_sql},
+    substr($_[0]->{last_sql}, $offset) eq $CACHE_COMMENT
+  );
 };
 
 
@@ -366,13 +375,14 @@ sub select {
   # Append condition
   my @values;
 
-  my $cond;
+  my ($cond, $prep);
   if (($_[0] && ref($_[0]) eq 'HASH') || @$join_pairs) {
 
     # Condition
-    my ($pairs, $values, $prep);
+    my ($pairs, $values);
     if ($_[0] && ref($_[0]) eq 'HASH') {
       ($pairs, $values, $prep) = _get_pairs( shift(@_) );
+
       push(@values, @$values);
 
       # Add to pairs
@@ -391,11 +401,36 @@ sub select {
     };
   };
 
-  # Prepare and execute
-  my ($rv, $sth) = $self->prep_and_exec('SELECT ' . $sql, \@values);
+  my $result;
 
-  # No statement created
-  return unless $sth;
+  # Check cache
+  my ($chi, $key, $chi_param);
+  if ($prep && $prep->{cache}) {
+    ($chi, $key, $chi_param) = @{$prep->{cache}};
+
+    # Generate key
+    $key = 'SELECT ' . $sql . '-' . join('-', @values) unless $key;
+
+    # Get cache result
+    $result = $chi->get($key);
+  };
+
+  my ($rv, $sth);
+
+  # Result was not cached
+  unless ($result) {
+
+    # Prepare and execute
+    ($rv, $sth) = $self->prep_and_exec('SELECT ' . $sql, \@values);
+
+    # No statement created
+    return unless $sth;
+  }
+
+  else {
+    # Last sql command
+    $self->{last_sql} = 'SELECT ' . $sql . ' -- ' . $CACHE_COMMENT;
+  };
 
   # Prepare treatments
   my (@treatment, %treatsub);
@@ -411,8 +446,16 @@ sub select {
     my $cb = shift;
 
     # Iterate through dbi result
-    my $row;
-    while ($row = $sth->fetchrow_hashref) {
+    my ($i, $row) = (0);
+    while ($row = $sth ? $sth->fetchrow_hashref : $result->[$i]) {
+
+      # Iterate for cache result
+      if ($chi && $sth) {
+	push(@$result, $row);
+      };
+
+      # Increment for cached results
+      $i++;
 
       # Treat result
       if ($treatment) {
@@ -427,19 +470,37 @@ sub select {
 
       # Finish if callback returns -1
       my $rv = $cb->($row);
-      last if $rv && $rv == -1;
+      if ($rv && $rv == -1) {
+	$result = undef;
+	last;
+      };
     };
+
+    # Save to cache
+    if ($sth && $chi && $result) {
+      $chi->set($key => $result, $chi_param);
+    };
+
+    # Came from cache
+    return if !$sth && $chi;
 
     # Finish statement
     $sth->finish;
     return;
   };
 
-  # Return array ref
-  return $sth->fetchall_arrayref({}) unless $treatment;
-
   # Create array ref
-  my $result = $sth->fetchall_arrayref({});
+  unless ($result) {
+    $result = $sth->fetchall_arrayref({});
+
+    # Save to stash
+    if ($chi && $result) {
+      $chi->set($key => $result, $chi_param);
+    };
+  };
+
+  # Return array ref
+  return $result unless $treatment;
 
   # Treat each row
   foreach my $row (@$result) {
@@ -570,15 +631,36 @@ sub count {
             ' FROM '  . join(', ', @$tables);
 
   # Get conditions
-  my ($pairs, $values);
+  my ($pairs, $values, $prep);
   if ($_[0]) {
-    ($pairs, $values) = _get_pairs( shift(@_) );
+    ($pairs, $values, $prep) = _get_pairs( shift(@_) );
     push(@pairs, @$pairs) if $pairs->[0];
   };
 
   # Add where clause
   $sql .= ' WHERE ' . join(' AND ', @pairs) if @pairs;
   $sql .= ' LIMIT 1';
+
+  my $result;
+
+  # Check cache
+  my ($chi, $key, $chi_param);
+  if ($prep && $prep->{cache}) {
+    ($chi, $key, $chi_param) = @{$prep->{cache}};
+
+    # Generate key
+    $key = $sql . '-' . join('-', @$values) unless $key;
+
+    # Get cache result
+    if ($result = $chi->get($key)) {
+
+      # Last sql command
+      $self->{last_sql} = $sql . ' -- ' . $CACHE_COMMENT;
+
+      # Return cache result
+      return $result;
+    };
+  };
 
   # Prepare and execute
   my ($rv, $sth) = $self->prep_and_exec($sql, $values || []);
@@ -587,9 +669,14 @@ sub count {
   return 0 if !$rv || $rv ne '0E0';
 
   # Return count
-  my $count = $sth->fetchrow_arrayref->[0];
+  $result = $sth->fetchrow_arrayref->[0];
   $sth->finish;
-  return $count;
+
+  # Save to cache
+  $chi->set($key => $result, $chi_param) if $chi && $result;
+
+  # Return result
+  $result;
 };
 
 
@@ -1005,7 +1092,7 @@ sub _get_pairs ($) {
   my (@pairs, @values, %prep);
 
   while (my ($key, $value) = each %{$_[0]}) {
-    next unless $key =~ qr/^-?$KEY_REGEX+$/o;
+    next unless $key =~ m/^-?$KEY_REGEX+$/o;
 
     # Restriction of the result set
     if (index($key, '-') == 0) {
@@ -1029,6 +1116,21 @@ sub _get_pairs ($) {
 		 (ref($value) ? @$value : $value)
 	       )
 	     );
+      }
+
+      # Cache
+      elsif ($key eq '-cache') {
+	my $chi = delete $value->{chi};
+
+	# Check chi existence
+	if ($chi) {
+	  $prep{cache} = [$chi, delete $value->{key} // '', $value];
+	}
+
+	# No chi given
+	else {
+	  carp 'No CHI driver given for cache';
+	};
       }
 
       # Limit and Offset restriction
@@ -1277,8 +1379,14 @@ B<This attribute is EXPERIMENTAL and may change without warnings.>
 =head2 C<last_sql>
 
   print $oro->last_sql;
+  my ($sql, $from_cache) = $oro->last_sql;
 
 The last executed SQL command.
+In array context returns the last executed SQL command
+and a false value in case of a real database request
+or a true value in case the result was returned by a cache.
+
+B<The array return is EXPERIMENTAL and may change without warnings.>
 
 
 =head2 C<driver>
@@ -1526,6 +1634,40 @@ current table name.
 
 B<Treatments are EXPERIMENTAL and may change without warnings.>
 
+
+=head3 Caching
+
+  use CHI;
+  my $hash = {};
+  my $cache = CHI->new(
+    driver => 'Memory',
+    datastore => $hash
+  );
+
+  my $users = $oro->select(
+    Person => {
+      -cache => {
+        chi        => CHI->new(),
+        key        => 'all_persons',
+        expires_in => '10 min'
+      }
+    }
+  );
+
+Selected results can be directly cached by using the C<-cache>
+keyword. It accepts a hash reference with the parameter C<chi>
+containing the cache object and C<key> containing the key
+for caching. If no key is given, the SQL statement is used
+as the key. All other parameters are transferred to the C<set>
+method of the cache.
+
+B<Note:> Although the parameter is called C<chi>, all caching
+objects granting the limited functionalities of C<set> and C<get>
+methods are valid (e.g., L<Cache::Cache>, L<Mojo::Cache>).
+
+B<Caching is EXPERIMENTAL and may change without warnings.>
+
+
 =head2 C<load>
 
   my $user  = $oro->load(Person, { id => 4 });
@@ -1537,6 +1679,8 @@ that meets a given condition.
 Expects the table name of selection, an optional array ref of fields
 to return and a hash ref with conditions, the rows have to fulfill.
 Normally this includes the primary key.
+Restrictions as well as the caching systems can be applied as with
+L<select>.
 In case of scalar values, identity is tested.
 In case of array refs, it is tested, if the field is an element of the set.
 Fields can be column names or functions. With a colon you can define
@@ -1564,6 +1708,7 @@ Returns the number of rows that were deleted.
 Returns the number of rows of a table.
 Expects the table name and a hash ref with conditions,
 the rows have to fulfill.
+Caching can be applied as with L<select>.
 
 
 =head2 C<table>
@@ -1656,34 +1801,6 @@ Transactions established with this method can be securely nested
 on the driver).
 
 
-=head1 EVENTS
-
-=head2 C<on_connect>
-
-  $oro->on_connect(
-    sub { $log->debug('New connection established') }
-  );
-
-  if ($oro->on_connect(
-    my_event => sub {
-      shift->insert(Log => { msg => 'reconnect' } )
-    })) {
-    say 'Event newly established!';
-  };
-
-Add callback for execution in case of newly established
-database connections.
-The first argument to the anonymous subroutine is the Oro object,
-the second one is the newly established database connection.
-Prepending a string with a name will prevent from adding an
-event multiple times - adding the event again will be ignored.
-Returns a true value in case the event is newly established,
-otherwise false.
-Events will be emitted in a unparticular order.
-
-B<This method is EXPERIMENTAL and may change without warnings.>
-
-
 =head2 C<last_insert_id>
 
   my $id = $oro->last_insert_id;
@@ -1701,6 +1818,34 @@ Returns the globally last inserted id regarding to the database connection.
 
 Executes SQL code.
 This is a wrapper for the DBI C<do()> method (but fork- and thread-safe).
+
+
+=head1 EVENTS
+
+=head2 C<on_connect>
+
+  $oro->on_connect(
+    sub { $log->debug('New connection established') }
+  );
+
+  if ($oro->on_connect(
+    my_event => sub {
+      shift->insert(Log => { msg => 'reconnect' } )
+    })) {
+    say 'Event newly established!';
+  };
+
+Add a callback for execution in case of newly established
+database connections.
+The first argument to the anonymous subroutine is the Oro object,
+the second one is the newly established database connection.
+Prepending a string with a name will prevent from adding an
+event multiple times - adding the event again will be ignored.
+Returns a true value in case the event is newly established,
+otherwise false.
+Events will be emitted in a unparticular order.
+
+B<This method is EXPERIMENTAL and may change without warnings.>
 
 
 =head1 DEPENDENCIES

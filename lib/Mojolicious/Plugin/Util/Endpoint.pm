@@ -3,6 +3,8 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 use Mojo::URL;
 
+# Todo: Update to https://tools.ietf.org/html/rfc6570
+
 # Endpoint hash
 our %endpoints;
 
@@ -282,7 +284,7 @@ L<Mojolicious> (best with SSL support).
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

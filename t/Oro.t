@@ -1,8 +1,19 @@
-use Test::More tests => 216;
+use Test::More;
 use File::Temp qw/:POSIX/;
 use Data::Dumper 'Dumper';
 use strict;
 use warnings;
+
+my $chi_loaded;
+my $base_tests = 219;
+
+if (eval 'use CHI; 1;') {
+  $chi_loaded = 1;
+  plan tests => $base_tests + 52;
+} else {
+  plan tests => $base_tests;
+};
+
 
 $|++;
 
@@ -80,14 +91,21 @@ unlink $db_file;
 
 $db_file = '';
 
-ok($oro = Sojolicious::Oro->new(
-  $db_file => sub {
+ok($oro = Sojolicious::Oro->new( $db_file ), 'Init temp db');
+
+my ($last_sql, $last_sql_cache) = $oro->last_sql;
+ok(!$last_sql, 'No last SQL');
+ok(!$last_sql_cache, 'No Cache');
+
+$oro->txn(
+  sub {
     for ($_[0]) {
       $_->do($_init_name);
       $_->do($_init_content);
       $_->do($_init_book);
-    };
-  }), 'Init temp db');
+    }
+  });
+
 
 ok($oro->insert(Content => {
   title => 'Test', content => 'Value 1'
@@ -185,6 +203,8 @@ ok($oro->update(Content =>
 is($oro->last_insert_id, 1, 'Row id');
 
 like($oro->last_sql, qr/^update/i, 'SQL command');
+($last_sql, $last_sql_cache) = $oro->last_sql;
+ok(!$last_sql_cache, 'No Cache');
 
 ok(!$oro->update(Content =>
 		  { content => 'This is changed content.' } =>
@@ -563,7 +583,7 @@ ok($found = $oro->select([
   Book => ['title:title','year:year'] => { author_id => 1 }
 ] => { author => 'Fry' } ), 'Joins');
 
-my $last_sql = $oro->last_sql;
+$last_sql = $oro->last_sql;
 
 ok($found = $oro->select([
   Name => ['prename:author'] => { id => 1 },
@@ -795,5 +815,225 @@ ok(length($oro->explain(
    WHERE
      Name.id = Book.author_id AND
      author_id = ?', [4])) > 0, 'Explain');
+
+
+
+
+# Caching tests
+if ($chi_loaded) {
+
+  my $hash = {};
+
+  my $chi = CHI->new(
+    driver => 'Memory',
+    datastore => $hash
+  );
+
+  $result = $oro->select(Name => {
+    prename => { glob => '*e*' }
+  });
+  is(@$result, 3, 'Select with like');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache');
+  ok(!(scalar $chi->get_keys), 'No keys');
+
+  $result = $oro->select(Name => {
+    prename => { glob => '*e*' },
+    -cache => {
+      chi => $chi,
+      key => 'Contains e'
+    }
+  });
+
+  is(@$result, 3, 'Select with like');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 2');
+  is(scalar $chi->get_keys, 1, 'One key');
+
+  $result = $oro->select(Name => {
+    prename => { glob => '*e*' },
+    -cache => {
+      chi => $chi,
+      key => 'Contains e'
+    }
+  });
+
+  is(@$result, 3, 'Select with like');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 1');
+
+  is(scalar $chi->get_keys, 1, 'One key');
+
+  $result = $oro->select(Name => {
+    prename => { glob => '*e*' },
+    -cache => {
+      chi => $chi,
+      key => 'Contains e'
+    }
+  } => sub {
+    my $row = shift;
+    ok($row->{prename} ~~ [qw/Michael Peter Sabine/], 'Name');
+  });
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 2');
+
+  $result = $oro->select(Name => {
+    prename => { like => '%e%' },
+    -cache => {
+      chi => $chi,
+      key => 'Contains e with like'
+    }
+  } => sub {
+    my $row = shift;
+    ok($row->{prename} ~~ [qw/Michael Peter Sabine/], 'Name 2');
+  });
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 3');
+
+  is(scalar $chi->get_keys, 2, 'Two keys');
+
+  $result = $oro->select(Name => {
+    prename => { like => '%e%' },
+    -cache => {
+      chi => $chi,
+      key => 'Contains e with like'
+    }
+  } => sub {
+    my $row = shift;
+    ok($row->{prename} ~~ [qw/Michael Peter Sabine/], 'Name 3');
+  });
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 4');
+  is(scalar $chi->get_keys, 2, 'One key');
+
+  my $count_result = 0;
+  $result = $oro->select(Name => {
+    prename => { like => '%e%' },
+    -cache => {
+      chi => $chi,
+      key => 'Contains e with like'
+    }
+  } => sub {
+    my $row = shift;
+    ok($row->{prename} ~~ [qw/Michael Peter Sabine/], 'Name 4');
+    return $count_result--;
+  });
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 5');
+  is(scalar $chi->get_keys, 2, 'Two keys');
+
+  $count_result = 1;
+  $result = $oro->select(Name => {
+    -cache => {
+      chi => $chi,
+      key => 'No restriction'
+    }
+  } => sub {
+    my $row = shift;
+    return $count_result--;
+  });
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 5');
+  is(scalar $chi->get_keys, 2, 'Two keys');
+
+  $result = $oro->select(Name => {
+    -cache => {
+      chi => $chi,
+      key => 'No restriction'
+    }
+  } => sub { return; });
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 6');
+  is(scalar $chi->get_keys, 3, 'Three keys');
+
+  $count_result = 2;
+  $result = $oro->select(Name => {
+    -cache => {
+      chi => $chi,
+      key => 'No restriction'
+    }
+  } => sub {
+    my $row = shift;
+    return --$count_result;
+  });
+
+  is($count_result, -1, 'Count Result');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 6');
+
+  is(scalar $chi->get_keys, 3, 'Three keys');
+
+  is_deeply(
+    $oro->load(Name => { prename => 'Sabine' }),
+    {id => 4, prename => 'Sabine', surname => 'Meier'},
+    'Load');
+
+  is(scalar $chi->get_keys, 3, 'Three keys');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 7');
+
+  is_deeply(
+    $oro->load(Name => {
+      prename => 'Sabine',
+      -cache => {
+	chi => $chi,
+	key => 'load'
+      }
+    }),
+    {id => 4, prename => 'Sabine', surname => 'Meier'},
+    'Load');
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 8');
+  is(scalar $chi->get_keys, 4, 'Four keys');
+
+  is_deeply(
+    $oro->load(Name => {
+      prename => 'Sabine',
+      -cache => {
+	chi => $chi,
+	key => 'load'
+      }
+    }),
+    {id => 4, prename => 'Sabine', surname => 'Meier'},
+    'Load');
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 9');
+  is(scalar $chi->get_keys, 4, 'Four keys');
+
+  is($oro->count('Name'), 5, 'Count');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 10');
+
+  is(scalar $chi->get_keys, 4, 'Four keys');
+
+  is($oro->count(Name => {
+    -cache => {
+      chi => $chi,
+      key => 'count'
+    }
+  }), 5, 'Count');
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok(!$last_sql_cache, 'Not from Cache 11');
+  is(scalar $chi->get_keys, 5, 'Five keys');
+
+  is($oro->count(Name => {
+    -cache => {
+      chi => $chi,
+      key => 'count'
+    }
+  }), 5, 'Count');
+
+  ($last_sql, $last_sql_cache) = $oro->last_sql;
+  ok($last_sql_cache, 'From Cache 7');
+  is(scalar $chi->get_keys, 5, 'Five keys');
+};
 
 __END__

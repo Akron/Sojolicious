@@ -99,7 +99,7 @@ Mojolicious::Plugin::CHI - CHI driver Plugin
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::CHI> is a simple plugin to work with
-L<CHI>.
+L<CHI> caches.
 
 =head1 HELPERS
 
@@ -109,7 +109,7 @@ L<CHI>.
   $c->chi('MyCache')->set(my_key => 'This is my value', '10 min');
   print $c->chi('MyCache')->get('my_key');
 
-Returns a CHI handle if registered.
+Returns a L<CHI> handle if registered.
 Accepts the name of the registered cache.
 If no cache handle name is given, a cache handle name
 C<default> is assumed.
@@ -145,6 +145,10 @@ associated with a L<CHI> object.
 
 L<Mojolicious>,
 L<CHI>.
+
+B<Note:> L<CHI> has a lot of dependencies. It is
+thus not recommended to use this plugin in a CGI
+environment.
 
 =head1 AVAILABILITY
 

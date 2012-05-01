@@ -44,9 +44,7 @@ sub register {
 	  %$db,
 	  on_connect => sub {
 	    my $oro = shift;
-	    $mojo->log->info(
-	      'Connect from ' . $$ . ' instead of ' . $oro->{pid}
-	    );
+	    $mojo->log->info( 'Connect from ' . $$ );
           }
 	);
 
