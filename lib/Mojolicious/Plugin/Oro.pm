@@ -2,9 +2,6 @@ package Mojolicious::Plugin::Oro;
 use Mojo::Base 'Mojolicious::Plugin';
 use Carp qw/carp croak/;
 
-# Todo: Create command for all databases
-#       loaded with this module
-
 # Database driver
 use Sojolicious::Oro;
 
@@ -29,6 +26,8 @@ sub register {
       });
   };
 
+  push @{$mojo->commands->namespaces}, __PACKAGE__;
+
   # Init databases
   Mojo::IOLoop->timer(
     0 => sub {
@@ -50,7 +49,8 @@ sub register {
 
 	# Emit on_oro_connect hook
 	$mojo->plugins->emit_hook(
-	  on_oro_init => ($plugin, $name, $oro)
+	  'on_' . ($name ne 'default' ? $name . '_' : '') . 'oro_init' =>
+	    $oro
 	) if $oro->created;
 
 	# No succesful creation
@@ -156,30 +156,57 @@ C<default> is assumed.
     Books => { file => 'Database/Books.sqlite' }
   };
 
+Called when registering the plugin.
 On creation, the plugin accepts a hash of database names
 associated with a L<Sojolicious::Oro> object.
-
+All parameters can be set either on registration or
+as part of the configuration file with the key C<Oro>.
 
 =head1 HOOKS
 
-=item <on_oro_init>
+=head2 C<on_DBNAME_oro_init>
 
-  $mojo->hook(
-    on_oro_init => sub {
-      my ($plugin, $c, $name, $oro) = @_;
+  $app->plugin(Oro => {
+    Books => {
+      file => 'Database/Books.sqlite';
+    }
+  });
+
+  $app->hook(
+    on_Books_oro_init => sub {
+      my $oro = shift;
       $oro->init_db;
     });
 
-This hook is run when an oro database is initialized.
+This hook is run when an oro database of the given name
+is initialized. In case of the default database,
+the handle of the hook is C<on_oro_init>.
+This hook will be automatically released in case an
+SQLite database was created.
+
+
+=head1 COMMANDS
+
+=head2 C<oro_init>
+
+  perl app.pl oro_init
+
+As the hook C<on_DBNAME_oro_init> is only automatically released
+in case of newly created SQLite instances, the hook can be forced
+by manually initializing the databases using the
+L<Mojolicious::Plugin::Oro::oro_init> command.
+
 
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
 L<Sojolicious::Oro>.
 
+
 =head1 AVAILABILITY
 
   https://github.com/Akron/Sojolicious
+
 
 =head1 COPYRIGHT AND LICENSE
 

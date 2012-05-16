@@ -11,7 +11,7 @@ sub secure { warn 'secure is deprecated' };
 
 # Register plugin
 sub register {
-  my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo) = @_;
 
   my $helpers = $mojo->renderer->helpers;
 
@@ -271,6 +271,19 @@ Mojolicious::Plugin::HostMeta - HostMeta Plugin for Mojolicious
 L<Mojolicious::Plugin::HostMeta> is a plugin to support
 "well-known" HostMeta documents
 (see L<https://tools.ietf.org/html/rfc6415|RFC6415>).
+
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('HostMeta');
+
+  # Mojolicious::Lite
+  plugin 'HostMeta';
+
+Called when registering the plugin.
 
 
 =head1 HELPERS

@@ -9,7 +9,7 @@ use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
 # Register plugin
 sub register {
-  my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo) = @_;
 
   # Set mime-types
   for ($mojo->types) {
@@ -332,6 +332,20 @@ L<Mojolicious::Plugin::MagicSignatures> is a plugin for L<Mojolicious>
 to fold and unfold MagicEnvelopes as described in
 L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
 
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('MagicSignatures');
+
+  # Mojolicious::Lite
+  plugin 'MagicSignatures';
+
+Called when registering the plugin.
+
+
 =head1 HELPERS
 
 =head2 C<magicenvelope>
@@ -379,6 +393,7 @@ in various formats and can be used from all L<Mojolicious::Controller>
 classes (see L<Mojolicious::Plugin::MagicSignatures::Key> C<new> for
 acceptable parameters).
 
+
 =head2 C<get_magickeys>
 
   my $mkeys = $c->get_magickeys('acct' => 'acct:akron@sojolicio.us');
@@ -410,6 +425,7 @@ reference of the following structure:
   [ [ MagicKey, key_id? ]* ]
 
 The MagicKeys may or may not contain a private part.
+
 
 =head2 C<verify_magicenvelope>
 

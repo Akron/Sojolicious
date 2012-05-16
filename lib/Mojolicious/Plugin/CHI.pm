@@ -137,8 +137,11 @@ C<default> is assumed.
     default => { driver => 'Memory', global => 1 }
   };
 
+Called when registering the plugin.
 On creation, the plugin accepts a hash of cache names
 associated with a L<CHI> object.
+All parameters can be set either on registration or
+as part of the configuration file with the key C<CHI>.
 
 
 =head1 DEPENDENCIES

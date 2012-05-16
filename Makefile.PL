@@ -13,6 +13,6 @@ WriteMakefile(
         'DBD::SQLite' => 1.33,
         'DBI'         => 1.57
     },
-    test => {TESTS => 't/*.t t/*/*.t'}
+    test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t'}
 );
 

@@ -12,6 +12,11 @@ use constant {
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Load parameter from Config file
+  if (my $config_param = $mojo->config('Salmon')) {
+    $param = { %$config_param, %$param };
+  };
+
   # Push package to render classes for DATA sections
   push (@{ $mojo->renderer->classes }, __PACKAGE__);
 
@@ -484,6 +489,19 @@ When set, there are three named routes to access in templates:
 These can be used for example in HTML C<Link> headers.
 
 =head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('Salmon');
+
+  # Mojolicious::Lite
+  plugin 'Salmon';
+
+Called when registering the plugin.
+All parameters can be set either on registration or
+as part of the configuration file with the key C<Salmon>.
+
 
 =head1 HOOKS
 

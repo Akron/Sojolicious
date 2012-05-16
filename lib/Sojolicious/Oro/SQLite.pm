@@ -522,11 +522,10 @@ Sojolicious::Oro::SQLite - SQLite driver for Sojolicious::Oro
 
   use Sojolicious::Oro;
 
-  my $db = Sojolicious::Oro->new('file.sqlite');
+  my $oro = Sojolicious::Oro->new('file.sqlite');
 
-  $oro = $db->attach(blog => ':memory:');
+  $db->attach(blog => ':memory:');
 
-  my $oro = 
   if ($oro->created) {
     $oro->do(
       'CREATE VIRTUAL TABLE Blog USING fts4(title, body)'

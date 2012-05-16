@@ -6,6 +6,22 @@ our $VERSION = '0.01';
 
 use Carp qw/carp croak/;
 
+# Todo: Change update method to use id first if given.
+# Todo: Change delete method to be also a wrapper
+#       of read - deletion of all '---' res_ids.
+# Todo: Create separated tutorial document.
+# Todo: Introduce replace operation.
+# Todo: Maybe a 'distinct' parameter
+# Todo: Create an ->error string object
+#       and return an error response for all actions
+# Todo: Use carp and croak
+# Todo: Check for possible views
+# Todo: Maybe use UNIQUE keyword
+
+# Todo:
+# - Use CHI caching
+# - Simple Caching of users
+
 BEGIN {
   # Load RFC3339 module
   foreach (qw/Mojolicious::Plugin::Date::RFC3339
@@ -31,21 +47,6 @@ use Sojolicious::ComplexValues::Read;
 use Sojolicious::ComplexValues::Update;
 use Sojolicious::ComplexValues::Delete;
 
-# Todo: Change update method to use id first if given.
-# Todo: Change delete method to be also a wrapper
-#       of read - deletion of all '---' res_ids.
-# Todo: Create separated tutorial document.
-# Todo: Introduce replace operation.
-# Todo: Maybe a 'distinct' parameter
-# Todo: Create an ->error string object
-#       and return an error response for all actions
-# Todo: Use carp and croak
-# Todo: Check for possible views
-# Todo: Maybe use UNIQUE keyword
-
-# Todo:
-# - Use CHI caching
-# - Simple Caching of users
 
 my $NAME_RE = qr{^[_a-zA-Z][_a-zA-Z0-9]*$};
 
@@ -197,6 +198,7 @@ sub items_per_page {
   return;
 };
 
+
 1;
 
 
@@ -256,7 +258,7 @@ Sojolicious::ComplexValues - Database accessor for complex values
 
   $cv->delete(1);
 
-=head1 Description
+=head1 DESCRIPTION
 
 L<Sojolicious::ComplexValues> allows for storing and retrieving
 values with limited complexity in SQL databases (semi-schemaless).

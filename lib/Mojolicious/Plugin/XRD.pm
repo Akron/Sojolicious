@@ -93,6 +93,19 @@ Additionally it supports the "rel" parameter of the
 L<WebFinger|https://datatracker.ietf.org/doc/draft-jones-appsawg-webfinger/>
 Specification.
 
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('XRD');
+
+  # Mojolicious::Lite
+  plugin 'XRD';
+
+Called when registering the plugin.
+
+
 =head1 HELPERS
 
 =head2 C<render_xrd>

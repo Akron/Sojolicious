@@ -21,7 +21,18 @@ my @challenge_chars = ('A' .. 'Z', 'a' .. 'z', 0 .. 9 );
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Load parameter from Config file
+  if (my $config_param = $mojo->config('PubSubHubbub')) {
+    $param = { %$config_param, %$param };
+  };
+
+  # Set hub attribute
   $plugin->hub($param->{hub}) if $param->{hub};
+
+  # Set lease_seconds attribute
+  if ($param->{lease_seconds}) {
+    $plugin->lease_seconds($param->{lease_seconds});
+  };
 
   push (@{ $mojo->renderer->classes }, __PACKAGE__);
 
@@ -543,30 +554,38 @@ Mojolicious::Plugin::PubSubHubbub - PubSubHubbub Plugin for Mojolicious
 =head1 SYNOPSIS
 
   # Mojolicious
-  $app->plugin('PubSubHubbub',
-              { hub => 'https://hub.example.org/' }
-              );
+  $app->plugin('PubSubHubbub' => {
+    hub => 'https://hub.example.org/'
+  });
 
   my $r = $app->routes;
   $r->route('/:user/callback_url')->pubsub('cb')
 
   # Mojolicious::Lite
-  plugin 'PubSubHubbub' => { hub => 'https://hub.example.org' };
+  plugin 'PubSubHubbub' => {
+    hub => 'https://hub.example.org'
+  };
 
   (any '/:user/callback_url')->pubsub('cb');
 
   # In Controllers:
   # Publish a feed
-  $c->publish('https://sojolicio.us/blog.atom',
-              'https://sojolicio.us/activity.atom');
+  $c->publish(
+    'https://sojolicio.us/blog.atom',
+    'https://sojolicio.us/activity.atom'
+  );
 
   # Subscribe to a feed
-  $c->subscribe( topic   => 'https://sojolicio.us/feed.atom',
-                 hub     => 'https://hub.sojolicio.us');
+  $c->subscribe(
+    topic   => 'https://sojolicio.us/feed.atom',
+    hub     => 'https://hub.sojolicio.us'
+  );
 
   # Unsubscribe from a feed
-  $c->unsubscribe( topic => 'https://sojolicio.us/feed.atom',
-                   hub   => 'https://hub.sojolicio.us' );
+  $c->unsubscribe(
+    topic => 'https://sojolicio.us/feed.atom',
+    hub   => 'https://hub.sojolicio.us'
+  );
 
 
 =head1 DESCRIPTION
@@ -578,8 +597,30 @@ L<PubSubHubbub 0.3|http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-cor
 The plugin currently supports the publisher and subscriber part,
 B<not> the hub part.
 
-The plugin is data store agnostic.
+This plugin is data store agnostic.
 Please use this plugin by applying hooks.
+
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin(PubSubHubbub => {
+    hub => 'https://hub.example.org/',
+    lease_seconds => 100 * 24 * 60 * 60
+  });
+
+  # Mojolicious::Lite
+  plugin 'PubSubHubbub' => {
+    hub => 'https://hub.example.org/',
+    lease_seconds => 100 * 24 * 60 * 60
+  };
+
+Called when registering the plugin.
+Accepts the attributes mentioned as parameters.
+All parameters can be set either on registration or
+as part of the configuration file with the key C<PubSubHubbub>.
 
 
 =head1 ATTRIBUTES

@@ -12,6 +12,12 @@ my %base_classes;
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Load parameter from Config file
+  if (my $config_param = $mojo->config('XML')) {
+    $param = { %$config_param, %$param };
+  };
+
+  # Set Namespace
   if (exists $param->{namespace}) {
     $plugin->namespace(delete $param->{namespace});
   };
@@ -178,6 +184,40 @@ Mojolicious::Plugin::XML - XML generation with Mojolicious
 
 L<Mojolicious::Plugin::XML> is a plugin to support
 XML documents based on L<Mojolicious::Plugin::XML::Base>.
+
+
+=head1 ATTRIBUTES
+
+=head2 C<namespace>
+
+  $xml->namespace('MyXMLFiles::XML');
+  print $xml->namespace;
+
+The namespace of all XML plugins.
+Defaults to C<Mojolicious::Plugin::XML>
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $mojo->plugin(XML => {
+    namespace    => 'Mojolicious::Plugin::XML',
+    new_activity => ['Atom', 'ActivityStreams']
+  });
+
+  # Mojolicious::Lite
+  plugin 'XML' => {
+    namespace    => 'Mojolicious::Plugin::XML',
+    new_activity => ['Atom', 'ActivityStreams']
+  };
+
+Called when registering the plugin.
+Accepts the attributes mentioned as parameters as
+well as new xml profiles.
+All parameters can be set either on registration or
+as part of the configuration file with the key C<XML>.
+
 
 =head1 HELPERS
 

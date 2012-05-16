@@ -5,6 +5,7 @@
 	- Small bugfix in LRDD.
 	- Added simple CHI plugin.
 	- Added native caching option to Oro.
+        - Added Config-Parameterization.
 
 0.18 2012-04-25
         - Added on_connect event to Oro.

@@ -6,7 +6,7 @@ use Mojo::ByteStream 'b';
 
 # Register Plugin
 sub register {
-  my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo) = @_;
 
   # Load LRDD if not already loaded.
   # This automatically loads the Hostmeta, XRD and Endpoints plugins.
@@ -27,7 +27,8 @@ sub register {
       };
 
       return $c->lrdd($norm => $domain);
-    });
+    }
+  );
 
 
   # Add 'parse_acct' helper
@@ -54,7 +55,8 @@ sub register {
 
       return ($user, $domain, $norm) if wantarray;
       return $norm;
-    });
+    }
+  );
 
 
   # on prepare webfinger hook
@@ -148,6 +150,20 @@ L<Mojolicious::Plugin::Webfinger> provides several functions for
 the L<Webfinger Protocol|https://datatracker.ietf.org/doc/draft-jones-appsawg-webfinger/>.
 It hooks into link-based descriptor discovery as provided by
 L<Mojolicious::Plugin::LRDD>.
+
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('Webfinger');
+
+  # Mojolicious::Lite
+  plugin 'Webfinger';
+
+Called when registering the plugin.
+
 
 =head1 HELPERS
 

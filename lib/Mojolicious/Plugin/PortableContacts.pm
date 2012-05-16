@@ -10,6 +10,7 @@ use Mojolicious::Plugin::PortableContacts::Entry;
 # TODO: Check OAuth2 and fill $c->stash->{'poco.user_id'} -> poco.user_id
 # TODO: Updates via http://www.w3.org/TR/2011/WD-contacts-api-20110616/
 # TODO: Support all error codes
+# TODO: Look at http://www.simplecloud.info/
 
 # Unlimited Items per page requested
 has count => 0;
@@ -37,6 +38,11 @@ BEGIN {
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Load parameter from Config file
+  if (my $config_param = $mojo->config('PoCo')) {
+    $param = { %$config_param, %$param };
+  };
+
   # Load Host-Meta if not already loaded.
   # This automatically loads the 'XRD' and 'Util-Endpoint' plugin.
   unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
@@ -45,7 +51,7 @@ sub register {
 
   # Add 'poco' shortcut
   $mojo->routes->add_shortcut(
-    'poco' => sub {
+    poco => sub {
       my ($route, $param) = @_;
 
       # Set endpoint
@@ -325,6 +331,25 @@ the L<PortableContacts API|http://portablecontacts.net/draft-spec.html>.
 
 This plugin is database agnostic. Communication with a datastore
 can be enabled via Hooks.
+
+
+=head1 METHODS
+
+=head2 C<register>
+
+  $app->plugin('PortableContacts' => {
+    count => 20
+  });
+
+  # Mojolicious::Lite
+  plugin 'PortableContacts' => {
+    count => 25
+  };
+
+Register the Plugin.
+All parameters can be set either on registration or
+as part of the configuration file with the key C<Oro>.
+
 
 =head1 ATTRIBUTES
 

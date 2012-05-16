@@ -4,7 +4,7 @@ use Mojo::ByteStream 'b';
 
 # Register Plugin
 sub register {
-  my ($plugin, $mojo, $param) = @_;
+  my ($plugin, $mojo) = @_;
 
   # Load Host-Meta if not already loaded.
   # This automatically loads the XRD and Endpoints plugins.
@@ -269,6 +269,19 @@ Mojolicious::Plugin::LRDD - Link-based Resource Descriptor Discovery
   # Mojolicious::Lite
   plugin 'LRDD';
   (any '/lrdd')->lrdd('uri');
+
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('LRDD');
+
+  # Mojolicious::Lite
+  plugin 'LRDD';
+
+Called when registering the plugin.
 
 
 =head1 SHORTCUTS

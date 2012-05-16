@@ -10,6 +10,13 @@ my %bases;
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
+  # Load parameter from Config file
+  if (my $config_param = $mojo->config('Util')) {
+    if ($config_param = $config_param->{ArbitraryBase}) {
+      $param = { %$config_param, %$param };
+    };
+  };
+
   # Register all encoding schemes
   while (my ($name, $array) = each %$param) {
 
@@ -121,7 +128,31 @@ Mojolicious::Plugin::Util::ArbitraryBase - Arbitrary base encoding
 L<Mojolicious::Plugin::Util::ArbitraryBase> is a plugin for
 encoding and decoding from integer values to arbitrary character bases.
 
-=head HELPERS
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('Util::ArbitraryBase' => {
+    base26 => '2345679bdfhmnprtFGHJLMNPRT'
+  });
+
+  # Mojolicious::Lite
+  plugin 'Util::ArbitraryBase' => {
+    base26 => '2345679bdfhmnprtFGHJLMNPRT'
+  };
+
+Called when registering the plugin.
+Various encodings can
+be defined in a hash reference, where a name of the scheme
+is followed by the ordered character set allowed for the
+encoding. Double characters are ignored.
+All parameters can be set either on registration or
+as part of the configuration file with the key C<ArbitraryBase>
+under the Key C<Util>.
+
+
+=head1 HELPERS
 
 =head2 C<*_encode>
 
@@ -155,10 +186,6 @@ Returns an integer based on the given encoding.
 The name of the helper is established when
 registering the plugin.
 
-When registering the plugin, various encodings can
-be defined in a hash reference, where a name of the scheme
-is followed by the ordered character set allowed for the
-encoding. Double characters are ignored.
 
 =head1 AVAILABILITY
 

@@ -25,7 +25,7 @@ lib/Mojolicious/Plugin/XML/MagicEnvelope.pm
 lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
-t/Atom-Pub.t
+t/XML/Atom-Pub.t
 t/Tree.t
 t/TagHelpers
 t/PortableContacts.t

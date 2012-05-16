@@ -10,7 +10,7 @@ our %endpoints;
 
 # Register Plugin
 sub register {
-  my ($plugin, $mojo, $gparam) = @_;
+  my ($plugin, $mojo) = @_;
 
   # Add 'endpoint' shortcut
   $mojo->routes->add_shortcut(
@@ -208,6 +208,20 @@ allows for the simple establishement of endpoint URIs.
 This is similar to the C<url_for> method of L<Mojolicious::Controller>,
 but includes support for template URIs with parameters
 (as used in, e.g., Host-Meta or OpenSearch).
+
+
+=head1 METHODS
+
+=head2 C<register>
+
+  # Mojolicious
+  $app->plugin('Util::Endpoint');
+
+  # Mojolicious::Lite
+  plugin 'Util::Endpoint';
+
+Called when registering the plugin.
+
 
 =head1 SHORTCUTS
 
