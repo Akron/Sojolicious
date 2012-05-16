@@ -12,6 +12,9 @@ our %endpoints;
 sub register {
   my ($plugin, $mojo) = @_;
 
+  # Add endpoints command
+  push @{$mojo->commands->namespaces}, __PACKAGE__;
+
   # Add 'endpoint' shortcut
   $mojo->routes->add_shortcut(
     endpoint => sub {
@@ -156,7 +159,9 @@ sub register {
     });
 };
 
+
 1;
+
 
 __END__
 
@@ -285,8 +290,17 @@ is returned.
     print $key, ' => ', $value, "\n";
   };
 
-Returns a hash of all endpoints, intterpolated with the current
+Returns a hash of all endpoints, interpolated with the current
 controller stash.
+
+=head1 COMMANDS
+
+=head2 C<endpoints>
+
+  perl app.pl endpoints
+
+Show all endpoints established by this plugin.
+
 
 =head1 DEPENDENCIES
 

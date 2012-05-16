@@ -6,6 +6,8 @@
 	- Added simple CHI plugin.
 	- Added native caching option to Oro.
         - Added Config-Parameterization.
+        - Added oro_init command.
+        - Added endpoints command.
 
 0.18 2012-04-25
         - Added on_connect event to Oro.

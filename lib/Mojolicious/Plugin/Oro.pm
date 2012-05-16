@@ -26,6 +26,7 @@ sub register {
       });
   };
 
+  # Add oro_init command
   push @{$mojo->commands->namespaces}, __PACKAGE__;
 
   # Init databases

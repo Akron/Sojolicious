@@ -26,7 +26,7 @@ lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 t/XML/Atom-Pub.t
-t/Tree.t
+t/Sojolicious/Tree.t
 t/TagHelpers
 t/PortableContacts.t
 t-speed
