@@ -8,7 +8,7 @@ $|++;
 
 use lib 'lib';
 use lib '../lib';
-use_ok 'Sojolicious::Oro';
+use_ok 'DBIx::Oro';
 
 my $t = Test::Mojo->new;
 my $app = $t->app;

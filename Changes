@@ -1,3 +1,11 @@
+0.21 2012-05-26
+        - Moved Sojolicious::Oro to DBIx::Oro.
+          Version numbers will now be independent.
+
+0.20 2012-05-20
+        - Small optimizations to Oro.
+        - Deleted deprecated methods from Oro.
+
 0.19 2012-05-01
         - Added "rel" parameter support to M::P::XRD.
 	- Added "resource" parameter support to M::P::HostMeta.

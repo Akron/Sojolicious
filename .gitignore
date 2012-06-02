@@ -1,6 +1,7 @@
 blib
 log
 Sandbox
+lib/DBIx
 lib/Sojolicious/User.pm
 lib/Sojolicious/User2.pm
 lib/Sojolicious/User_todo.pm
@@ -31,6 +32,7 @@ t/TagHelpers
 t/PortableContacts.t
 t-speed
 t-leak
+t/DBIx
 public
 todo.org
 script*
@@ -41,5 +43,6 @@ pm_to_blib
 *.sqlite
 *.log
 *.db
+*.old
 .*
 !.gitignore

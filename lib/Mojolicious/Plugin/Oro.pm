@@ -3,7 +3,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Carp qw/carp croak/;
 
 # Database driver
-use Sojolicious::Oro;
+use DBIx::Oro;
 
 # Register Plugin
 sub register {
@@ -40,7 +40,7 @@ sub register {
 	next if exists $databases->{$name};
 
 	# Get Database handle
-	my $oro = Sojolicious::Oro->new(
+	my $oro = DBIx::Oro->new(
 	  %$db,
 	  on_connect => sub {
 	    my $oro = shift;
@@ -114,7 +114,7 @@ Mojolicious::Plugin::Oro - Oro Database driver Plugin
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::Oro> is a simple plugin to work with
-L<Sojolicious::Oro>.
+L<DBIx::Oro>.
 
 =head1 HELPERS
 
@@ -159,7 +159,7 @@ C<default> is assumed.
 
 Called when registering the plugin.
 On creation, the plugin accepts a hash of database names
-associated with a L<Sojolicious::Oro> object.
+associated with a L<DBIx::Oro> object.
 All parameters can be set either on registration or
 as part of the configuration file with the key C<Oro>.
 
@@ -201,7 +201,7 @@ L<Mojolicious::Plugin::Oro::oro_init> command.
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
-L<Sojolicious::Oro>.
+L<DBIx::Oro>.
 
 
 =head1 AVAILABILITY
