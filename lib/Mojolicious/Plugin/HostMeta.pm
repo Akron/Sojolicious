@@ -1,13 +1,16 @@
 package Mojolicious::Plugin::HostMeta;
 use Mojo::Base 'Mojolicious::Plugin';
+use Mojo::UserAgent;
 use Mojo::JSON;
-use Storable 'dclone';
+use Mojo::Util qw/quote/;
 
+use Storable 'dclone';
 
 use constant WK_PATH => '/.well-known/host-meta';
 
-sub host { warn 'host is deprecated' };
+sub host   { warn 'host is deprecated'   };
 sub secure { warn 'secure is deprecated' };
+
 
 # Register plugin
 sub register {
@@ -16,18 +19,18 @@ sub register {
   my $helpers = $mojo->renderer->helpers;
 
   # Load Util-Endpoint if not already loaded
-  unless (exists $helpers->{'endpoint'}) {
+  unless (exists $helpers->{endpoint}) {
     $mojo->plugin('Util::Endpoint');
   };
 
   # Load XML if not already loaded
-  unless (exists $helpers->{'render_xrd'}) {
+  unless (exists $helpers->{render_xrd}) {
     $mojo->plugin('XRD');
   };
 
-  unless (exists $helpers->{'new_hostmeta'}) {
+  unless (exists $helpers->{new_hostmeta}) {
     $mojo->plugin('XML' => {
-      new_hostmeta => ['XRD', 'HostMeta']
+      new_hostmeta => [qw/XRD HostMeta/]
     });
   };
 
@@ -35,27 +38,28 @@ sub register {
 
   # Get host information on first request
   $mojo->hook(
-    'on_prepare_hostmeta' =>
+    on_prepare_hostmeta =>
       sub {
 	my ($plugin, $c, $xrd_ref) = @_;
 	my $host = $c->req->url->host;
-	if ($host) {
 
-	  # Add host-information to host-meta
-	  $hostmeta->add_host($host);
-	}
-      });
+	# Add host-information to host-meta
+	$hostmeta->add_host($host) if $host;
+      }
+    );
 
   # Establish 'hostmeta' helper
   $mojo->helper(
-    'hostmeta' => sub {
+    hostmeta => sub {
       my $c = shift;
 
-      if (!$_[0]) {
+      unless ($_[0]) {
 
+	# Return local host
 	return $plugin->_prepare_and_serve($c, $hostmeta);
       }
 
+      # Is host (which is deprecated)
       elsif ($_[0] eq 'host') {
 	warn "->hostmeta('host') is DEPRECATED!";
 	return $plugin->host unless $_[1];
@@ -81,15 +85,16 @@ sub register {
 	my $res = $c->param('resource');
 
 	# LRDD
-	if (exists $helpers->{'lrdd'}) {
+	if (exists $helpers->{lrdd}) {
 	  my $xrd = $c->lrdd($res => 'localhost');
 	  return $c->render_xrd($xrd) if $xrd;
 	  return $c->render_xrd(undef, $res);
 	};
       };
 
-      my $hostmeta_clone = $plugin->_prepare_and_serve($c, $hostmeta);
-      return $c->render_xrd($hostmeta_clone);
+      return $c->render_xrd(
+	$plugin->_prepare_and_serve($c, $hostmeta)
+      );
     });
 };
 
@@ -101,11 +106,14 @@ sub _get_hostmeta {
 
   my $host = lc(shift(@_));
 
-  my ($param, $res, $res_param, $rel) = (shift);
-  if ($param) {
-    $rel = $param->{rel};
-    $res = $param->{resource};
-    $res_param = $res ? '?resource=' . $res : '';
+  my ($param, $res, $rel) = (shift);
+
+  my $res_param = do {
+    if ($param) {
+      $rel = $param->{rel};
+      $res = $param->{resource};
+    };
+    $res ? '?resource=' . $res : '';
   };
 
   # Hook for caching
@@ -127,8 +135,10 @@ sub _get_hostmeta {
   my $host_hm_path = $host . WK_PATH;
 
   # Get user agent
-  my $ua = $c->ua->max_redirects(3);
-  $ua->name('Sojolicious on Mojolicious (Perl)');
+  my $ua = Mojo::UserAgent->new(
+    max_redirects => 3,
+    name => 'Sojolicious on Mojolicious (Perl)'
+  );
 
   # Fetch Host-Meta XRD
   # First try ssl
@@ -151,20 +161,20 @@ sub _get_hostmeta {
     unless ($host_hm &&
 	    $host_hm->res->is_status_class(200)) {
 
-      # Reset max_redirects
-      $ua->max_redirects(0);
-
       # No result
       return undef;
     };
   };
 
   # Parse XRD
-  $hostmeta_xrd =
-    $c->new_hostmeta($host_hm->res->body);
+  $hostmeta_xrd = $c->new_hostmeta($host_hm->res->body);
 
   my @hook_array = (
-    $plugin, $c, $host, \$hostmeta_xrd, $host_hm->res
+    $plugin,
+    $c,
+    $host,
+    \$hostmeta_xrd,
+    $host_hm->res
   );
 
   # Resource request
@@ -172,7 +182,7 @@ sub _get_hostmeta {
     my $helpers = $c->app->renderer->helpers;
 
     # LRDD exists
-    if (exists $helpers->{'lrdd'}) {
+    if (exists $helpers->{lrdd}) {
 
       # Hook for caching
       $c->app->plugins->emit_hook(
@@ -193,7 +203,7 @@ sub _get_hostmeta {
   _filter_rel($hostmeta_xrd, $rel) if $rel;
 
   # Return XRD DOM
-  return $hostmeta_xrd;
+  $hostmeta_xrd;
 };
 
 
@@ -209,13 +219,14 @@ sub _prepare_and_serve {
   # Emit on_prepare_hostmeta only once
   if ($plugins->has_subscribers( $ophm )) {
     $plugins->emit_hook(
-      $ophm =>
-	($plugin,
-	 $c,
-	 $hostmeta));
+      $ophm => (
+	$plugin,
+	$c,
+	$hostmeta
+      ));
 
     # Unsubscribe all subscribers
-    foreach (@{$plugins->subscribers( $ophm )}) {
+    foreach (@{ $plugins->subscribers( $ophm ) }) {
       $plugins->unsubscribe($ophm => $_);
     };
   };
@@ -223,13 +234,16 @@ sub _prepare_and_serve {
   # Clone hostmeta reference
   my $hostmeta_clone = dclone($hostmeta);
 
+  # Emit 'before_serving_hostmeta' hook
   $plugins->emit_hook(
-    'before_serving_hostmeta' =>
-      ($plugin,
-       $c,
-       $hostmeta_clone));
+    before_serving_hostmeta => (
+      $plugin,
+      $c,
+      $hostmeta_clone
+    ));
 
-  return $hostmeta_clone;
+  # Return hostmeta clone
+  $hostmeta_clone;
 };
 
 
@@ -237,9 +251,9 @@ sub _prepare_and_serve {
 sub _filter_rel {
   my ($xrd, $rel) = @_;
   my @rel = ref $rel ? @$rel : split(/\s+/, $rel);
-  $rel = 'Link:' . join(':', map { 'not([rel=' . quote ($_) . '])'} @rel);
-  $xrd->find($rel)->each(sub{ $_->replace('') });
-}
+  $rel = 'Link:' . join(':', map { 'not([rel=' . quote $_ . '])'} @rel);
+  $xrd->find($rel)->each( sub{ $_->replace('') } );
+};
 
 
 1;

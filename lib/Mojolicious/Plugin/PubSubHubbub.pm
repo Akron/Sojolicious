@@ -1,5 +1,6 @@
 package Mojolicious::Plugin::PubSubHubbub;
 use Mojo::Base 'Mojolicious::Plugin';
+use Mojo::UserAgent;
 use Mojo::ByteStream 'b';
 use Mojo::DOM;
 
@@ -100,10 +101,14 @@ sub publish {
   my %post = ( 'hub.mode' => 'publish',
 	       'hub.url' => \@urls);
 
+  # Get user agent
+  my $ua = Mojo::UserAgent->new(
+    max_redirects => 3,
+    name => 'Sojolicious on Mojolicious (Perl)'
+  );
+
   # Post to hub
-  my $res = $c->ua
-    ->max_redirects(3)
-      ->post_form( $plugin->hub, \%post )->res;
+  my $res = $ua->post_form( $plugin->hub, \%post )->res;
 
   # No response
   unless ($res) {

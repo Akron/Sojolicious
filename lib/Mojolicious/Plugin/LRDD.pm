@@ -1,5 +1,7 @@
 package Mojolicious::Plugin::LRDD;
 use Mojo::Base 'Mojolicious::Plugin';
+use Mojo::UserAgent;
+use Mojo::URL;
 use Mojo::ByteStream 'b';
 
 # Register Plugin
@@ -8,10 +10,9 @@ sub register {
 
   # Load Host-Meta if not already loaded.
   # This automatically loads the XRD and Endpoints plugins.
-  unless (exists $mojo->renderer->helpers->{'hostmeta'}) {
+  unless (exists $mojo->renderer->helpers->{hostmeta}) {
     $mojo->plugin('HostMeta');
   };
-
 
   # lrdd helper
   $mojo->helper(
@@ -29,7 +30,6 @@ sub register {
       return $plugin->_get_lrdd($c, $resource => $host );
     });
 
-
   # Add 'lrdd' shortcut
   $mojo->routes->add_shortcut(
     lrdd => sub {
@@ -40,7 +40,6 @@ sub register {
 	lrdd => {
 	  query  => $param_key ? [ $param_key => '{uri}' ] : undef
 	});
-
 
       # Add Route to Hostmeta - exactly once
       $mojo->hook(
@@ -57,9 +56,9 @@ sub register {
 	  my $type = index($endpoint, '{uri}') >= 0 ? 'template' : 'href';
 	  $lrdd->{$type} = $endpoint;
 
-	  $hostmeta->add_link('lrdd' => $lrdd)
+	  $hostmeta->add_link( lrdd => $lrdd )
 	    ->comment('Link-based Resource Descriptor Discovery')
-	      ->add('Title','Resource Descriptor');
+	      ->add( Title => 'Resource Descriptor' );
 	});
 
       # Point the route to a callback
@@ -69,7 +68,7 @@ sub register {
 
 	  # Get uri from route
 	  my $uri = $c->stash('uri');
-	  $uri = $c->param($param_key) if ($param_key && !$uri);
+	  $uri = $c->param($param_key) if $param_key && !$uri;
 
 	  return $plugin->_prepare_and_serve($c, $uri)
 	});
@@ -80,7 +79,7 @@ sub register {
 # Fetch resource
 sub _get_lrdd {
   my $plugin = shift;
-  my $c      = shift;
+  my $c = shift;
 
   my ($resource, $host) = @_;
 
@@ -95,17 +94,24 @@ sub _get_lrdd {
   # Hook for caching
   my $lrdd_xrd;
   $c->app->plugins->emit_hook(
-    before_fetching_lrdd =>
-      ($plugin, $c, $resource, $host, \$lrdd_xrd )
-    );
+    before_fetching_lrdd => (
+      $plugin,
+      $c,
+      $resource,
+      $host,
+      \$lrdd_xrd
+    )
+  );
 
   # Serve XRD from cache
   return $lrdd_xrd if $lrdd_xrd;
 
   # Get host-meta from domain
-  my $domain_hm = $c->hostmeta($host => {
-    resource => $resource
-  });
+  my $domain_hm = $c->hostmeta(
+    $host => {
+      resource => $resource
+    }
+  );
 
   # No host-meta found
   return undef unless $domain_hm;
@@ -120,8 +126,8 @@ sub _get_lrdd {
   my $lrdd = $domain_hm->get_link('lrdd');
 
   # Get uri by using template
-  my $uri;
-  if ($uri = $lrdd->{template}) {
+  my $uri = $lrdd->{template};
+  if ($uri) {
     my $res = b($resource)->url_escape;
     $uri =~ s/\{uri\}/$res/;
   }
@@ -131,37 +137,21 @@ sub _get_lrdd {
     return undef;
   };
 
-  my $ua = $c->ua->max_redirects(3);
+  # Get user agent
+  my $ua = Mojo::UserAgent->new(
+    max_redirects => 3,
+    name => 'Sojolicious on Mojolicious (Perl)'
+  );
 
-#    # If the Uri has no host-information:
-#    # Problematic, when there was a redirect like at yahoo.com!
-#    if ($webfinger_uri !~ /^https?:/) {
-#	# Todo: Get xml:base
-#        my $new_uri = Mojo::URL->new($webfinger_uri);
-#	$new_uri->host($domain);
-#	$new_uri->scheme('https');
-#
-#        if ($webfinger_uri =~ /^\//) {
-#
-#        } else {
-#
-#	};
-#
-#	$acct_doc = $ua->get($new_uri);
-#	if ($acct_doc) {
-#	} else {
-#	    $new_uri->scheme('http');
-#	    # ...
-#	};
-#
-#     } else {
+  # If the Uri has no host-information:
+  # Problematic, when there was a redirect like at yahoo.com!
 
   # lrdd XRD document
   my $lrdd_xrd_doc = $ua->get($uri);
 
   # lrdd request was a success
   if ($lrdd_xrd_doc &&
-	$lrdd_xrd_doc->res->is_status_class(200)) {
+      $lrdd_xrd_doc->res->is_status_class(200)) {
 
     # Return Mojolicious::Plugin::XRD object
     $lrdd_xrd = $c->new_xrd($lrdd_xrd_doc->res->body);
@@ -176,7 +166,8 @@ sub _get_lrdd {
       $host,
       $lrdd_xrd, # Todo: This is no reference?
       $lrdd_xrd_doc->res
-    ));
+    )
+  );
 
   # Retrieved document is no XRD
   return undef unless $lrdd_xrd;
@@ -224,13 +215,11 @@ sub _prepare {
 
 # Serve LRDD
 sub _serve {
-  my $plugin = shift;
-  my $c = shift;
-  my $uri = shift;
+  my ($plugin, $c, $uri) = @_;
 
   # New xrd
   my $lrdd_xrd = $c->new_xrd;
-  $lrdd_xrd->add('Subject' => $uri);
+  $lrdd_xrd->add(Subject => $uri);
 
   # Run hook
   $c->app->plugins->emit_hook(
@@ -319,7 +308,7 @@ Returns the LRDD L<Mojolicious::Plugin::XRD> document.
 =item C<before_fetching_lrdd>
 
   $mojo->hook(
-    'before_fetching_lrdd' => sub {
+    before_fetching_lrdd => sub {
       my ($plugin,
           $c,
           $resource,
@@ -340,7 +329,7 @@ If the XRD reference is filled, the fetching will not proceed.
 =item C<after_fetching_lrdd>
 
   $mojo->hook(
-    'after_fetching_lrdd' => sub {
+    after_fetching_lrdd => sub {
 	my ($plugin,
 	    $c,
 	    $resource,
@@ -358,7 +347,7 @@ the XRD object, and the L<Mojo::Message::Response> object from the request.
 =item C<on_prepare_lrdd>
 
   $mojo->hook(
-    'on_prepare_lrdd' => (
+    on_prepare_lrdd => (
       my ($plugin, $c, $resource, $ok_ref) = @_;
       if ($resource eq 'http://sojolicio.us/catz') {
         $$ok_ref = 1;
@@ -378,7 +367,7 @@ reference is false.
 =item C<before_serving_lrdd>
 
   $mojo->hook(
-    'before_serving_lrdd' => sub {
+    before_serving_lrdd => sub {
       my ($plugin, $c, $resource, $lrdd_xrd) = @_;
       $lrdd_xrd->add_link('hcard' => { href => '/me.hcard' } );
     });
