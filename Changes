@@ -1,3 +1,6 @@
+0.22 2012-06-11
+        - Added 'on_oro_connect' event to M::P::Oro.
+
 0.21 2012-05-26
         - Moved Sojolicious::Oro to DBIx::Oro.
           Version numbers will now be independent.

@@ -45,14 +45,26 @@ sub register {
 	  on_connect => sub {
 	    my $oro = shift;
 	    $mojo->log->info( 'Connect from ' . $$ );
+
+	    # Emit on_oro_connect hook
+	    $mojo->plugins->emit_hook(
+	      'on_' . ($name ne 'default' ? $name . '_' : '') . 'oro_connect' =>
+		$oro
+	      );
           }
 	);
 
-	# Emit on_oro_connect hook
-	$mojo->plugins->emit_hook(
-	  'on_' . ($name ne 'default' ? $name . '_' : '') . 'oro_init' =>
-	    $oro
-	) if $oro->created;
+	if ($oro->created) {
+
+	  # Emit on_oro_init hook
+	  $mojo->plugins->emit_hook(
+	    'on_' . ($name ne 'default' ? $name . '_' : '') . 'oro_init' =>
+	      $oro
+	    );
+
+	  # Initialization log message
+	  $mojo->log->debug(qq{Initialize Oro-DB "$name"});
+	};
 
 	# No succesful creation
 	croak "Unable to create database handle '$name'" unless $oro;
@@ -184,6 +196,26 @@ is initialized. In case of the default database,
 the handle of the hook is C<on_oro_init>.
 This hook will be automatically released in case an
 SQLite database was created.
+
+
+=head2 C<on_DBNAME_oro_connect>
+
+  $app->plugin(Oro => {
+    Books => {
+      file => 'Database/Books.sqlite';
+    }
+  });
+
+  $app->hook(
+    on_Books_oro_connect => sub {
+      my $oro = shift;
+      $app->log->debug('Database ' . $oro->file . ' is connected!');
+    });
+
+
+This hook is run when an oro database of the given name
+is connected. In case of the default database,
+the handle of the hook is C<on_oro_connect>.
 
 
 =head1 COMMANDS
