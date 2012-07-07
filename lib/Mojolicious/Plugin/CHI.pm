@@ -147,6 +147,7 @@ as part of the configuration file with the key C<CHI>.
 =head1 DEPENDENCIES
 
 L<Mojolicious>,
+L<Carp>,
 L<CHI>.
 
 B<Note:> L<CHI> has a lot of dependencies. It is

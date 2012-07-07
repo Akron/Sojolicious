@@ -2,7 +2,7 @@
 use Mojolicious::Lite;
 use Test::More tests => 23;
 use Test::Mojo;
-use Data::Dumper 'Dumper';
+use Data::Dumper;
 
 $|++;
 

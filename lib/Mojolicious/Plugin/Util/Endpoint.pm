@@ -4,6 +4,8 @@ use Mojo::ByteStream 'b';
 use Mojo::URL;
 
 # Todo: Update to https://tools.ietf.org/html/rfc6570
+# Todo: Allow for changing scheme, port, host etc. afterwords
+
 
 # Endpoint hash
 our %endpoints;
@@ -34,7 +36,7 @@ sub register {
       my $r = $route;
       $r->pattern->match('/');
       while ($r) {
-	foreach (@{$r->pattern->symbols}) {
+	foreach (@{$r->pattern->placeholders}) {
 	  $placeholders{$_} = '{' . $_ . '}';
 	};
 	$r = $r->parent;

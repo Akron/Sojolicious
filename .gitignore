@@ -26,10 +26,13 @@ lib/Mojolicious/Plugin/XML/MagicEnvelope.pm
 lib/Mojolicious/Plugin/XML/Test.pm
 lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
+lib/Mojolicious/Plugin/Util/FromNow.pm
+lib/Mojolicious/Plugin/Util/RandomString.pm
 t/XML/Atom-Pub.t
 t/Sojolicious/Tree.t
 t/TagHelpers
 t/PortableContacts.t
+t/Util/FromNow.t
 t-speed
 t-leak
 t/DBIx

@@ -28,6 +28,7 @@ sub new {
   return $self;
 };
 
+
 # Parse date value
 sub parse {
   my ($self, $date) = @_;

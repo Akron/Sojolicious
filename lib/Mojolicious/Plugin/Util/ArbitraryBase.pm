@@ -116,7 +116,7 @@ Mojolicious::Plugin::Util::ArbitraryBase - Arbitrary base encoding
 
   # In Controllers
   my $encode = $c->base26_encode(402758585289);
-  print $c->base26($encode);
+  print $c->base26_encode($encode);
 
   # Mojolicious::Lite
   plugin 'Util::ArbitraryBase' => {
@@ -182,9 +182,14 @@ encoding. Double characters are ignored.
   $c->base5_encode('eauouuoao'); # 465578
   $c->foobar_encode('wryywete'); # 465578
 
-Returns an integer based on the given encoding.
+Returns an integer (as a L<Math::BigInt> object)
+based on the given encoding.
 The name of the helper is established when
 registering the plugin.
+
+=head1 DEPENDENCIES
+
+L<Math::BigInt>.
 
 
 =head1 AVAILABILITY
@@ -193,7 +198,7 @@ registering the plugin.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2012, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

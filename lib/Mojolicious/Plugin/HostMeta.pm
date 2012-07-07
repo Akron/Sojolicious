@@ -81,8 +81,7 @@ sub register {
       my $c = shift;
 
       # resource parameter
-      if ($c->param('resource')) {
-	my $res = $c->param('resource');
+      if (my $res = $c->param('resource')) {
 
 	# LRDD
 	if (exists $helpers->{lrdd}) {
