@@ -1,5 +1,5 @@
 package Mojolicious::Plugin::Oro::oro_init;
-use Mojo::Base 'Mojo::Command';
+use Mojo::Base 'Mojolicious::Command';
 
 use Getopt::Long qw/GetOptions :config no_auto_abbrev no_ignore_case/;
 
@@ -25,7 +25,7 @@ sub run {
 
   my $app = $self->app;
 
-  my $databases = $app->attr('oro_handles');
+  my $databases = $app->attr('oro_handles') || {};
 
   @ARGV = keys %$databases unless @ARGV;
 
@@ -45,7 +45,7 @@ sub run {
     };
   };
 
-  return;
+  return 1;
 }
 
 

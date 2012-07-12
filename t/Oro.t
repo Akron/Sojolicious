@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite;
-use Test::More tests => 23;
+use Test::More tests => 25;
 use Test::Mojo;
 use Data::Dumper;
 
@@ -110,3 +110,12 @@ ok($article->insert({ titel => 'Headline4', inhalt => 'Text4' }), 'Insert');
 is($c->oro->load(Article => { titel => 'Headline2' })->{inhalt}, 'Text2', 'Load');
 is($c->oro->load(Article => { titel => 'Headline3' })->{inhalt}, 'Text3', 'Load');
 is($c->oro->load(Article => { titel => 'Headline4' })->{inhalt}, 'Text4', 'Load');
+
+
+# Command
+is_deeply($app->commands->namespaces, [
+  'Mojolicious::Command',
+  'Mojolicious::Plugin::Oro'
+], 'Commands-Namespace');
+
+ok($app->commands->run('oro_init'), 'Init');
