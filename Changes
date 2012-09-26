@@ -1,3 +1,6 @@
+0.23 2012-09-26
+	- Update Sojolicious for Mojolicious 3.43.
+
 0.22 2012-07-04
         - Added 'on_oro_connect' event to M::P::Oro.
 	- Update Sojolicious for Mojolicious 3.0.

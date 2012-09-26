@@ -8,10 +8,10 @@ use constant ATOM_NS => 'http://www.w3.org/2005/Atom';
 
 # Todo: Support Link-Headers for discovery-Method,
 #       when subscribing to html, rss without hub etc.
-
+#       Test with http://push-pub.appspot.com/
 
 # Default lease seconds before automatic subscription refreshing
-has 'lease_seconds' => ( 30 * 24 * 60 * 60 );
+has lease_seconds => ( 30 * 24 * 60 * 60 );
 has 'hub';
 
 # Character set for challenge

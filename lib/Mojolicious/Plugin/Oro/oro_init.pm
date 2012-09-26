@@ -25,7 +25,7 @@ sub run {
 
   my $app = $self->app;
 
-  my $databases = $app->attr('oro_handles') || {};
+  my $databases = $app->can('oro_handles') ? $app->oro_handles : {};
 
   @ARGV = keys %$databases unless @ARGV;
 

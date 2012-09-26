@@ -15,15 +15,18 @@ sub register {
   };
 
   # Hash of database handles
-  my $databases = $mojo->attr('oro_handles');
+  my $databases;
 
   # No databases attached
-  unless ($databases) {
+  unless ($mojo->can('oro_handles')) {
     $databases = {};
     $mojo->attr(
       oro_handles => sub {
 	return $databases;
       });
+  }
+  else {
+    $databases = $mojo->oro_handles;
   };
 
   # Add oro_init command
@@ -44,7 +47,7 @@ sub register {
 	  %$db,
 	  on_connect => sub {
 	    my $oro = shift;
-	    $mojo->log->info( 'Connect from ' . $$ );
+	    $mojo->log->info( 'Connect ' . $name . ' from ' . $$ );
 
 	    # Emit on_oro_connect hook
 	    $mojo->plugins->emit_hook(

@@ -15,16 +15,20 @@ sub register {
   };
 
   # Hash of cache handles
-  my $caches = $mojo->attr('chi_handles');
+  my $caches;
 
   # No databases attached
-  unless ($caches) {
+  unless ($mojo->can('chi_handles')) {
     $caches = {};
     $mojo->attr(
       chi_handles => sub {
 	return $caches;
       });
+  }
+  else {
+    $caches = $mojo->chi_handles;
   };
+
 
   # Init databases
   Mojo::IOLoop->timer(

@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite;
-use Test::More tests => 25;
+use Test::More tests => 27;
 use Test::Mojo;
 use Data::Dumper;
 

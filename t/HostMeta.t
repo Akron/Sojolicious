@@ -4,7 +4,7 @@ use warnings;
 
 $|++;
 
-use lib '../lib';
+use lib ('lib', '../lib');
 
 use Test::More tests => 52;
 use Test::Mojo;
@@ -52,7 +52,7 @@ $t->get_ok('/.well-known/host-meta')
     ->element_exists('XRD[xsi]')
     ->element_exists_not('Link')
     ->element_exists_not('Property')
-    ->element_exists('Host')->text_is($hm_host);
+    ->element_exists('Host')->text_is(Host => $hm_host);
 
 $app->hook(
   'before_serving_hostmeta' => sub {
@@ -71,8 +71,8 @@ $t->get_ok('/.well-known/host-meta')
     ->element_exists_not('Link')
     ->element_exists('Property')
     ->element_exists('Property[type="foo"]')
-    ->text_is('bar')
-    ->element_exists('Host')->text_is($hm_host);
+    ->text_is('Property[type="foo"]' => 'bar')
+    ->element_exists('Host')->text_is(Host => $hm_host);
 
 $app->hook('before_fetching_hostmeta',
 	   => sub {

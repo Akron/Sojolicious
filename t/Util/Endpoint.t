@@ -147,7 +147,7 @@ is($app->endpoint('test6' =>
 		  {
 		      '?' => undef
 		  }),
-   '/suggest?c={foo}&d={BAR}&f=%2A',
+   '/suggest?c={foo}&d={BAR}&f=*',
    'endpoint 16');
 
 is($app->endpoint('test6' =>
@@ -155,7 +155,7 @@ is($app->endpoint('test6' =>
 		      'test:foo' => 'check',
 		      '?' => undef
 		  }),
-   '/suggest?c={foo}&d={BAR}&e=check&f=%2A',
+   '/suggest?c={foo}&d={BAR}&e=check&f=*',
    'endpoint 17');
 
 my $hash = $app->get_endpoints;
@@ -181,5 +181,5 @@ is ($hash->{test5},
     'hash-test 5');
 
 is ($hash->{test6},
-    '/suggest?a={foo?}&b={bar?}&c={foo}&d={BAR}&e={test:foo?}&f=%2A',
+    '/suggest?a={foo?}&b={bar?}&c={foo}&d={BAR}&e={test:foo?}&f=*',
     'hash-test 6');

@@ -4,8 +4,7 @@ use warnings;
 
 $|++;
 
-use lib '../lib';
-use lib '../../lib';
+use lib ('lib', '../lib', '../../lib', '../../../lib');
 
 use Mojo::ByteStream 'b';
 use Test::Mojo;
@@ -356,7 +355,7 @@ is($atom->at('entry > author > name')->text, 'Bender', 'Text');
 is($atom->at('content[type]')->text,  'I am Bender!', 'Text');
 is($atom->at('content[type="html"]')->text,  'I am <strong>Bender</strong>!', 'Text');
 is($atom->at('content[type="xhtml"]')->text,  '', 'Text');
-is($atom->at('content[type="xhtml"] div')->text,  'I am !', 'Text');
+is($atom->at('content[type="xhtml"] div')->text,  'I am!', 'Text');
 is($atom->at('content[type="xhtml"] div')->all_text,  'I am Bender!', 'Text');
 is($atom->at('content[type="movie"]')->text, 'SSBhbSBCZW5kZXIh', 'Text');
 
