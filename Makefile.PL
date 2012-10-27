@@ -10,7 +10,8 @@ WriteMakefile(
     AUTHOR       => 'Nils Diewald',
     PREREQ_PM => {
         'Mojolicious' => 3.43,
-        'DBIx::Oro'   => 0.21
+        'DBIx::Oro'   => 0.21,
+	'Test::More'  => 0
     },
     test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t t/*/*/*/*.t'}
 );
