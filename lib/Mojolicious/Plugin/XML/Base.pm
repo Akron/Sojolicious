@@ -18,8 +18,7 @@ use constant {
 sub new {
   my $class = shift;
 
-# Todo: Is often called with class = '<...>' - this seems to be totally wrong!!!
-
+  # Todo: Is often called with class = '<...>' - this seems to be totally wrong!!!
 
   # Todo: Change order for speed (often 'charset' is $_[0])
   # Create from parent class
@@ -60,8 +59,9 @@ sub new {
     };
 
     # Add attributes to node
-#     my $root_e = $root->_root_element;
-#     $root_e->[2] = $att;
+#   my $root_e = $root->_root_element;
+#   $root_e->[2] = $att;
+
     my $root_e = $root->at(':root');
     $root_e->attrs($att);
 
@@ -86,7 +86,7 @@ sub add {
   my $element = $self->_add_clean(@_);
 
   # Prepend no prefix
-  if (index($element->tree->[1],'-') == 0) {
+  if (index($element->tree->[1], '-') == 0) {
     $element->tree->[1] = substr($element->tree->[1], 1);
     return $element;
   };
@@ -103,9 +103,9 @@ sub add {
 	($caller && $class) &&
 	  ($caller ne $class)) {
     no strict 'refs';
-    if ((my $prefix = ${ $caller.'::PREFIX' }) &&
-	  ${ $caller.'::NAMESPACE' }) {
-      $element->tree->[1] = $prefix.':'.$name if $prefix;
+    if ((my $prefix = ${ $caller . '::PREFIX' }) &&
+	  ${ $caller . '::NAMESPACE' }) {
+      $element->tree->[1] = $prefix . ':' . $name if $prefix;
     };
   };
 
@@ -605,11 +605,13 @@ Mojolicious::Plugin::XML::Base - XML generator base class
   #   </fun:env>
   # </entry>
 
+
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::XML::Base> allows for the simple creation
 of serialized XML documents with multiple namespaces and
 pretty printing.
+
 
 =head1 METHODS
 

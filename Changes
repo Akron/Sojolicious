@@ -1,5 +1,6 @@
-0.24 2012-10-28
+0.24 2012-10-30
         - Made M::P::Util::Endpoint a separated distribution.
+        - Made M::P::PubSubHubbub a separated distribution.
 
 0.23 2012-09-26
 	- Update Sojolicious for Mojolicious 3.43.

@@ -11,6 +11,8 @@ WriteMakefile(
     PREREQ_PM => {
         'Mojolicious' => 3.43,
         'DBIx::Oro'   => 0.21,
+        'Mojolicious::Plugin::Util::Endpoint'   => 0.03,
+        'Mojolicious::Plugin::PubSubHubbub'   => 0.01,
 	'Test::More'  => 0
     },
     test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t t/*/*/*/*.t'}

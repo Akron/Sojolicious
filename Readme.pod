@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.24';
+our $VERSION = '0.25';
 
 1;
 
@@ -97,7 +97,7 @@ and existing parts reworked. Don't use it in its current status!
 
 =item L<PortableContacts|http://portablecontacts.net/draft-spec.html>
 
-=item L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html>
+=item L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html> (Now separated)
 
 =item L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
 

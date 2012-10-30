@@ -90,14 +90,14 @@ sub {
 
     # Default 'new_xml' helper
     $mojo->helper(
-      'new_xml' => sub {
+      new_xml => sub {
 	return Mojolicious::Plugin::XML::Base->new( @_ );
       });
 
 
     # Add 'render_xml' helper
     $mojo->helper(
-      'render_xml' => sub {
+      render_xml => sub {
 	my $c      = shift;
 	my $xml    = shift;
 	my $format = 'xml';
@@ -118,7 +118,9 @@ sub {
   };
 };
 
+
 1;
+
 
 __END__
 
@@ -179,6 +181,7 @@ Mojolicious::Plugin::XML - XML generation with Mojolicious
   #      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   #   <hm:Host>sojolicio.us</hm:Host>
   # </XRD>
+
 
 =head1 DESCRIPTION
 
@@ -277,5 +280,3 @@ This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.
 
 =cut
-
-
