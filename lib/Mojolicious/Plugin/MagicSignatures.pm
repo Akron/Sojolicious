@@ -58,6 +58,7 @@ sub register {
     });
 
   # Add magickey to webfinger document
+  # Todo: Allow for json serialization!
   $mojo->hook(
     'before_serving_webfinger' => sub {
       my ($c, $acct, $xrd) = @_;
