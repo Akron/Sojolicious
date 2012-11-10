@@ -199,7 +199,7 @@ regarding discovery.
   $mojo->hook(
     'on_prepare_webfinger' => sub {
       my ($plugin, $c, $acct, $ok_ref) = @_;
-      if ($uri eq 'akron@sojolicio.us') {
+      if ($acct eq 'akron@sojolicio.us') {
         $$ok_ref = 1;
       };
     });

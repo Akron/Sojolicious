@@ -6,6 +6,7 @@ use Mojolicious::Plugin::MagicSignatures::Key;
 
 use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
+# Todo: Delete all plugin parameters for hooks
 
 # Register plugin
 sub register {
@@ -61,7 +62,7 @@ sub register {
   # Todo: Allow for json serialization!
   $mojo->hook(
     'before_serving_webfinger' => sub {
-      my ($c, $acct, $xrd) = @_;
+      my ($plugin, $c, $acct, $xrd) = @_;
 
       # Get keys
       my $mkeys = $c->get_magickeys(
@@ -117,7 +118,7 @@ sub get_magickeys {
   my @magickeys;
 
   # Run hook for caching or database retrieval
-  $c->app->plugins->run_hook(
+  $c->app->plugins->emit_hook(
     'before_fetching_magickeys' => (
       $plugin, $c, \%param, \@magickeys
     ));
@@ -210,7 +211,7 @@ sub get_magickeys {
     };
 
     # Run hook for caching
-    $c->app->plugins->run_hook(
+    $c->app->plugins->emit_hook(
       'after_fetching_magickeys',
       $plugin,
       $c,

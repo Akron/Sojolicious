@@ -7,7 +7,7 @@ no strict 'refs';
 
 $|++;
 
-use lib '../lib';
+use lib '../lib', '../../lib';
 
 our ($module, $modulekey);
 BEGIN {

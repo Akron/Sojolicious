@@ -13,6 +13,8 @@ WriteMakefile(
         'DBIx::Oro'   => 0.21,
         'Mojolicious::Plugin::Util::Endpoint'   => 0.03,
         'Mojolicious::Plugin::PubSubHubbub'   => 0.01,
+        'Mojolicious::Plugin::Oro'   => 0.01,
+        'Mojolicious::Plugin::CHI'   => 0.01,
 	'Test::More'  => 0
     },
     test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t t/*/*/*/*.t'}
