@@ -1,4 +1,4 @@
-package Mojolicious::Plugin::Date::RFC3339;
+package Mojo::Date::RFC3339;
 use overload '""' => sub { shift->to_string }, fallback => 1;
 
 require Time::Local;
@@ -179,6 +179,10 @@ L<Mojolicious::Plugin::Date::RFC3339> implements date and time functions
 according to L<RFC3339|http://tools.ietf.org/html/rfc3339>.
 In addition it supports granularity as described in
 L<W3C date and time formats|http://www.w3.org/TR/NOTE-datetime>.
+
+This module is meant to be compatible with the L<Mojo::Date>-API,
+but has no other Mojo-specific things.
+
 
 =head1 ATTRIBUTES
 

@@ -19,7 +19,8 @@ lib/Mojolicious/Plugin/INames.pm
 lib/Mojolicious/Plugin/ImageResize.pm
 lib/Mojolicious/Plugin/VCard.pm
 lib/Mojolicious/Plugin/PubSubHubbub/Hub.pm
-lib/Mojolicious/Plugin/TagHelpers/
+lib/Mojolicious/Plugin/TagHelpers/PrettyDate.pm
+lib/Mojolicious/Plugin/TagHelpers/LoremIpsum.pm
 lib/Mojolicious/Plugin/Util/HeaderLink.pm
 lib/Mojolicious/Plugin/XML/Atom/Pub.pm
 lib/Mojolicious/Plugin/XML/MagicEnvelope.pm
@@ -30,7 +31,7 @@ lib/Mojolicious/Plugin/Util/FromNow.pm
 lib/Mojolicious/Plugin/Util/RandomString.pm
 t/XML/Atom-Pub.t
 t/Sojolicious/Tree.t
-t/TagHelpers
+t/TagHelpers/PrettyDate.t
 t/PortableContacts.t
 t/Util/FromNow.t
 t-speed
