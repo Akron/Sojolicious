@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 1;
 
@@ -28,8 +28,7 @@ with each other. All plugins are application (despite the fact
 that they are Mojolicious-Plugins) and storage agnostic,
 providing event driven hooks for usage.
 
-All plugins have no requirements other than L<Mojolicious> and Perl 5.10.1
-(core modules).
+Some plugins will become separated distributions, in case this is useful.
 
 Sojolicious is work in progress. There are missing parts currently developed
 and existing parts reworked. Don't use it in its current status!
@@ -142,7 +141,7 @@ L<http://ostatus.org/>.
 
 =head1 ... and?
 
-Copyright (C) 2011-2012, Nils Diewald.
+Copyright (C) 2011-2013, Nils Diewald.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

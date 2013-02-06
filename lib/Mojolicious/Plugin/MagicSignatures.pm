@@ -1,8 +1,8 @@
 package Mojolicious::Plugin::MagicSignatures;
 use Mojo::Base 'Mojolicious::Plugin';
 
-use Mojolicious::Plugin::MagicSignatures::Envelope;
-use Mojolicious::Plugin::MagicSignatures::Key;
+use Crypt::MagicSignatures::Envelope;
+use Crypt::MagicSignatures::Key;
 
 use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
@@ -28,7 +28,7 @@ sub register {
   $mojo->helper(
     'magicenvelope' => sub {
       # New MagicEnvelope instance object
-      my $me = Mojolicious::Plugin::MagicSignatures::Envelope
+      my $me = Crypt::MagicSignatures::Envelope
 	->new( @_[1..$#_] );
 
       # MagicEnvelope can not be build
@@ -42,7 +42,7 @@ sub register {
   $mojo->helper(
     'magickey' => sub {
       # New MagicKey instance object
-      return Mojolicious::Plugin::MagicSignatures::Key
+      return Crypt::MagicSignatures::Key
 	->new( @_[1..$#_] );
     });
 
@@ -508,8 +508,8 @@ mime-types:
 =head1 DEPENDENCIES
 
 L<Mojolicious> (best with SSL support),
-L<Mojolicious::Plugin::MagicSignatures::Envelope>,
-L<Mojolicious::Plugin::MagicSignatures::Key>,
+L<Crypt::MagicSignatures::Envelope>,
+L<Crypt::MagicSignatures::Key>,
 L<Mojolicious::Plugin::Webfinger>.
 
 =head1 AVAILABILITY
@@ -518,7 +518,7 @@ L<Mojolicious::Plugin::Webfinger>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2012, Nils Diewald.
+Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de>.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

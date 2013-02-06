@@ -15,6 +15,8 @@ WriteMakefile(
         'Mojolicious::Plugin::PubSubHubbub'   => 0.01,
         'Mojolicious::Plugin::Oro'   => 0.01,
         'Mojolicious::Plugin::CHI'   => 0.01,
+        'Crypt::MagicSignatures::Key' => 0.04,
+	'Crypt::MagicSignatures::Envelope' => 0.02,
 	'Test::More'  => 0
     },
     test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t t/*/*/*/*.t'}

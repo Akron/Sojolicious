@@ -1,3 +1,11 @@
+0.26 2013-02-06
+        - Made M::P::MagicSignatures::Key a separated distribution
+          as Crypt::MagicSignatures::Key.
+        - Made M::P::MagicSignatures::Envelope a separated distribution
+          as Crypt::MagicSignatures::Envelope.
+	- Change the "no dependencies other than perl and mojo" rule
+          in the readme.
+
 0.25 2012-11-14
         - Added M::P::T::Pagination.
 
