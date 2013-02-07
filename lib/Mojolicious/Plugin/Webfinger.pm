@@ -22,7 +22,7 @@ sub register {
       my ($user, $domain, $norm) = $c->parse_acct( shift );
 
       # If local, serve local
-      if ($domain ~~ [$c->req->url->host, 'localhost']) {
+      if ($domain ~~ [$c->req->url->base->host, 'localhost']) {
 	return $plugin->_serve($c, $norm);
       };
 
@@ -48,7 +48,7 @@ sub register {
       return if !$user || $user =~ /[^-_\w]/;
 
       # Use request host if no host is given
-      $domain ||= $c->req->url->host || 'localhost';
+      $domain ||= $c->req->url->base->host || 'localhost';
 
       # Create norm writing
       my $norm = 'acct:' . $user . '@' . $domain;
@@ -97,7 +97,7 @@ sub _serve {
 
   # Get local account data
   if (!$domain ||
-      $domain ~~ [$c->req->url->host, 'localhost']) {
+      $domain ~~ [$c->req->url->base->host, 'localhost']) {
 
     my $wf_xrd = $c->new_xrd;
     $wf_xrd->add(Subject => $norm);

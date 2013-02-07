@@ -6,7 +6,7 @@ use strict;
 use warnings;
 no strict 'refs';
 
-use lib '../lib';
+use lib ('../../lib', '../lib');
 
 our $module;
 BEGIN {
