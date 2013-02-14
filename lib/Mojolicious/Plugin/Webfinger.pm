@@ -27,7 +27,7 @@ sub register {
 	return $plugin->_serve($c, $norm);
       };
 
-      return $c->lrdd($norm => $domain);
+      return $c->lrdd($norm => $domain, shift);
     }
   );
 
@@ -173,8 +173,11 @@ Called when registering the plugin.
   # In Controllers:
   my $xrd = $self->webfinger('me');
   my $xrd = $self->webfinger('acct:me@sojolicio.us');
+  my $xrd = $self->webfinger('acct:me@sojolicio.us', -secure);
 
 Returns the Webfinger L<Mojolicious::Plugin::XRD> document.
+The C<-secure> flag indicates, that only discovery over C<https>
+is allowed.
 
 =head2 C<parse_acct>
 
@@ -236,7 +239,7 @@ L<Mojolicious::Plugin::LRDD>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2012, Nils Diewald.
+Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de/>.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

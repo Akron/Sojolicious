@@ -107,6 +107,8 @@ sub _get_hostmeta {
 
   my ($param, $res, $rel) = (shift);
 
+  my $secure = $_[0] && $_[0] eq '-secure' ? 1 : 0;
+
   my $res_param = do {
     if ($param) {
       $rel = $param->{rel};
@@ -141,8 +143,7 @@ sub _get_hostmeta {
 
   # Fetch Host-Meta XRD
   # First try ssl
-  my $secure = 'https://';
-  my $host_hm = $ua->get($secure . $host_hm_path . $res_param);
+  my $host_hm = $ua->get('https://' . $host_hm_path . $res_param);
 
   #  unless ($host_hm->success) { ... };
 
@@ -153,9 +154,10 @@ sub _get_hostmeta {
       return undef;
     };
 
+    return undef if $secure;
+
     # Then try insecure
-    $secure = 'http://';
-    $host_hm = $ua->get($secure . $host_hm_path . $res_param);
+    $host_hm = $ua->get('http://' . $host_hm_path . $res_param);
 
     unless ($host_hm &&
 	    $host_hm->res->is_status_class(200)) {
@@ -310,6 +312,7 @@ Called when registering the plugin.
     resource => 'acct:akron@sojolicio.us',
     rel      => 'hub'
   });
+  $xrd = $self->hostmeta('gmail.com', -secure);
 
 The helper C<hostmeta> returns the own hostmeta document
 as an L<Mojolicious::Plugin::XML::XRD> object with
@@ -320,14 +323,16 @@ is retrieved and returned as an XRD object.
 In that case an additional hash reference is accepted
 with C<resource> and C<rel> parameters (see the spec for explanation).
 
+An additional C<-secure> flag indicates, that only discovery over
+C<https> is allowed.
 
 =head2 C<new_hostmeta>
 
   # In Controller:
   my $xrd = $self->new_hostmeta;
 
-The helper C<new_hostmeta> returns a new L<Mojolicious::Plugin::XML::XRD>
-object with C<Mojolicious::Plugin::XML::HostMeta> extension.
+The helper C<new_hostmeta> returns a new L<MojoX::XML::XRD>
+object with C<MojoX::XML::HostMeta> extension.
 
 
 =head1 ROUTES
@@ -408,7 +413,7 @@ L<Storable>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011, Nils Diewald.
+Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de/>.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

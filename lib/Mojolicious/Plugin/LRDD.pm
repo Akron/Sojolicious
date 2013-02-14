@@ -19,6 +19,8 @@ sub register {
     lrdd => sub {
       my ($c, $resource, $host) = @_;
 
+      my $flag = shift;
+
       # Get host information based on resource
       unless ($host) {
 	$host = Mojo::URL->new( $resource );
@@ -27,7 +29,7 @@ sub register {
       };
 
       # Return xrd document
-      return $plugin->_get_lrdd($c, $resource => $host );
+      return $plugin->_get_lrdd($c, $resource => $host, $flag);
     });
 
   # Add 'lrdd' shortcut
@@ -81,7 +83,7 @@ sub _get_lrdd {
   my $plugin = shift;
   my $c = shift;
 
-  my ($resource, $host) = @_;
+  my ($resource, $host, $flag) = @_;
 
   # Serve, if the request is local
   if ($host ~~ ['localhost', $c->req->url->host]) {
@@ -110,7 +112,7 @@ sub _get_lrdd {
   my $domain_hm = $c->hostmeta(
     $host => {
       resource => $resource
-    }
+    }, $flag
   );
 
   # No host-meta found
@@ -136,6 +138,9 @@ sub _get_lrdd {
   elsif (not ($uri = $lrdd->{href})) {
     return undef;
   };
+
+  return undef if $flag && $flag eq '-secure' &&
+    $uri !~ /^(?i:https)/;
 
   # Get user agent
   my $ua = Mojo::UserAgent->new(
@@ -297,8 +302,11 @@ for serving a C<lrdd> Link relation in C</.well-known/host-meta>
 
   # In Controllers:
   my $xrd = $self->lrdd('https://sojolicio.us/image.gif');
+  my $xrd = $self->lrdd('https://sojolicio.us/image.gif', -secure);
 
 Returns the LRDD L<Mojolicious::Plugin::XRD> document.
+The C<-secure> flag indicates, that only discovery over
+C<https> is allowed.
 
 
 =head1 HOOKS
@@ -389,7 +397,7 @@ L<Mojolicious::Plugin::HostMeta>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2012, Nils Diewald.
+Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de/>.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

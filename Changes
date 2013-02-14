@@ -5,6 +5,7 @@
           as Crypt::MagicSignatures::Envelope.
 	- Change the "no dependencies other than perl and mojo" rule
           in the readme.
+	- Add -secure flag to Hammer stack discovery for fallback prevention.
 
 0.25 2012-11-14
         - Added M::P::T::Pagination.

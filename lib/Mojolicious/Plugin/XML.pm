@@ -1,10 +1,10 @@
 package Mojolicious::Plugin::XML;
 use Mojo::Base 'Mojolicious::Plugin';
-use Mojolicious::Plugin::XML::Base;
+use MojoX::XML;
 use Mojo::Loader;
 
 # Namespace for xml classes and extensions
-has namespace => 'Mojolicious::Plugin::XML';
+has namespace => 'MojoX::XML';
 
 my %base_classes;
 
@@ -91,15 +91,14 @@ sub {
     # Default 'new_xml' helper
     $mojo->helper(
       new_xml => sub {
-	return Mojolicious::Plugin::XML::Base->new( @_ );
+	return MojoX::XML->new( @_ );
       });
 
 
     # Add 'render_xml' helper
     $mojo->helper(
       render_xml => sub {
-	my $c      = shift;
-	my $xml    = shift;
+	my ($c, $xml) = @_;
 	my $format = 'xml';
 
 	if (my $class = ref $xml) {
@@ -111,9 +110,11 @@ sub {
 	};
 
 	# render XML with correct mime type
-	return $c->render_data($xml->to_pretty_xml,
-			       'format' => $format,
-			       @_);
+	return $c->render_data(
+	  $xml->to_pretty_xml,
+	  'format' => $format,
+	  @_
+	);
       });
   };
 };
@@ -133,12 +134,13 @@ Mojolicious::Plugin::XML - XML generation with Mojolicious
 =head1 SYNOPSIS
 
   # Mojolicious
-  $mojo->plugin(XML => {
-    namespace    => 'Mojolicious::Plugin::XML',
-    new_activity => ['Atom', 'ActivityStreams'],
-    new_hostmeta => ['XRD',  'HostMeta'],
-    new_myXML    => ['Base', 'Atom', 'Atom-Threading']
-  });
+  $mojo->plugin(
+    XML => {
+      namespace    => 'Mojox::XML',
+      new_activity => ['Atom', 'ActivityStreams'],
+      new_hostmeta => ['XRD',  'HostMeta'],
+      new_myXML    => ['Base', 'Atom', 'Atom-Threading']
+    });
 
   my $xml = $self->new_xml('entry');
   my $env = $xml->add('fun:env' => { foo => 'bar' });
@@ -186,7 +188,7 @@ Mojolicious::Plugin::XML - XML generation with Mojolicious
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::XML> is a plugin to support
-XML documents based on L<Mojolicious::Plugin::XML::Base>.
+XML document generation based on L<MojoX::XML>.
 
 
 =head1 ATTRIBUTES
@@ -197,7 +199,7 @@ XML documents based on L<Mojolicious::Plugin::XML::Base>.
   print $xml->namespace;
 
 The namespace of all XML plugins.
-Defaults to C<Mojolicious::Plugin::XML>
+Defaults to C<MojoX::XML>
 
 =head1 METHODS
 
@@ -205,19 +207,27 @@ Defaults to C<Mojolicious::Plugin::XML>
 
   # Mojolicious
   $mojo->plugin(XML => {
-    namespace    => 'Mojolicious::Plugin::XML',
+    namespace    => 'MyOwn::XML',
     new_activity => ['Atom', 'ActivityStreams']
   });
 
   # Mojolicious::Lite
   plugin 'XML' => {
-    namespace    => 'Mojolicious::Plugin::XML',
     new_activity => ['Atom', 'ActivityStreams']
   };
 
+  # In your config file
+  {
+    XML => {
+      new_activity => ['Atom', 'ActivityStreams']
+    }
+  };
+
 Called when registering the plugin.
-Accepts the attributes mentioned as parameters as
+Accepts the attributes mentioned as
 well as new xml profiles.
+
+
 All parameters can be set either on registration or
 as part of the configuration file with the key C<XML>.
 
@@ -225,6 +235,11 @@ as part of the configuration file with the key C<XML>.
 =head1 HELPERS
 
 =head2 C<new_xml>
+
+  my $xml = $c->new_xml('entry');
+  print $xml->to_pretty_xml;
+
+Get a new L<MojoX::XML> document.
 
 To create a helper extending the base class,
 use 'Base' as the base class:

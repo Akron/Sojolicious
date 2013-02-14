@@ -29,6 +29,7 @@ lib/Mojolicious/Plugin/XML/Template.pm
 lib/Mojolicious/Plugin/XML/DublinCore.pm
 lib/Mojolicious/Plugin/Util/FromNow.pm
 lib/Mojolicious/Plugin/Util/RandomString.pm
+lib/Mojolicious/Plugin/Util/Callback.pm
 t/XML/Atom-Pub.t
 t/Sojolicious/Tree.t
 t/TagHelpers/PrettyDate.t
