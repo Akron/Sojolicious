@@ -3,6 +3,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::ByteStream 'b';
 
 # Todo: Allow for cache plugin
+# See http://www.packetizer.com/webfinger/server.html
 
 # Register Plugin
 sub register {
