@@ -3,6 +3,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 
 my %callback;
 
+# Register the plugin
 sub register {
   my ($plugin, $mojo, $param) = @_;
 
@@ -16,26 +17,27 @@ sub register {
 	my $cb = shift;
 	my $once = $_[0] && $_[0] eq '-once' ? 1 : 0;
 
-	if (exists $callback{$name} && $callback{$name}->{once}) {
+	if (exists $callback{$name} && $callback{$name}->[1]) {
 	  $mojo->log->debug(
-	    qq{Not allowed to redefine callback $name}
+	    qq{No allowance to redefine callback "$name"}
 	  );
+
+	  # Return nothing
 	  return;
 	};
 
 	# Establish callback
-	$callback{$name} = {
-	  cb   => $cb,
-	  once => $once
-	};
+	$callback{$name} = [$cb, $once];
       }
 
       # Call callback
       else {
 	if (exists $callback{$name}) {
-	  return $callback{$name}->{cb}->($c, @_);
+	  return $callback{$name}->[0]->($c, @_);
 	};
-	return undef;
+
+	# Return nothing
+	return;
       };
     }
   );
@@ -60,7 +62,7 @@ Mojolicious::Plugin::Util::Callback - Reverse helpers for Mojolicious
   # Mojolicious::Lite
   plugin 'Util::Callback';
 
-  # In controllers or app
+  # In controller or app
   $c->callback(get_cached_profile => sub {
     my ($c, $name) = @_;
     return $c->cache->get( $name );
@@ -74,11 +76,12 @@ Mojolicious::Plugin::Util::Callback - Reverse helpers for Mojolicious
 
 =head1 DESCRIPTION
 
-Callbacks are a kind of reverse helpers.
+Callbacks are similar to helpers, with a slightly
+different semantic.
 While helpers are usually established by plugins
-and called by the enduser, callbacks are
+and called by controllers, callbacks are
 usually called by plugins and established
-by the enduser or by other plugins.
+in a controller or by other plugins.
 
 A typical usecase is the database agnostic
 access to caching via plugins.
@@ -105,8 +108,8 @@ to release to the helper. The arguments of the callback
 function will be the controller object followed by all
 passed parameters from the call.
 
-An additional C<-once> flag indicates, that the callback
-is not allowed to be redefined later.
+An additional C<-once> flag when establishing indicates,
+that the callback is not allowed to be redefined later.
 
 If there is no callback defined for a certain name,
 C<undef> is returned.

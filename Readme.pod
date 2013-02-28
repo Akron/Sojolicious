@@ -25,58 +25,57 @@ surrounding specifications.
 The design goal is to make all plugins useful on their own,
 as separated building blocks of OStatus, while playing well
 with each other. All plugins are application (despite the fact
-that they are Mojolicious-Plugins) and storage agnostic,
+that they are Mojolicious plugins) and storage agnostic,
 providing event driven hooks for usage.
 
 Some plugins will become separated distributions, in case this is useful.
 
+For the moment the following plugins were already seperated:
+
+=over 2
+
+=item L<Crypt-MagicSignatures-Key> and L<Crypt-MagicSignatures-Envelope>
+
+=item L<Mojolicious::Plugin::PubSubHubbub|https://github.com/Akron/Mojolicious-Plugin-PubSubHubbub>
+
+=item L<MojoX::XML|https://github.com/Akron/MojoX-XML> (Name will change soon)
+
+=back
+
 Sojolicious is work in progress. There are missing parts currently developed
 and existing parts reworked. Don't use it in its current status!
+However, you can use all separated parts published on CPAN.
 
 =head2 Synopsis
 
-  package MySocialApp;
-  use Mojolicious;
-
-  sub startup {
-    my $app = shift;
+  use Mojolicious::Lite;
 
     # Load Plugins
-    $app->plugin('Webfinger');
-    $app->plugin('PubSubHubbub');
-    $app->plugin('Salmon');
+  plugin 'Webfinger';
+  plugin 'PubSubHubbub';
+  plugin 'Salmon';
 
-    my $r = $app->routes;
-
-    # Establish webfinger url
-    $r->route('/webfinger')->lrdd('q');
-
-    # Esablish Salmon Endpoints:
-    my $salmon = $r->route('/salmon');
-    for ($salmon) {
-	$_->route('/:acct/mentioned')->salmon('mentioned');
-	$_->route('/:acct/all-replies')->salmon('all-replies');
-	$_->route('/signer')->salmon('signer');
-    };
-
-    # Add pubsubhubbub callback url
-    $r->route('/pubsub')->pubsub('cb');
-
-    $app->hook(
-      'on_salmon_follow' => sub {
-        ... # You received a follow request
-      };
-    );
-
-    $app->hook(
-      'on_pubsub_content' => sub {
-        my ($plugin, $c, $type, $dom) = @_;
-        ...
-    };
+  # Esablish Salmon Endpoints:
+  group {
+    under '/salmon';
+    (any '/:acct/mentioned')->salmon('mentioned');
+    (any '/:acct/all-replies')->salmon('all-replies');
+    (any '/signer')->salmon('signer');
   };
 
-  package main;
-  MySocialApp->start;
+  # Add pubsubhubbub callback url
+  (any '/pubsub')->pubsub;
+
+  hook on_salmon_follow => sub {
+    # ... You received a follow request
+  };
+
+  hook on_pubsub_content => sub {
+    my ($c, $type, $dom) = @_;
+    # ... You receive feed information you subscribed to
+  };
+
+  app->start;
 
 =head2 Plugins for ...
 
@@ -104,28 +103,27 @@ and existing parts reworked. Don't use it in its current status!
 
 =item L<Webfinger|http://code.google.com/p/webfinger/wiki/WebFingerProtocol>
 
-As Sojolicious is in its early stages, there is currently work on
-most of these protocols. There is no stable release at GitHub or CPAN.
+=back
 
-There are plans to expand the scope to other social protocols,
+There are plans to expand the scope to other social protocols later,
 for example L<OExchange|http://www.oexchange.org/spec/>.
 
 =back
 
 =head2 Acknowledgement
 
-C<ActivityStreams> was developed by Martin Atkins, Will Norris, Chris Messina, Monica Wilkinson, and Rob Dolin.
-C<Atom> was developed by Mark Nottingham and Robert Sayre.
-C<Atom Threading Extensions> was developed by James M. Snell.
-C<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
-C<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
-L<Mojolicious> is written by Sebastian Riedel.
-C<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach Copley.
-C<PortableContacts> was developed by Joseph Smarr.
-C<PubSubHubbub> was developed by Brad Fitzpatrick, Brett Slatkin, and Martin Atkins.
-C<Salmon> was developed by John Panzer.
-C<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
-C<XRD> was developed by Eran Hammer-Lahav and Will Norris.
+B<ActivityStreams> was developed by Martin Atkins, Will Norris, Chris Messina, Monica Wilkinson, and Rob Dolin.
+B<Atom> was developed by Mark Nottingham and Robert Sayre.
+B<Atom Threading Extensions> was developed by James M. Snell.
+B<HostMeta> was developed by  Eran Hammer-Lahav and Blaine Cook.
+B<MagicSignatures> was developed by John Panzer, Ben Laurie, and Dirk Balfanz.
+B<Mojolicious> is written by Sebastian Riedel.
+B<OStatus> was developed by Evan Prodromou, Brion Vibber, James Walker, and Zach Copley.
+B<PortableContacts> was developed by Joseph Smarr.
+B<PubSubHubbub> was developed by Brad Fitzpatrick, Brett Slatkin, and Martin Atkins.
+B<Salmon> was developed by John Panzer.
+B<Webfinger> was developed by Brad Fitzpatrick, Eran Hammer-Lahav, Blaine Cook, John Panzer, and Joe Gregorio.
+B<XRD> was developed by Eran Hammer-Lahav and Will Norris.
 
 ... just to name the persons officially responsible for maintaining the code and the specifications.
 Thanks to all contributors of these projects as well!
@@ -141,7 +139,7 @@ L<http://ostatus.org/>.
 
 =head1 ... and?
 
-Copyright (C) 2011-2013, Nils Diewald.
+Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de/>.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.

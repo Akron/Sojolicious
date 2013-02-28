@@ -22,7 +22,7 @@ $c->app($app);
 my %cache = (
   Akron => 30,
   Peter => 31,
-  Jan => 32
+  Jan   => 32
 );
 
 ok($app->callback(
@@ -57,5 +57,6 @@ ok(!$app->callback(
 is($c->callback(from_cache => 'Akron'), 'is 30', 'Call callback');
 is($c->callback(from_cache => 'Peter'), 'is 31', 'Call callback');
 is($c->callback(from_cache => 'Jan'), 'is 32', 'Call callback');
+ok(!$c->callback(from_supercache => 'Jan'), 'Call callback');
 
 done_testing;

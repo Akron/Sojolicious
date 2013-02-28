@@ -1,4 +1,4 @@
-0.26 2013-02-06
+0.26 2013-02-28
         - Made M::P::MagicSignatures::Key a separated distribution
           as Crypt::MagicSignatures::Key.
         - Made M::P::MagicSignatures::Envelope a separated distribution
@@ -6,6 +6,7 @@
 	- Change the "no dependencies other than perl and mojo" rule
           in the readme.
 	- Add -secure flag to Hammer stack discovery for fallback prevention.
+	- Change readme to use Mojolicious::Lite example.
 
 0.25 2012-11-14
         - Added M::P::T::Pagination.
