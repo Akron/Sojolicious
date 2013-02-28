@@ -16,41 +16,12 @@ Sojolicious is a toolkit for the federated social web, containing
 plugins for the powerful web framework L<Mojolicious>
 written in Perl.
 
-=head2 Goal
-
-Sojolicious mainly focus on support for the L<OStatus|http://ostatus.org/>
-meta protocol and aims for a straight forward implementation of all
-surrounding specifications.
-
-The design goal is to make all plugins useful on their own,
-as separated building blocks of OStatus, while playing well
-with each other. All plugins are application (despite the fact
-that they are Mojolicious plugins) and storage agnostic,
-providing event driven hooks for usage.
-
-Some plugins will become separated distributions, in case this is useful.
-
-For the moment the following plugins were already seperated:
-
-=over 2
-
-=item L<Crypt-MagicSignatures-Key> and L<Crypt-MagicSignatures-Envelope>
-
-=item L<Mojolicious::Plugin::PubSubHubbub|https://github.com/Akron/Mojolicious-Plugin-PubSubHubbub>
-
-=item L<MojoX::XML|https://github.com/Akron/MojoX-XML> (Name will change soon)
-
-=back
-
-Sojolicious is work in progress. There are missing parts currently developed
-and existing parts reworked. Don't use it in its current status!
-However, you can use all separated parts published on CPAN.
 
 =head2 Synopsis
 
   use Mojolicious::Lite;
 
-    # Load Plugins
+  # Load Plugins
   plugin 'Webfinger';
   plugin 'PubSubHubbub';
   plugin 'Salmon';
@@ -77,38 +48,96 @@ However, you can use all separated parts published on CPAN.
 
   app->start;
 
+
+=head2 Goal
+
+Sojolicious mainly focus on support for the L<OStatus|http://ostatus.org/>
+meta protocol and aims for a straight forward implementation of all
+surrounding specifications.
+
+The design goal is to make all plugins useful on their own,
+as separated building blocks of OStatus, while playing well
+with each other. All plugins are application (despite the fact
+that they are Mojolicious plugins) and storage agnostic,
+providing event driven hooks for usage.
+
+Some plugins will become separated distributions, in case this is useful.
+
+For the moment the following plugins were already seperated:
+
+=over 2
+
+=item
+
+L<Crypt-MagicSignatures-Key> and L<Crypt-MagicSignatures-Envelope>
+
+=item
+
+L<Mojolicious::Plugin::PubSubHubbub|https://github.com/Akron/Mojolicious-Plugin-PubSubHubbub>
+
+=item
+
+L<MojoX::XML|https://github.com/Akron/MojoX-XML> (Name will change soon)
+
+=back
+
+Sojolicious is work in progress. There are missing parts currently developed
+and existing parts reworked. Don't use it in its current status!
+However, you can use all separated parts published on CPAN.
+
+
 =head2 Plugins for ...
 
 =over 2
 
-=item L<ActivityStreams|http://activitystrea.ms/specs/atom/1.0/>
+=item
 
-=item L<Atom|https://www.ietf.org/rfc/rfc4287.txt>
+L<ActivityStreams|http://activitystrea.ms/specs/atom/1.0/>
 
-=item L<Atom-Threading-Extension|https://www.ietf.org/rfc/rfc4685.txt>
+=item
 
-=item L<HostMeta|http://tools.ietf.org/html/draft-hammer-hostmeta>
+L<Atom|https://www.ietf.org/rfc/rfc4287.txt>
 
-=item L<MagicSignatures|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html>
+=item
 
-=item L<OStatus|http://ostatus.org/sites/default/files/ostatus-1.0-draft-2-specification.html>
+L<Atom-Threading-Extension|https://www.ietf.org/rfc/rfc4685.txt>
 
-=item L<PortableContacts|http://portablecontacts.net/draft-spec.html>
+=item
 
-=item L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html> (Now separated)
+L<HostMeta|http://tools.ietf.org/html/draft-hammer-hostmeta>
 
-=item L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
+=item
 
-=item L<XRD|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
+L<MagicSignatures|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html>
 
-=item L<Webfinger|http://code.google.com/p/webfinger/wiki/WebFingerProtocol>
+=item
+
+L<OStatus|http://ostatus.org/sites/default/files/ostatus-1.0-draft-2-specification.html>
+
+=item
+
+L<PortableContacts|http://portablecontacts.net/draft-spec.html>
+
+=item
+
+L<PubSubHubbub|https://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.3.html> (Now separated)
+
+=item
+
+L<Salmon|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-salmon-00.html>
+
+=item
+
+L<XRD|http://docs.oasis-open.org/xri/xrd/v1.0/xrd-1.0.html>
+
+=item
+
+L<Webfinger|http://code.google.com/p/webfinger/wiki/WebFingerProtocol>
 
 =back
 
 There are plans to expand the scope to other social protocols later,
 for example L<OExchange|http://www.oexchange.org/spec/>.
-
-=back
 
 =head2 Acknowledgement
 
