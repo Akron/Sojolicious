@@ -4,9 +4,17 @@ use Mojo::UserAgent;
 use Mojo::URL;
 use Mojo::ByteStream 'b';
 
+# Todo:
+#   - Change everything to not pass the plugin object
+
 # Register Plugin
 sub register {
   my ($plugin, $mojo) = @_;
+
+  # Load Util::Callback if not already loaded
+  unless (exists $mojo->renderer->helpers->{callback}) {
+    $mojo->plugin('Util::Callback');
+  };
 
   # Load Host-Meta if not already loaded.
   # This automatically loads the XRD and Endpoints plugins.
@@ -58,7 +66,7 @@ sub register {
 	  my $type = index($endpoint, '{uri}') >= 0 ? 'template' : 'href';
 	  $lrdd->{$type} = $endpoint;
 
-	  $hostmeta->add_link( lrdd => $lrdd )
+	  $hostmeta->link( lrdd => $lrdd )
 	    ->comment('Link-based Resource Descriptor Discovery')
 	      ->add( Title => 'Resource Descriptor' );
 	});
@@ -97,7 +105,6 @@ sub _get_lrdd {
   my $lrdd_xrd;
   $c->app->plugins->emit_hook(
     before_fetching_lrdd => (
-      $plugin,
       $c,
       $resource,
       $host,
@@ -165,7 +172,6 @@ sub _get_lrdd {
   # Hook for caching
   $c->app->plugins->emit_hook(
     after_fetching_lrdd => (
-      $plugin,
       $c,
       $resource,
       $host,
@@ -205,16 +211,7 @@ sub _prepare_and_serve {
 # Prepare LRDD
 sub _prepare {
   my ($plugin, $c, $uri) = @_;
-
-  my $ok = 0;
-
-  # Emit 'on_prepare_lrdd' hook
-  $c->app->plugins->emit_hook(
-    on_prepare_lrdd => (
-      $plugin, $c, $uri, \$ok
-    ));
-
-  return $ok;
+  return $c->callback(prepare_lrdd => $c, $uri);
 };
 
 
@@ -292,9 +289,14 @@ Called when registering the plugin.
   # LRDD at /test/
 
 L<Mojolicious::Plugin::LRDD> provides a route shortcut
-for serving a C<lrdd> Link relation in C</.well-known/host-meta>
+for serving a C<lrdd> Link relation in
+C</.well-known/host-meta>
 (see L<Mojolicious::Plugin::HostMeta).
 
+This shortcut is DEPRECATED to be used to establish
+a WebFinger endpoint.
+Use L<WebFinger|Mojolicious::Plugin::WebFinger>
+to establish such an endpoint.
 
 =head1 HELPERS
 
@@ -307,6 +309,31 @@ for serving a C<lrdd> Link relation in C</.well-known/host-meta>
 Returns the LRDD L<Mojolicious::Plugin::XRD> document.
 The C<-secure> flag indicates, that only discovery over
 C<https> is allowed.
+
+
+=head1 CALLBACKS
+
+=item C<on_prepare_lrdd>
+
+  $c->callback(
+    prepare_lrdd => sub {
+      my ($c, $resource) = @_;
+      if ($resource eq 'http://sojolicio.us/catz') {
+        return 1;
+      };
+  });
+
+TODO: Callback!
+
+This hook is run on the preparation of serving
+a lrdd document. The hook passes the plugin object,
+the current controller object, the identifier of the
+resource and a scalar reference.
+If a resource description exists for a given resource,
+the scalar of the scalar reference should be set to true.
+The serving process will be stopped, if content was already
+rendered and not found will be rendered, if the scalar
+reference is false.
 
 
 =head1 HOOKS
@@ -352,25 +379,6 @@ The hook passes the plugin object, the current controller object,
 the resource identifier, a string reference, meant to refer to
 the XRD object, and the L<Mojo::Message::Response> object from the request.
 
-=item C<on_prepare_lrdd>
-
-  $mojo->hook(
-    on_prepare_lrdd => (
-      my ($plugin, $c, $resource, $ok_ref) = @_;
-      if ($resource eq 'http://sojolicio.us/catz') {
-        $$ok_ref = 1;
-      };
-  ));
-
-This hook is run on the preparation of serving
-a lrdd document. The hook passes the plugin object,
-the current controller object, the identifier of the
-resource and a scalar reference.
-If a resource description exists for a given resource,
-the scalar of the scalar reference should be set to true.
-The serving process will be stopped, if content was already
-rendered and not found will be rendered, if the scalar
-reference is false.
 
 =item C<before_serving_lrdd>
 
