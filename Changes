@@ -1,3 +1,6 @@
+0.28 2013-03-24
+        - Separated M::P::XRD.
+
 0.27 2013-03-08
         - All M::P::XML modules are now part of XML::Loy.
           They will be removed in the next release.
