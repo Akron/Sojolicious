@@ -1,3 +1,6 @@
+0.29 2013-03-31
+        - Separated M::P::HostMeta.
+
 0.28 2013-03-24
         - Separated M::P::XRD.
 

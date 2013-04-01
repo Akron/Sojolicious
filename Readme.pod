@@ -2,7 +2,7 @@ package Sojolicious;
 use strict;
 use warnings;
 
-our $VERSION = '0.26';
+our $VERSION = '0.29';
 
 1;
 
@@ -63,28 +63,7 @@ providing event driven hooks for usage.
 
 Some plugins will become separated distributions, in case this is useful.
 
-For the moment the following plugins were already seperated:
-
-=over 2
-
-=item
-
-L<Crypt-MagicSignatures-Key> and L<Crypt-MagicSignatures-Envelope>
-
-=item
-
-L<Mojolicious::Plugin::PubSubHubbub|https://github.com/Akron/Mojolicious-Plugin-PubSubHubbub>
-
-=item
-
-L<MojoX::XML|https://github.com/Akron/MojoX-XML> (Name will change soon)
-
-=back
-
-Sojolicious is work in progress. There are missing parts currently developed
-and existing parts reworked. Don't use it in its current status!
-However, you can use all separated parts published on CPAN.
-
+See L<sojolicio.us|http://sojolicio.us/> for recent updates.
 
 =head2 Plugins for ...
 
