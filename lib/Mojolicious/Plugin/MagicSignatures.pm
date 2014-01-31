@@ -7,6 +7,7 @@ use Crypt::MagicSignatures::Key;
 use constant ME_NS => 'http://salmon-protocol.org/ns/magic-key';
 
 # Todo: Delete all plugin parameters for hooks
+# Todo: Use Mojolicious' Validator!
 
 # Register plugin
 sub register {
@@ -26,13 +27,13 @@ sub register {
 
   # Add 'magicenvelope' helper
   $mojo->helper(
-    'magicenvelope' => sub {
+    magicenvelope => sub {
       # New MagicEnvelope instance object
       my $me = Crypt::MagicSignatures::Envelope
-	->new( @_[1..$#_] );
+	->new( @_[1 .. $#_] );
 
       # MagicEnvelope can not be build
-      return if (!$me || !$me->data);
+      return unless $me && $me->data;
 
       # Return MagicEnvelope
       return $me;
@@ -40,7 +41,7 @@ sub register {
 
   # Add 'magickey' helper
   $mojo->helper(
-    'magickey' => sub {
+    magickey => sub {
       # New MagicKey instance object
       return Crypt::MagicSignatures::Key
 	->new( @_[1..$#_] );
@@ -48,26 +49,26 @@ sub register {
 
   # Add 'verify_magicenvelope' helper
   $mojo->helper(
-    'verify_magicenvelope' => sub {
+    verify_magicenvelope => sub {
       return $plugin->verify_magicenvelope( @_ );
     });
 
   # Add 'get_magickeys' helper
   $mojo->helper(
-    'get_magickeys' => sub {
+    get_magickeys => sub {
       return $plugin->get_magickeys( @_ );
     });
 
   # Add magickey to webfinger document
   # Todo: Allow for json serialization!
   $mojo->hook(
-    'before_serving_webfinger' => sub {
+    before_serving_webfinger => sub {
       my ($plugin, $c, $acct, $xrd) = @_;
 
       # Get keys
       my $mkeys = $c->get_magickeys(
-	'acct'      => $acct,
-	'discovery' => 0
+	acct      => $acct,
+	discovery => 0
       );
 
       return unless defined $mkeys->[0];
@@ -88,10 +89,10 @@ sub register {
       # Based on spec-01
       my $first = 0;
       foreach my $mkey (@$mkeys) {
-	my %att_hash = ('-type' => 'base64');
+	my %att_hash = (-type => 'base64');
 
 	if ($mkey->[1]) {
-	  $xrd->add_ns('mk' => ME_NS) unless $first++;
+	  $xrd->add_ns(mk => ME_NS) unless $first++;
 	  $att_hash{'mk:key_id'} = $mkey->[1] ;
 	};
 
@@ -119,7 +120,7 @@ sub get_magickeys {
 
   # Run hook for caching or database retrieval
   $c->app->plugins->emit_hook(
-    'before_fetching_magickeys' => (
+    before_fetching_magickeys => (
       $plugin, $c, \%param, \@magickeys
     ));
 
@@ -148,7 +149,7 @@ sub get_magickeys {
       # Discovery based on spec-01
       # Key id is not specified
       unless (exists $param{key_id}) {
-	foreach (@{ $wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
+	foreach (@{ $wf_xrd->find('Property[type="' . ME_NS . '"]')}) {
 
 	  # Create key from property
 	  my @key = ($plugin->magickey($c, $_->text(0)));
@@ -166,7 +167,7 @@ sub get_magickeys {
       # Key id is specified, maybe undef
       else {
 	my $key_id = $param{key_id};
-	foreach (@{$wf_xrd->find('Property[type="'.ME_NS.'"]')}) {
+	foreach (@{$wf_xrd->find('Property[type="' . ME_NS . '"]')}) {
 
 	  # Get key_ids from property
 	  my ($key_id_key) = grep(/key_id$/, keys %{ $_->attrs });
@@ -199,13 +200,13 @@ sub get_magickeys {
 
 	if ( $mkey_link ) {
 	  my $key = $mkey_link->attrs('href');
-	  $key =~ s/^data:application\/magic-public-key,\s*//;
+	  $key =~ s{^data:application/magic-public-key,\s*}{};
 
 	  my $mkey = $c->magickey($key);
 
 	  return unless $mkey;
 
-	  push(@magickeys,[$mkey]);
+	  push(@magickeys, [$mkey]);
 	};
       };
     };
@@ -231,7 +232,7 @@ sub verify_magicenvelope {
   my $me     = shift;
   my %param  = %{ shift(@_) };
 
-  my $mkey = $param{'key'} || undef;
+  my $mkey = $param{key} || undef;
 
   # If key_id does not exist, set to undef (default key)
   $param{key_id} = undef unless exists $param{key_id};
@@ -328,11 +329,12 @@ Mojolicious::Plugin::MagicSignatures - MagicSignatures Plugin for Mojolicious
   # Fetch MagicKeys
   my $magickeys = $c->get_magickeys(acct => 'akron@sojolicio.us');
 
+
 =head1 DESCRIPTION
 
 L<Mojolicious::Plugin::MagicSignatures> is a plugin for L<Mojolicious>
 to fold and unfold MagicEnvelopes as described in
-L<http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html|Specification>.
+L<Specification|http://salmon-protocol.googlecode.com/svn/trunk/draft-panzer-magicsig-01.html>.
 
 
 =head1 METHODS
@@ -398,7 +400,7 @@ acceptable parameters).
 
 =head2 C<get_magickeys>
 
-  my $mkeys = $c->get_magickeys('acct' => 'acct:akron@sojolicio.us');
+  my $mkeys = $c->get_magickeys(acct => 'acct:akron@sojolicio.us');
 
 L<Mojolicious::Plugin::MagicSignatures> establishes a helper
 called C<get_magickeys>.
@@ -433,7 +435,7 @@ The MagicKeys may or may not contain a private part.
 
   if ($c->verify_magicenvelope($me) > 0) {
     print "Origin is verified.\n";
-  }
+  };
 
   $c->verify_magicenvelope(
         $me => {
@@ -463,7 +465,7 @@ MagicEnvelope contains an Atom document with a given
 entry/author/uri element. This uri will be used for
 discovery.
 
-B<This method is experimental and can change without warning!>
+B<This method is experimental and may change without warning!>
 
 =head1 HOOKS
 
@@ -518,7 +520,7 @@ L<Mojolicious::Plugin::Webfinger>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de>.
+Copyright (C) 2011-2014, L<Nils Diewald|http://nils-diewald.de>.
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.
