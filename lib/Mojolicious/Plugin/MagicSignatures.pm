@@ -22,7 +22,7 @@ sub register {
 
   # Load Webfinger if not already loaded.
   unless (exists $mojo->renderer->helpers->{'webfinger'}) {
-    $mojo->plugin('Webfinger');
+    $mojo->plugin('WebFinger');
   };
 
   # Add 'magicenvelope' helper

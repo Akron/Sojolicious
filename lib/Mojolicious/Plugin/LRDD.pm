@@ -94,7 +94,7 @@ sub _get_lrdd {
   my ($resource, $host, $flag) = @_;
 
   # Serve, if the request is local
-  if ($host ~~ ['localhost', $c->req->url->host]) {
+  if ($host eq 'localhost' or $host eq $c->req->url->host) {
     if ($plugin->_prepare($c, $resource)) {
       return $plugin->_serve($c, $resource);
     };

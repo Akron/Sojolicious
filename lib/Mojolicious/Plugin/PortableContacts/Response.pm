@@ -1,7 +1,7 @@
 package Mojolicious::Plugin::PortableContacts::Response;
 use Mojo::Base -base;
 use Mojo::JSON;
-use Mojolicious::Plugin::XML::Base;
+use XML::Loy;
 use Mojolicious::Plugin::PortableContacts::Entry;
 
 # Todo: Allow other valid values
@@ -107,7 +107,7 @@ sub to_json {
 sub to_xml {
   my $self = shift;
 
-  my $response = Mojolicious::Plugin::XML::Base->new('response');
+  my $response = XML::Loy->new('response');
 
   my %hash;
   foreach (@RESPONSE) {

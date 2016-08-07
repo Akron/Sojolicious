@@ -1,6 +1,6 @@
 package Mojolicious::Plugin::PortableContacts::Entry;
 use Mojo::Base -base;
-use Mojolicious::Plugin::XML::Base;
+use XML::Loy;
 
 # Todo: Allow further valid labels
 # Todo: Use Mojo::JSON true/false for 'connected'
@@ -49,7 +49,7 @@ sub _xml {
   my $self = shift;
 
   # New XML object
-  my $entry = Mojolicious::Plugin::XML::Base->new('entry');
+  my $entry = XML::Loy->new('entry');
 
   foreach my $key (keys %$self) {
 
