@@ -1,7 +1,7 @@
 # Sojolicious
 
 Sojolicious is a toolkit for the federated social web, containing
-plugins for the powerful web framework L<Mojolicious>
+plugins for the powerful web framework [Mojolicious](https://mojolicious.org/)
 written in Perl.
 
 
@@ -102,7 +102,7 @@ Participation on conferences was supported by the BMBF-project [Linguistic Netwo
 
 # ... and?
 
-Copyright (C) 2011-2013, L<Nils Diewald|http://nils-diewald.de/>.
+Copyright (C) 2011-2013, [Nils Diewald](https://www.nils-diewald.de/).
 
 This program is free software, you can redistribute it
 and/or modify it under the same terms as Perl.
